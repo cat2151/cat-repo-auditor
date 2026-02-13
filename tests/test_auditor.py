@@ -11,6 +11,7 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+import cat_repo_auditor.cli as cli_module  # noqa: E402
 from cat_repo_auditor.auditor import AuditResult, GitHubClient, audit_user_repositories  # noqa: E402
 from cat_repo_auditor.cli import main  # noqa: E402
 
@@ -116,3 +117,61 @@ def test_cli_outputs_table(tmp_path):
     assert "sample" in output
     assert "README.md" in output and "yes" in output
     assert "LICENSE" in output and "no" in output
+
+
+def test_audit_result_missing_handles_all_cases():
+    empty = AuditResult(repository="r", updated_at=None, found={})
+    all_present = AuditResult(repository="r", updated_at=None, found={"a": True})
+    mixed = AuditResult(repository="r", updated_at=None, found={"a": True, "b": False, "c": False})
+
+    assert empty.missing == []
+    assert all_present.missing == []
+    assert mixed.missing == ["b", "c"]
+
+
+def test_cli_handles_empty_check_items(tmp_path):
+    config_path = tmp_path / "audit_config.toml"
+    config_path.write_text('check_items = []\n\n[display]\nshow_repo_name = true\n', encoding="utf-8")
+
+    buffer = io.StringIO()
+    exit_code = main(["--user", "alice", "--config", str(config_path)], stream=buffer)
+
+    assert exit_code == 1
+    assert "No check_items configured" in buffer.getvalue()
+
+
+def test_cli_handles_no_repositories(tmp_path):
+    config_path = tmp_path / "audit_config.toml"
+    config_path.write_text('check_items = ["README.md"]\n\n[display]\nshow_repo_name = true\n', encoding="utf-8")
+
+    class EmptyClient(GitHubClient):
+        def list_repositories(self, username, limit):
+            return []
+
+    buffer = io.StringIO()
+    exit_code = main(["--user", "alice", "--config", str(config_path)], client=EmptyClient(), stream=buffer)
+
+    assert exit_code == 0
+    assert "No repositories found" in buffer.getvalue()
+
+
+def test_cli_passes_token_to_audit(tmp_path):
+    config_path = tmp_path / "audit_config.toml"
+    config_path.write_text('check_items = ["README.md"]\n\n[display]\nshow_repo_name = true\n', encoding="utf-8")
+
+    captured: Dict[str, str | None] = {}
+
+    def stub_audit(user, items, **kwargs):
+        captured["token"] = kwargs.get("token")
+        return []
+
+    original = cli_module.audit_user_repositories
+    cli_module.audit_user_repositories = stub_audit
+    buffer = io.StringIO()
+    try:
+        exit_code = cli_module.main(["--user", "alice", "--config", str(config_path), "--token", "secret"], stream=buffer)
+    finally:
+        cli_module.audit_user_repositories = original
+
+    assert exit_code == 0
+    assert captured["token"] == "secret"

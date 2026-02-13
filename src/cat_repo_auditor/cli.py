@@ -6,8 +6,10 @@ import argparse
 import sys
 from typing import Iterable, Sequence
 
+import requests
+
 from .auditor import AuditResult, GitHubClient, audit_user_repositories
-from .config import load_config
+from .config import ConfigError, load_config
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -59,19 +61,28 @@ def main(argv: Sequence[str] | None = None, client: GitHubClient | None = None, 
     stream = stream or sys.stdout
     args = _build_parser().parse_args(argv)
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except ConfigError as exc:
+        stream.write(f"Failed to load configuration: {exc}\n")
+        return 1
+
     check_items = config.get("check_items") or []
     if not check_items:
         stream.write("No check_items configured.\n")
         return 1
 
-    results = audit_user_repositories(
-        args.user,
-        check_items,
-        limit=args.limit,
-        client=client,
-        token=args.token,
-    )
+    try:
+        results = audit_user_repositories(
+            args.user,
+            check_items,
+            limit=args.limit,
+            client=client,
+            token=args.token,
+        )
+    except (requests.HTTPError, ValueError) as exc:
+        stream.write(f"Audit failed: {exc}\n")
+        return 1
 
     if not results:
         stream.write("No repositories found for the user.\n")

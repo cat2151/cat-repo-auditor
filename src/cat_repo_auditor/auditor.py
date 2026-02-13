@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, TypedDict
 
 import requests
+from urllib.parse import quote
 
 API_BASE = "https://api.github.com"
 DEFAULT_REPO_LIMIT = 20
+
+
+class RepositoryInfo(TypedDict):
+    """Basic repository metadata."""
+
+    name: str
+    updated_at: str | None
 
 
 @dataclass
@@ -32,6 +41,7 @@ class GitHubClient:
     def __init__(self, token: str | None = None, session: requests.Session | None = None) -> None:
         self.session = session or requests.Session()
         self.token = token or os.getenv("GITHUB_TOKEN")
+        self._username_pattern = re.compile(r"^[A-Za-z0-9-]+$")
 
     def _headers(self) -> Dict[str, str]:
         headers = {
@@ -42,7 +52,7 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
-    def list_repositories(self, username: str, limit: int = DEFAULT_REPO_LIMIT) -> List[Dict[str, str | None]]:
+    def list_repositories(self, username: str, limit: int = DEFAULT_REPO_LIMIT) -> List[RepositoryInfo]:
         """
         Retrieve repositories for a GitHub user ordered by recent activity.
 
@@ -54,8 +64,12 @@ class GitHubClient:
             Basic repository metadata.
 
         Raises:
-            HTTPError: When the GitHub API responds with an error.
+            requests.HTTPError: When the GitHub API responds with an error.
+            ValueError: If the username is invalid or response is unexpected.
         """
+        if not self._username_pattern.match(username):
+            raise ValueError("Username must be alphanumeric and may include hyphens.")
+
         response = self.session.get(
             f"{API_BASE}/users/{username}/repos",
             params={"per_page": limit, "sort": "pushed"},
@@ -64,7 +78,16 @@ class GitHubClient:
         )
         response.raise_for_status()
         repos = response.json()
-        return [{"name": repo.get("name", ""), "updated_at": repo.get("pushed_at")} for repo in repos]
+        if not isinstance(repos, list):
+            raise ValueError("Unexpected response when listing repositories.")
+
+        results: List[RepositoryInfo] = []
+        for repo in repos:
+            name = repo.get("name")
+            if not isinstance(name, str):
+                continue
+            results.append({"name": name, "updated_at": repo.get("pushed_at")})
+        return results
 
     def path_exists(self, username: str, repo: str, path: str) -> bool:
         """
@@ -79,10 +102,18 @@ class GitHubClient:
             True when the path exists, False when missing.
 
         Raises:
-            HTTPError: For non-404 error responses.
+            requests.HTTPError: For non-404 error responses.
+            ValueError: If inputs are invalid.
         """
+        if not self._username_pattern.match(username):
+            raise ValueError("Username must be alphanumeric and may include hyphens.")
+        if not repo or "/" in repo:
+            raise ValueError("Repository name must be a single path segment.")
+        if not path:
+            raise ValueError("Path must be non-empty.")
+
         response = self.session.get(
-            f"{API_BASE}/repos/{username}/{repo}/contents/{path}",
+            f"{API_BASE}/repos/{quote(username)}/{quote(repo)}/contents/{quote(path)}",
             headers=self._headers(),
             timeout=10,
         )
@@ -114,6 +145,10 @@ def audit_user_repositories(
 
     Returns:
         List of AuditResult objects.
+
+    Note:
+        This makes a request for every repository-path combination, which can be slow
+        and may hit rate limits for large inputs.
     """
     auditor = client or GitHubClient(token=token)
     repos = auditor.list_repositories(username, limit)
