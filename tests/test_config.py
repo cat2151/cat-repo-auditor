@@ -8,7 +8,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from cat_repo_auditor.config import load_config  # noqa: E402
+from cat_repo_auditor.config import ConfigError, load_config  # noqa: E402
 
 
 def test_load_config_creates_default_when_missing(tmp_path: Path) -> None:
@@ -38,3 +38,21 @@ highlight_missing = false
     assert config["check_items"] == ["README.md", "CONTRIBUTING.md"]
     assert config["display"]["show_repo_name"] is False
     assert config["display"]["highlight_missing"] is False
+
+
+def test_load_config_raises_when_tomllib_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "audit_config.toml"
+    import cat_repo_auditor.config as config_module
+
+    monkeypatch.setattr(config_module, "tomllib", None)
+
+    with pytest.raises(ConfigError):
+        load_config(config_path)
+
+
+def test_load_config_raises_on_invalid_toml(tmp_path: Path) -> None:
+    config_path = tmp_path / "audit_config.toml"
+    config_path.write_text("invalid = [unclosed", encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        load_config(config_path)

@@ -7,8 +7,11 @@ from typing import Any, Dict
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.11+ includes tomllib
-    tomllib = None
+except ImportError:  # pragma: no cover - Python 3.11+ includes tomllib; fallback to tomli on older versions
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None
 
 DEFAULT_CONFIG_TEXT = """# Repository Auditor Configuration
 # Edit this file to change what gets checked. Updates are intended to be picked up automatically by the app.
