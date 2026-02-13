@@ -4,6 +4,28 @@
 
 GitHubリポジトリ群の標準化を可視化・管理するツール
 
+## 現状（2026-02時点でできること）
+
+- 実装済み: `cat_repo_auditor.config.load_config` による `audit_config.toml` の自動生成と読み込み
+- 未実装: CLI/GUIのエントリポイントや監査ロジック（今後追加予定）
+- 検証方法: 下記の手順でユニットテストを実行、または設定ローダーを直接呼び出す
+
+## 今すぐ現状を検証するには？
+
+1. Python 3.10+ を用意
+2. 依存関係をインストール: `python -m pip install -r requirements.txt pytest`
+3. テストを実行: `pytest`
+4. 設定ファイル生成を確認（任意）:
+
+   ```bash
+   PYTHONPATH=src python - <<'PY'
+   from cat_repo_auditor.config import load_config
+   print(load_config())  # audit_config.toml が無ければ自動生成
+   PY
+   ```
+
+※ 本READMEの以降のセクション（特徴、使い方、アーキテクチャなど）は将来的な構想メモです。現状の実装は上記の設定ローダーのみです。
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
