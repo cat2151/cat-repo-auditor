@@ -4,6 +4,10 @@ on:
   issues:
     types: [opened]
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   call-reusable-issue-note:
     uses: cat2151/github-actions/.github/workflows/issue-note.yml@main
