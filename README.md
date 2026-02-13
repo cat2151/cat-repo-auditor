@@ -10,7 +10,7 @@ How to verify the current behavior
 2. Run tests: `pytest`
 3. Optionally confirm config generation:
    ```bash
-   python - <<'PY'
+   PYTHONPATH=src python - <<'PY'
    from cat_repo_auditor.config import load_config
    print(load_config())  # creates audit_config.toml if missing
    PY

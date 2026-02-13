@@ -18,7 +18,7 @@ GitHubリポジトリ群の標準化を可視化・管理するツール
 4. 設定ファイル生成を確認（任意）:
 
    ```bash
-   python - <<'PY'
+   PYTHONPATH=src python - <<'PY'
    from cat_repo_auditor.config import load_config
    print(load_config())  # audit_config.toml が無ければ自動生成
    PY
