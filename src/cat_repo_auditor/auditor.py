@@ -122,7 +122,6 @@ class GitHubClient:
         if response.status_code == 404:
             return False
         response.raise_for_status()
-        return False
 
 
 def audit_user_repositories(
