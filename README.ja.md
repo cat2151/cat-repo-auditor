@@ -326,52 +326,6 @@ except ImportError:
   self.tree.tag_configure("missing", background="#ffebee")    # 赤色
   ```
 
-##### 4.5 TOMLパーサーの実装（fallback用）
-
-Python 3.10以下または`tomllib`が利用できない場合のフォールバック:
-
-```python
-def _parse_toml_simple(self, path: Path) -> Dict:
-    """シンプルなTOMLパーサー（基本的な構文のみサポート）"""
-    config = {"check_items": [], "display": {}}
-    current_section = None
-    
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            
-            if line.startswith("[") and line.endswith("]"):
-                current_section = line[1:-1]
-                if current_section not in config:
-                    config[current_section] = {}
-            elif "=" in line:
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
-                
-                # 値のパース
-                if value == "true":
-                    value = True
-                elif value == "false":
-                    value = False
-                elif value.startswith("[") and value.endswith("]"):
-                    # 配列のパース
-                    items = value[1:-1].split(",")
-                    value = [item.strip().strip('"').strip("'") 
-                            for item in items if item.strip()]
-                else:
-                    value = value.strip('"').strip("'")
-                
-                if current_section:
-                    config[current_section][key] = value
-                else:
-                    config[key] = value
-    
-    return config
-```
-
 #### Step 5: エントリーポイントの実装
 
 ```python
