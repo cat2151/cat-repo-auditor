@@ -6,7 +6,7 @@ This is a Python-based repository auditing tool project.
 ## Development Guidelines
 
 ### Python Standards
-- **Python Version**: Use Python 3.8 or higher
+- **Python Version**: Use Python 3.10 or higher
 - **Code Style**: Follow PEP 8 coding standards
 - **Type Hints**: Use type hints for all function parameters and return values (PEP 484)
 - **Docstrings**: Follow PEP 257 docstring conventions

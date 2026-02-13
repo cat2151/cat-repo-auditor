@@ -6,7 +6,7 @@ This file provides repository-wide custom instructions for GitHub Copilot to hel
 This is a Python-based repository auditing tool project.
 
 ## Python Standards
-- Use Python 3.8 or higher
+- Use Python 3.10 or higher
 - Follow PEP 8 coding standards
 - Use type hints for all function parameters and return values (PEP 484)
 - Follow PEP 257 docstring conventions:
