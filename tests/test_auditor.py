@@ -119,6 +119,35 @@ def test_cli_outputs_table(tmp_path):
     assert "LICENSE" in output and "no" in output
 
 
+def test_cli_runs_update_callback(tmp_path):
+    config_path = tmp_path / "audit_config.toml"
+    config_path.write_text('check_items = ["README.md"]\n\n[display]\nshow_repo_name = true\n', encoding="utf-8")
+
+    class StubClient(GitHubClient):
+        def list_repositories(self, username, limit):
+            return [{"name": "sample", "updated_at": "2024-02-01"}]
+
+        def path_exists(self, username, repo, path):
+            return True
+
+    called = {"count": 0}
+
+    def fake_update():
+        called["count"] += 1
+        return False
+
+    buffer = io.StringIO()
+    exit_code = main(
+        ["--user", "alice", "--config", str(config_path), "--limit", "1"],
+        client=StubClient(),
+        stream=buffer,
+        update_fn=fake_update,
+    )
+
+    assert exit_code == 0
+    assert called["count"] == 1
+
+
 def test_audit_result_missing_handles_all_cases():
     empty = AuditResult(repository="r", updated_at=None, found={})
     all_present = AuditResult(repository="r", updated_at=None, found={"a": True})

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import requests
 
 from .auditor import AuditResult, GitHubClient, audit_user_repositories
+from .auto_updater import maybe_self_update
 from .config import ConfigError, load_config
 
 
@@ -46,7 +47,14 @@ def _format_table(check_items: Sequence[str], results: Iterable[AuditResult]) ->
     return "\n".join([header, divider, *body_lines])
 
 
-def main(argv: Sequence[str] | None = None, client: GitHubClient | None = None, stream=None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    client: GitHubClient | None = None,
+    stream=None,
+    *,
+    self_update: bool = True,
+    update_fn: Callable[[], bool] | None = None,
+) -> int:
     """
     Run the CLI.
 
@@ -54,12 +62,21 @@ def main(argv: Sequence[str] | None = None, client: GitHubClient | None = None, 
         argv: Optional argument list for testing.
         client: Optional GitHubClient override for testing.
         stream: Optional stream to write output to. Defaults to stdout.
+        self_update: Whether to perform a self-update check before running.
+        update_fn: Optional override for the self-update function.
 
     Returns:
         Exit code.
     """
     stream = stream or sys.stdout
     args = _build_parser().parse_args(argv)
+
+    if self_update:
+        updater = update_fn or maybe_self_update
+        try:
+            updater()
+        except Exception:
+            pass
 
     try:
         config = load_config(args.config)
