@@ -96,3 +96,15 @@ JSON ファイル（`repo_analysis.json`）には各リポジトリの詳細情�
 - 通常実行するとdry-run的に、localリポジトリをチェックして結果をprintする
 - `--pull` をつけて実行すると、pullableなものをすべてpullする
 - 用途は、大量の実験用の小規模リポジトリを持っているuserが、把握を楽にするため、localに大量にpullする用
+
+# check_local_workflows.py
+
+- local側を軸にしたチェックツール
+- 同じTOMLを利用する
+- hashチェックする
+- 用途は、大量の実験用の小規模リポジトリを持っているuserが、把握を楽にする用
+
+# sync_workflows.py
+
+- 用途は、localのリポジトリ間で、多数派のworkflowファイルに揃える用
+- 最終的なcommit push前に、y/[N]で確認プロンプトが表示される

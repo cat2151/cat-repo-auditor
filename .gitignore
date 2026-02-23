@@ -209,3 +209,4 @@ __marimo__/
 #
 config.toml
 repo_analysis.json
+github_local_checker_result.json
