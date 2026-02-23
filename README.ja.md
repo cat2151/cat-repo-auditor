@@ -89,6 +89,10 @@ python cat_repo_auditor.py
 
 JSON ファイル（`repo_analysis.json`）には各リポジトリの詳細情報が含まれる。
 
-## ライセンス
+## github_local_checker.py
 
-MIT
+- local側を軸にしたチェックツール
+- 同じTOMLを利用する
+- 通常実行するとdry-run的に、localリポジトリをチェックして結果をprintする
+- `--pull` をつけて実行すると、pullableなものをすべてpullする
+- 用途は、大量の実験用の小規模リポジトリを持っているuserが、把握を楽にするため、localに大量にpullする用
