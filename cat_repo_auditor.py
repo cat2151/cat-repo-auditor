@@ -1,0 +1,443 @@
+#!/usr/bin/env python3
+"""
+GitHubリポジトリを分析するCLI
+
+認証: gh コマンド (GitHub CLI) が認証済みであること。
+      `gh auth token` でトークンを自動取得するため --token 指定は不要。
+
+チェック項目:
+  - README.ja.md の存在
+  - README.ja.md 内の DeepWiki 記載有無
+  - google*.html がプロジェクトルートに存在するか
+  - AGENTS.md または .github/copilot-instructions.md のどちらかが存在するか
+  - .github/workflows/ 配下に yml/yaml が存在するか
+  - プロジェクトルートに _config.yml (Jekyll用) が存在するか
+"""
+
+import json
+import re
+import sys
+import subprocess
+import time
+import urllib.request
+import urllib.error
+import base64
+import argparse
+from datetime import datetime
+from pathlib import Path
+from fnmatch import fnmatch
+try:
+    import tomllib          # Python 3.11+
+except ImportError:
+    try:
+        import tomli as tomllib  # pip install tomli
+    except ImportError:
+        tomllib = None
+
+# GITHUB_USER は config.toml から取得 (load_config() 参照)
+
+# ---------------------------------------------------------------------------
+# config.toml からユーザー設定を読み込む
+# ---------------------------------------------------------------------------
+
+def load_config(config_path="config.toml"):
+    """カレントディレクトリの config.toml を読み込む。
+    必須キー: github_user
+    例:
+        github_user = "your-github-username"
+    """
+    p = Path(config_path)
+    if not p.exists():
+        print(f"{C.NG_RED}ERROR{C.RESET}: {config_path} が見つからない。", file=sys.stderr)
+        print("  カレントディレクトリに以下の内容で作成してくれ:", file=sys.stderr)
+        print('  github_user = "your-github-username"\n', file=sys.stderr)
+        sys.exit(1)
+    if tomllib is None:
+        print(f"{C.NG_RED}ERROR{C.RESET}: TOML パーサーが見つからない。", file=sys.stderr)
+        print("  Python 3.11+ を使うか `pip install tomli` を実行してくれ。", file=sys.stderr)
+        sys.exit(1)
+    with open(p, "rb") as f:
+        cfg = tomllib.load(f)
+    if "github_user" not in cfg:
+        print(f"{C.NG_RED}ERROR{C.RESET}: config.toml に github_user が定義されていない。", file=sys.stderr)
+        sys.exit(1)
+    return cfg
+
+DEEPWIKI_PATTERNS = ["deepwiki.com", "deepwiki", "DeepWiki"]
+
+# ---------------------------------------------------------------------------
+# ANSI カラー
+# ---------------------------------------------------------------------------
+
+# Monokai 256色パレット
+class C:
+    RESET  = "\033[0m"
+    BOLD   = "\033[1m"
+    OK_GRN = "\033[38;5;148m"   # #A6E22E 黄緑    : OK
+    NG_RED = "\033[38;5;197m"   # #F92672 赤ピンク : NG
+    TITLE  = "\033[38;5;81m"    # #66D9EF 水色    : セクションタイトル
+    ORANGE = "\033[38;5;208m"   # #FD971F オレンジ : ヘッダ強調
+    REPO   = "\033[38;5;228m"   # #E6DB74 黄      : リポジトリ名
+    PURPLE = "\033[38;5;141m"   # #AE81FF 紫      : カウント
+    DIM    = "\033[38;5;242m"   # #75715E グレー   : dim補足
+    FG     = "\033[38;5;231m"   # #F8F8F2 白前景  : 通常テキスト
+
+def ok(text):   return f"{C.OK_GRN}{text}{C.RESET}"
+def ng(text):   return f"{C.NG_RED}{text}{C.RESET}"
+def head(text): return f"{C.TITLE}{C.BOLD}{text}{C.RESET}"
+def dim(text):  return f"{C.DIM}{text}{C.RESET}"
+def repo(text): return f"{C.REPO}{text}{C.RESET}"
+def hl(text):   return f"{C.ORANGE}{C.BOLD}{text}{C.RESET}"
+
+
+# ---------------------------------------------------------------------------
+# gh コマンドによるトークン取得
+# ---------------------------------------------------------------------------
+
+def get_token_from_gh():
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, timeout=10
+        )
+        token = result.stdout.strip()
+        if not token:
+            print(f"{C.RED}ERROR{C.RESET}: `gh auth token` がトークンを返さなかった。", file=sys.stderr)
+            print("  `gh auth login` で認証してから再実行してくれ。", file=sys.stderr)
+            sys.exit(1)
+        return token
+    except FileNotFoundError:
+        print(f"{C.RED}ERROR{C.RESET}: gh コマンドが見つからない。GitHub CLI をインストールしてくれ。", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        print(f"{C.RED}ERROR{C.RESET}: `gh auth token` がタイムアウトした。", file=sys.stderr)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# GitHub API
+# ---------------------------------------------------------------------------
+
+def github_request(url, token):
+    req = urllib.request.Request(url)
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    req.add_header("User-Agent", "github-repo-analyzer/1.0")
+    req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+    except Exception as e:
+        print(f"  [ERROR] リクエスト失敗: {url} -> {e}", file=sys.stderr)
+        return None
+
+def file_exists(repo, path, token, github_user):
+    url = f"https://api.github.com/repos/{github_user}/{repo}/contents/{path}?ref=main"
+    data = github_request(url, token)
+    time.sleep(0.2)
+    return data is not None and isinstance(data, dict)
+
+
+def fetch_dir_listing(repo, path, token, github_user):
+    url = f"https://api.github.com/repos/{github_user}/{repo}/contents/{path}?ref=main"
+    data = github_request(url, token)
+    time.sleep(0.2)
+    if data is None or not isinstance(data, list):
+        return []
+    return data
+
+
+def fetch_root_listing(repo, token, github_user):
+    url = f"https://api.github.com/repos/{github_user}/{repo}/contents/?ref=main"
+    data = github_request(url, token)
+    time.sleep(0.2)
+    if data is None or not isinstance(data, list):
+        return []
+    return data
+
+
+# ---------------------------------------------------------------------------
+# リポジトリ一覧
+# ---------------------------------------------------------------------------
+
+def fetch_repos(token, github_user):
+    print(f"{C.ORANGE}[1/3]{C.RESET} {github_user} のリポジトリを取得中...")
+    url = (
+        f"https://api.github.com/users/{github_user}/repos"
+        f"?sort=pushed&direction=desc&per_page=20"
+    )
+    repos = github_request(url, token)
+    if not repos:
+        print(f"{C.NG_RED}ERROR{C.RESET}: リポジトリの取得に失敗した", file=sys.stderr)
+        sys.exit(1)
+    print(f"      {len(repos)} 件取得")
+    return repos
+
+
+# ---------------------------------------------------------------------------
+# README.ja.md
+# ---------------------------------------------------------------------------
+
+def fetch_readme_ja(repo_name, token, github_user):
+    url = (
+        f"https://api.github.com/repos/{github_user}/{repo_name}"
+        f"/contents/README.ja.md?ref=main"
+    )
+    data = github_request(url, token)
+    time.sleep(0.2)
+    if not data or "content" not in data:
+        return None
+    try:
+        return base64.b64decode(data["content"]).decode("utf-8")
+    except Exception:
+        return None
+
+
+def check_deepwiki(content):
+    found_patterns = []
+    occurrences = []
+    for i, line in enumerate(content.splitlines(), 1):
+        for pattern in DEEPWIKI_PATTERNS:
+            if pattern in line:
+                if pattern not in found_patterns:
+                    found_patterns.append(pattern)
+                occurrences.append({"line": i, "text": line.strip()})
+                break
+    return {
+        "has_deepwiki": bool(found_patterns),
+        "matched_patterns": found_patterns,
+        "occurrences": occurrences,
+    }
+
+
+def analyze_readme(content):
+    lines = content.splitlines()
+    non_empty = [l for l in lines if l.strip()]
+    headings = [l.strip() for l in lines if l.startswith("#")]
+    urls = re.findall(r'https?://[^\s\)\]\"\']+', content)
+    return {
+        "char_count": len(content),
+        "line_count": len(lines),
+        "non_empty_lines": len(non_empty),
+        "heading_count": len(headings),
+        "headings": headings[:10],
+        "url_count": len(set(urls)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 各種チェック
+# ---------------------------------------------------------------------------
+
+def check_google_html(root_files):
+    names = [f["name"] for f in root_files if f.get("type") == "file"]
+    matched = [n for n in names if fnmatch(n.lower(), "google*.html")]
+    return {"exists": bool(matched), "files": matched}
+
+
+def check_agents_file(repo, root_files, token, github_user):
+    root_names = {f["name"] for f in root_files}
+    found = []
+    if "AGENTS.md" in root_names:
+        found.append("AGENTS.md")
+    if "copilot-instructions.md" in root_names:
+        found.append("copilot-instructions.md")
+    if file_exists(repo, ".github/copilot-instructions.md", token, github_user):
+        found.append(".github/copilot-instructions.md")
+    return {"exists": bool(found), "found_files": found}
+
+
+def check_workflows(repo, token, github_user):
+    entries = fetch_dir_listing(repo, ".github/workflows", token, github_user)
+    ymls = [
+        e["name"] for e in entries
+        if e.get("type") == "file"
+        and (e["name"].endswith(".yml") or e["name"].endswith(".yaml"))
+    ]
+    return {"exists": bool(ymls), "files": ymls}
+
+
+def check_jekyll_config(root_files):
+    names = {f["name"] for f in root_files if f.get("type") == "file"}
+    return {"exists": "_config.yml" in names}
+
+
+# ---------------------------------------------------------------------------
+# メイン処理
+# ---------------------------------------------------------------------------
+
+def process_repos(repos, token, github_user):
+    print(f"\n{C.ORANGE}[2/3]{C.RESET} 各リポジトリを分析中...")
+    results = []
+
+    for i, repo in enumerate(repos, 1):
+        name = repo["name"]
+        print(f"  [{i:2d}/{len(repos)}] {C.REPO}{name}{C.RESET}", flush=True)
+
+        result = {
+            "repo_name": name,
+            "full_name": repo["full_name"],
+            "html_url": repo["html_url"],
+            "description": repo.get("description"),
+            "pushed_at": repo.get("pushed_at"),
+            "created_at": repo.get("created_at"),
+            "stars": repo.get("stargazers_count", 0),
+            "language": repo.get("language"),
+            "is_fork": repo.get("fork", False),
+            "is_archived": repo.get("archived", False),
+            "readme_ja_exists": False,
+            "readme_ja_analysis": None,
+            "deepwiki": None,
+            "google_html": None,
+            "agents_file": None,
+            "workflows_yml": None,
+            "jekyll_config": None,
+        }
+
+        root_files = fetch_root_listing(name, token, github_user)
+        readme_content = fetch_readme_ja(name, token, github_user)
+
+        if readme_content:
+            result["readme_ja_exists"] = True
+            result["readme_ja_analysis"] = analyze_readme(readme_content)
+            result["deepwiki"] = check_deepwiki(readme_content)
+        else:
+            result["deepwiki"] = {"has_deepwiki": False, "matched_patterns": [], "occurrences": []}
+
+        result["google_html"]   = check_google_html(root_files)
+        result["agents_file"]   = check_agents_file(name, root_files, token, github_user)
+        result["workflows_yml"] = check_workflows(name, token, github_user)
+        result["jekyll_config"] = check_jekyll_config(root_files)
+
+        def flag(label, val):
+            return (f"{C.OK_GRN}\u2713{C.RESET} {C.FG}{label}{C.RESET}") if val else (f"{C.NG_RED}\u2717{C.RESET} {C.DIM}{label}{C.RESET}")
+
+        flags = [
+            flag("README.ja", result["readme_ja_exists"]),
+            flag("DeepWiki",  result["deepwiki"]["has_deepwiki"]),
+            flag("google",    result["google_html"]["exists"]),
+            flag("agents",    result["agents_file"]["exists"]),
+            flag("CI",        result["workflows_yml"]["exists"]),
+            flag("jekyll",    result["jekyll_config"]["exists"]),
+        ]
+        print(f"         {' | '.join(flags)}")
+
+        results.append(result)
+
+    return results
+
+
+def print_summary(results, output_path):
+    W = 70
+    print(f"\n{C.ORANGE}[3/3]{C.RESET} {C.FG}{C.BOLD}サマリー{C.RESET}")
+    print("=" * W)
+
+    total = len(results)
+    with_readme   = [r for r in results if r["readme_ja_exists"]]
+    with_deepwiki = [r for r in results if r["deepwiki"]["has_deepwiki"]]
+
+
+    def missing(key):
+        return [{'repo_name': r['repo_name'], 'html_url': r['html_url']}
+                for r in results if not (r.get(key) or {}).get('exists', False)]
+
+    no_readme   = [{'repo_name': r['repo_name'], 'html_url': r['html_url']} for r in results if not r['readme_ja_exists']]
+    no_deepwiki = [{'repo_name': r['repo_name'], 'html_url': r['html_url']} for r in results if not r['deepwiki']['has_deepwiki']]
+    no_google   = missing('google_html')
+    no_agents   = missing('agents_file')
+    no_ci       = missing('workflows_yml')
+    no_jekyll   = missing('jekyll_config')
+
+
+    # no_list: [{'repo_name': ..., 'html_url': ...}, ...]
+    def section(title, no_list, ok_count):
+        bar = "\u2500" * W
+        print(f"\n{bar}")
+        label_ok = ok(f"{ok_count}/{total} あり")
+        label_ng = ng(f"{len(no_list)}/{total} なし")
+        print(f"  {head(title)}  [{label_ok} / {label_ng}]")
+        if no_list:
+            for item in no_list:
+                print(f"    {C.NG_RED}\u2717{C.RESET} {C.REPO}{item['repo_name']}{C.RESET}")
+                print(f"      {C.DIM}{item['html_url']}{C.RESET}")
+        else:
+            print(f"    {ok('(全リポジトリに存在する)')}")
+
+    print(f"{C.FG}対象リポジトリ数: {C.PURPLE}{C.BOLD}{total}{C.RESET}")
+    print(f"{C.DIM}フォーク: {sum(1 for r in results if r['is_fork'])}  "
+          f"アーカイブ済: {sum(1 for r in results if r['is_archived'])}{C.RESET}")
+
+    section("README.ja.md",                        no_readme,   len(with_readme))
+    section("DeepWiki \u8a18\u8f09 (README.ja.md \u5185)",  no_deepwiki, len(with_deepwiki))
+    section("google*.html (\u30eb\u30fc\u30c8)",             no_google,   total - len(no_google))
+    section("AGENTS.md / copilot-instructions.md", no_agents,   total - len(no_agents))
+    section(".github/workflows/ \u306e yml/yaml",  no_ci,       total - len(no_ci))
+    section("_config.yml (Jekyll, \u30eb\u30fc\u30c8)",      no_jekyll,   total - len(no_jekyll))
+
+    if no_deepwiki:
+        print(f"\n{chr(9472)*W}")
+        print(f"  {head('DeepWiki 記載なし 詳細:')}")
+        for item in no_deepwiki:
+            print(f"    {C.NG_RED}\u2717{C.RESET} {C.REPO}{item['repo_name']}{C.RESET}")
+            print(f"      {C.DIM}{item['html_url']}{C.RESET}")
+
+    print(f"\n{'='*W}")
+    print(f"{C.DIM}出力ファイル: {output_path}{C.RESET}")
+    print("=" * W)
+
+
+# ---------------------------------------------------------------------------
+# エントリポイント
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="GitHubリポジトリを多角的に分析するCLI (gh認証使用)"
+    )
+    parser.add_argument(
+        "--output", "-o",
+        help="JSON出力ファイルパス (デフォルト: repo_analysis.json)",
+        default="repo_analysis.json",
+    )
+    parser.add_argument(
+        "--config", "-c",
+        help="設定ファイルパス (デフォルト: config.toml)",
+        default="config.toml",
+    )
+    args = parser.parse_args()
+
+    cfg = load_config(args.config)
+    github_user = cfg["github_user"]
+
+    print(f"{C.TITLE}{C.BOLD}=== GitHub リポジトリ分析CLI ==={C.RESET}")
+    print(f"{C.DIM}実行日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{C.RESET}")
+    print(f"{C.DIM}対象ユーザー:{C.RESET} {C.REPO}{github_user}{C.RESET}")
+
+    token = get_token_from_gh()
+    print(f"{C.DIM}認証:{C.RESET} {ok('gh auth token で取得済み')}")
+    print()
+
+    repos   = fetch_repos(token, github_user)
+    results = process_repos(repos, token, github_user)
+
+    output = {
+        "generated_at": datetime.now().isoformat(),
+        "user": github_user,
+        "total_repos": len(results),
+        "repos": results,
+    }
+
+    output_path = Path(args.output)
+    output_path.write_text(
+        json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    print_summary(results, str(output_path))
+
+
+if __name__ == "__main__":
+    main()
