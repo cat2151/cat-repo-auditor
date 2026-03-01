@@ -35,6 +35,7 @@ except ImportError:
         tomllib = None
 
 from .colors import C, ok, ng, head, dim, repo, hl
+from .constants import CACHE_DIR, HISTORY_FILE, REPO_CACHE_FILE, CONFIG_DIR, REPO_CONFIG_FILE
 
 # GITHUB_USER は config.toml から取得 (load_config() 参照)
 
@@ -66,16 +67,6 @@ def load_config(config_path="config.toml"):
     return cfg
 
 DEEPWIKI_PATTERNS = ["deepwiki.com", "deepwiki", "DeepWiki"]
-
-# ---------------------------------------------------------------------------
-# パス定数
-# ---------------------------------------------------------------------------
-
-CACHE_DIR       = Path("cache")
-HISTORY_FILE    = CACHE_DIR / "history.json"
-REPO_CACHE_FILE = CACHE_DIR / "repositories.json"
-CONFIG_DIR      = Path("config")
-REPO_CONFIG_FILE = CONFIG_DIR / "repositories.toml"
 
 # ---------------------------------------------------------------------------
 # gh コマンドによるトークン取得
