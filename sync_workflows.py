@@ -72,6 +72,7 @@ def is_git_repo(path: Path) -> bool:
         ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        check=False,
     )
     return result.returncode == 0
 
@@ -90,10 +91,25 @@ def collect_target_repos(siblings: list[Path]) -> list[Path]:
 # git ユーティリティ
 # ---------------------------------------------------------------------------
 
-def git_run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+def git_run(
+    args: list[str],
+    cwd: Path,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess:
     """git コマンドを実行し、失敗時はエラーを表示して終了する。"""
     cmd = ["git"] + args
-    result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"[ERROR] コマンドがタイムアウトした: {' '.join(cmd)} (timeout={timeout}s)")
+        sys.exit(1)
     if result.returncode != 0:
         print(f"[ERROR] コマンド失敗: {' '.join(cmd)}")
         if result.stderr.strip():
@@ -106,16 +122,67 @@ def git_run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 
 def git_fetch(repo_dir: Path) -> None:
     """origin を fetch する。"""
-    git_run(["-C", str(repo_dir), "fetch", "origin"], cwd=repo_dir)
+    git_run(["-C", str(repo_dir), "fetch", "origin"], cwd=repo_dir, timeout=30)
+
+
+def git_get_upstream_ref(repo_dir: Path) -> str | None:
+    """現在ブランチの upstream ref（例: origin/main）を返す。未設定なら None。"""
+    result = subprocess.run(
+        ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    ref = result.stdout.strip()
+    return ref or None
 
 
 def git_show_remote_file(repo_dir: Path, filepath: Path) -> bytes | None:
-    """remote HEAD のファイル内容をバイト列で返す。取得失敗時は None。"""
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "show", f"origin/HEAD:{filepath.as_posix()}"],
-        capture_output=True,
-    )
-    return result.stdout if result.returncode == 0 else None
+    """remote のファイル内容をバイト列で返す。ファイル未存在時は None。"""
+    upstream = git_get_upstream_ref(repo_dir)
+    candidates: list[str] = []
+    if upstream:
+        candidates.append(upstream)
+    candidates.extend(["origin/main", "origin/master"])
+
+    seen: set[str] = set()
+    for remote_ref in candidates:
+        if remote_ref in seen:
+            continue
+        seen.add(remote_ref)
+
+        spec = f"{remote_ref}:{filepath.as_posix()}"
+        try:
+            result = subprocess.run(
+                ["git", "--no-pager", "-C", str(repo_dir), "show", spec],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"[ERROR] git show がタイムアウトした: {repo_dir.name} {spec}")
+            sys.exit(1)
+
+        if result.returncode == 0:
+            return result.stdout
+
+        stderr_text = result.stderr.decode("utf-8", errors="replace")
+        if (
+            "does not exist in" in stderr_text
+            or "Path '" in stderr_text
+            or "exists on disk, but not in" in stderr_text
+        ):
+            continue
+
+        print(f"[ERROR] git show 失敗: {repo_dir.name} {spec}")
+        if stderr_text.strip():
+            print(stderr_text.strip())
+        sys.exit(result.returncode if result.returncode != 0 else 1)
+
+    return None
 
 
 def git_add(filepath: Path, repo_dir: Path) -> None:
@@ -128,6 +195,7 @@ def git_has_staged_changes(repo_dir: Path) -> bool:
     result = subprocess.run(
         ["git", "-C", str(repo_dir), "diff", "--cached", "--quiet"],
         capture_output=True,
+        check=False,
     )
     return result.returncode == 1
 
@@ -160,6 +228,25 @@ def copy_file(src: Path, dst: Path) -> None:
     """ファイルを上書きコピーする。親ディレクトリがなければ作成する。"""
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(src), str(dst))
+
+
+def normalize_line_endings(data: bytes) -> bytes:
+    """改行コードを LF に正規化したバイト列を返す。"""
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def count_line_endings(data: bytes) -> tuple[int, int, int]:
+    """改行コードの内訳を (CRLF, LF, CR) で返す。"""
+    crlf_count = data.count(b"\r\n")
+    rest = data.replace(b"\r\n", b"")
+    lf_count = rest.count(b"\n")
+    cr_count = rest.count(b"\r")
+    return crlf_count, lf_count, cr_count
+
+
+def is_line_ending_only_diff(data_a: bytes, data_b: bytes) -> bool:
+    """内容は同一で改行コードのみ異なる場合に True を返す。"""
+    return data_a != data_b and normalize_line_endings(data_a) == normalize_line_endings(data_b)
 
 
 # ---------------------------------------------------------------------------
@@ -219,17 +306,38 @@ def find_master_repo(
 # 差分の可視化
 # ---------------------------------------------------------------------------
 
-def show_difft(path_a: Path, path_b: Path) -> None:
+def show_difft(
+    path_a: Path,
+    path_b: Path,
+    label_a: str = "left",
+    label_b: str = "right",
+) -> None:
     """difft を使って2ファイルの差分を表示する。difft がなければ diff にフォールバック。
 
     difft が "No changes." を報告した場合（例: CRLF のみの差異で構文上は同一と判定された場合）は、
-    --language text オプションで再試行してテキストレベルの差異を表示する。
+    --override '*:text' と --strip-cr off で再試行してテキストレベルの差異を表示する。
     それでも解決しない場合は diff にフォールバックする。
 
     Args:
         path_a: 比較元ファイル (旧/remote など)。
         path_b: 比較先ファイル (新/local など)。
+        label_a: 表示用ラベル（path_a 側）。
+        label_b: 表示用ラベル（path_b 側）。
     """
+    try:
+        data_a = path_a.read_bytes()
+        data_b = path_b.read_bytes()
+        if is_line_ending_only_diff(data_a, data_b):
+            a_crlf, a_lf, a_cr = count_line_endings(data_a)
+            b_crlf, b_lf, b_cr = count_line_endings(data_b)
+            print("  [INFO] 改行コードのみが差分（内容差分なし）")
+            print(f"         {label_a}: CRLF={a_crlf}, LF={a_lf}, CR={a_cr}")
+            print(f"         {label_b}: CRLF={b_crlf}, LF={b_lf}, CR={b_cr}")
+            return
+    except OSError:
+        # 読み取り失敗時は通常の差分表示へフォールバック
+        pass
+
     try:
         # --color always で ANSI カラーを強制する（capture_output 時も色を保持するため）。
         completed = subprocess.run(
@@ -238,6 +346,7 @@ def show_difft(path_a: Path, path_b: Path) -> None:
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=10,
             check=False,
         )
         if completed.stdout:
@@ -246,12 +355,23 @@ def show_difft(path_a: Path, path_b: Path) -> None:
             print(completed.stderr, file=sys.stderr, end="")
         if completed.returncode == 0:
             # difft が "No changes." を報告した場合、CRLF 等の差異が隠れている可能性がある。
-            # --language text で再試行してテキストレベルの差異を表示する。
+            # --override '*:text' と --strip-cr off で再試行してテキストレベルの差異を表示する。
             if "No changes." in completed.stdout:
-                print("  [INFO] 構文差異なし。--language text で再比較する (CRLF 等の差異を検出)：")
+                print("  [INFO] 構文差異なし。text比較で再比較する (CRLF 等の差異を検出)：")
                 # capture_output を使わず stdout に直接出力させ、ANSI カラーを保持する。
                 completed2 = subprocess.run(
-                    ["difft", "--language", "text", str(path_a), str(path_b)],
+                    [
+                        "difft",
+                        "--color",
+                        "always",
+                        "--strip-cr",
+                        "off",
+                        "--override",
+                        "*:text",
+                        str(path_a),
+                        str(path_b),
+                    ],
+                    timeout=10,
                     check=False,
                 )
                 if completed2.returncode == 0:
@@ -262,6 +382,9 @@ def show_difft(path_a: Path, path_b: Path) -> None:
         # difft が非ゼロを返した場合は diff にフォールバック
     except FileNotFoundError:
         pass  # difft が見つからない場合は diff にフォールバック
+    except subprocess.TimeoutExpired:
+        print("  [INFO] difft がタイムアウトしたため、内容比較をスキップする。")
+        return
 
     # diff にフォールバック
     try:
@@ -333,22 +456,22 @@ def show_remote_local_status(
 
         diffs = get_uncommitted_vs_remote(repo_dir, sync_filepaths)
         if not diffs:
-            print(f"    [OK] 差分なし")
+            print("    [OK] 差分なし")
             continue
 
         for fp, lh, rh, remote_bytes in diffs:
             print(f"    [!] 差分あり: {fp.as_posix()}")
             print(f"        local  : {lh}")
             print(f"        remote : {rh}")
-            print(f"        ※ localの変更をremoteにcommit & pushする予定")
+            print("        ※ localの変更をremoteにcommit & pushする予定")
             with tempfile.NamedTemporaryFile(
                 suffix=fp.suffix or ".txt", delete=False, prefix="remote_"
             ) as tmp:
                 tmp.write(remote_bytes)
                 tmp_path = Path(tmp.name)
             try:
-                print(f"        --- 差分内容 (remote → local) ---")
-                show_difft(tmp_path, repo_dir / fp)
+                print("        --- 差分内容 (remote → local) ---")
+                show_difft(tmp_path, repo_dir / fp, label_a="remote", label_b="local")
             finally:
                 tmp_path.unlink(missing_ok=True)
         uncommitted_map[repo_dir] = diffs
@@ -438,7 +561,7 @@ def commit_and_push_repo(
     print(f"  [COMMIT] '{COMMIT_MSG}'")
 
     git_push(repo_dir)
-    print(f"  [PUSH] 完了")
+    print("  [PUSH] 完了")
     print()
 
 
@@ -464,7 +587,7 @@ def sync_repo(
     print(f"  [COMMIT] '{COMMIT_MSG}'")
 
     git_push(repo_dir)
-    print(f"  [PUSH] 完了")
+    print("  [PUSH] 完了")
     print()
 
 
@@ -539,7 +662,7 @@ def main() -> None:
             copy_plan[repo_dir].append((sync_filepath, master_fp))
             if local_fp.exists():
                 print(f"  --- 差分内容 ({repo_dir.name}/{sync_filepath.as_posix()}: local → {master_repo.name}) ---")
-                show_difft(local_fp, master_fp)
+                show_difft(local_fp, master_fp, label_a="local", label_b=master_repo.name)
 
     print()
 
