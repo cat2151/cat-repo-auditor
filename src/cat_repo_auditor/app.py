@@ -15,22 +15,22 @@ GitHubリポジトリを分析するCLI
 """
 
 import json
-import re
 import sys
-import base64
 import argparse
 from datetime import datetime
 from pathlib import Path
-from fnmatch import fnmatch
 
-from .colors import C, ok, ng, head, dim, repo, hl
-from .constants import CACHE_DIR, HISTORY_FILE, REPO_CACHE_FILE, CONFIG_DIR, REPO_CONFIG_FILE
-from .config_loader import load_config, DEEPWIKI_PATTERNS
-from .github_api import get_token_from_gh, github_request, file_exists, fetch_dir_listing, fetch_root_listing
+from .colors import C, ok, ng, head, dim
+from .config_loader import load_config
+from .github_api import get_token_from_gh, github_request, fetch_root_listing
 from .cache import (
     load_history, save_history, is_cache_from_today,
     load_repo_cache, save_repo_cache,
     load_known_repo_names, append_repos_to_config, print_repo_config,
+)
+from .checkers import (
+    fetch_readme_ja, check_deepwiki, analyze_readme,
+    check_google_html, check_agents_file, check_workflows, check_jekyll_config,
 )
 
 # GITHUB_USER は config.toml から取得 (load_config() 参照)
@@ -60,94 +60,6 @@ def fetch_repos(token, github_user):
     save_repo_cache(repos)
     save_history()
     return repos
-
-
-# ---------------------------------------------------------------------------
-# README.ja.md
-# ---------------------------------------------------------------------------
-
-def fetch_readme_ja(repo_name, token, github_user):
-    url = (
-        f"https://api.github.com/repos/{github_user}/{repo_name}"
-        f"/contents/README.ja.md?ref=main"
-    )
-    data = github_request(url, token)
-    time.sleep(0.2)
-    if not data or "content" not in data:
-        return None
-    try:
-        return base64.b64decode(data["content"]).decode("utf-8")
-    except Exception:
-        return None
-
-
-def check_deepwiki(content):
-    found_patterns = []
-    occurrences = []
-    for i, line in enumerate(content.splitlines(), 1):
-        for pattern in DEEPWIKI_PATTERNS:
-            if pattern in line:
-                if pattern not in found_patterns:
-                    found_patterns.append(pattern)
-                occurrences.append({"line": i, "text": line.strip()})
-                break
-    return {
-        "has_deepwiki": bool(found_patterns),
-        "matched_patterns": found_patterns,
-        "occurrences": occurrences,
-    }
-
-
-def analyze_readme(content):
-    lines = content.splitlines()
-    non_empty = [l for l in lines if l.strip()]
-    headings = [l.strip() for l in lines if l.startswith("#")]
-    urls = re.findall(r'https?://[^\s\)\]\"\']+', content)
-    return {
-        "char_count": len(content),
-        "line_count": len(lines),
-        "non_empty_lines": len(non_empty),
-        "heading_count": len(headings),
-        "headings": headings[:10],
-        "url_count": len(set(urls)),
-    }
-
-
-# ---------------------------------------------------------------------------
-# 各種チェック
-# ---------------------------------------------------------------------------
-
-def check_google_html(root_files):
-    names = [f["name"] for f in root_files if f.get("type") == "file"]
-    matched = [n for n in names if fnmatch(n.lower(), "google*.html")]
-    return {"exists": bool(matched), "files": matched}
-
-
-def check_agents_file(repo, root_files, token, github_user):
-    root_names = {f["name"] for f in root_files}
-    found = []
-    if "AGENTS.md" in root_names:
-        found.append("AGENTS.md")
-    if "copilot-instructions.md" in root_names:
-        found.append("copilot-instructions.md")
-    if file_exists(repo, ".github/copilot-instructions.md", token, github_user):
-        found.append(".github/copilot-instructions.md")
-    return {"exists": bool(found), "found_files": found}
-
-
-def check_workflows(repo, token, github_user):
-    entries = fetch_dir_listing(repo, ".github/workflows", token, github_user)
-    ymls = [
-        e["name"] for e in entries
-        if e.get("type") == "file"
-        and (e["name"].endswith(".yml") or e["name"].endswith(".yaml"))
-    ]
-    return {"exists": bool(ymls), "files": ymls}
-
-
-def check_jekyll_config(root_files):
-    names = {f["name"] for f in root_files if f.get("type") == "file"}
-    return {"exists": "_config.yml" in names}
 
 
 # ---------------------------------------------------------------------------
