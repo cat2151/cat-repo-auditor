@@ -3,13 +3,11 @@ from pathlib import Path
 
 try:
     from .constants import CHECK_LARGE_FILES_CONFIG
-    from .file_utils import file_sha256
 except ImportError:
     from constants import CHECK_LARGE_FILES_CONFIG
-    from file_utils import file_sha256
 
 
-def find_latest_large_files_toml(target_repos: list) -> Path | None:
+def find_latest_large_files_toml(target_repos: list[Path]) -> Path | None:
     """
     target_repos の中から最も新しい CHECK_LARGE_FILES_CONFIG を返す。
     1件も存在しなければ None を返す。
@@ -24,7 +22,7 @@ def find_latest_large_files_toml(target_repos: list) -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
-def install_large_files_toml(target_repos: list) -> bool:
+def install_large_files_toml(target_repos: list[Path]) -> bool:
     """
     CHECK_LARGE_FILES_CONFIG が欠落しているリポジトリへ、
     最新ファイルをコピーしてインストールする。

@@ -73,7 +73,7 @@ def test_find_latest_large_files_toml_none(tmp_path):
 
 
 def test_find_latest_large_files_toml_found(tmp_path):
-    import time
+    import os
     repo1 = tmp_path / "repo1"
     repo2 = tmp_path / "repo2"
     repo1.mkdir()
@@ -83,11 +83,13 @@ def test_find_latest_large_files_toml_found(tmp_path):
     toml1.parent.mkdir(parents=True, exist_ok=True)
     toml1.write_text("first")
 
-    time.sleep(0.01)
-
     toml2 = repo2 / CHECK_LARGE_FILES_CONFIG
     toml2.parent.mkdir(parents=True, exist_ok=True)
     toml2.write_text("second")
+
+    # Set toml2 mtime to be clearly later than toml1
+    mtime1 = toml1.stat().st_mtime
+    os.utime(toml2, (mtime1 + 10, mtime1 + 10))
 
     result = find_latest_large_files_toml([repo1, repo2])
     assert result == toml2

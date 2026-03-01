@@ -7,14 +7,14 @@ except ImportError:
     from file_utils import file_sha256
 
 
-def check_one(sync_filepath: Path, target_repos: list) -> bool:
+def check_one(sync_filepath: Path, target_repos: list[Path]) -> bool:
     """
     1ファイルについてハッシュ比較を行い、全一致なら True を返す。
     欠落リポジトリも不一致として扱う。
     """
     print(f"=== {sync_filepath.as_posix()} ===")
 
-    hashes: dict = {}
+    hashes: dict[Path, str] = {}
     for d in target_repos:
         fp = d / sync_filepath
         hashes[d] = file_sha256(fp) if fp.exists() else "(欠落)"

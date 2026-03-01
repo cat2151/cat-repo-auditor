@@ -16,6 +16,6 @@ def is_target_repo(path: Path, prerequisite: str) -> bool:
     return is_git_repo(path) and (path / prerequisite).exists()
 
 
-def collect_target_repos(siblings: list, prerequisite: str) -> list:
+def collect_target_repos(siblings: list[Path], prerequisite: str) -> list[Path]:
     """処理対象リポジトリの一覧を返す。"""
     return [d for d in siblings if is_target_repo(d, prerequisite)]
