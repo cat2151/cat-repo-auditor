@@ -197,8 +197,14 @@ def find_master_repo(
     """
     if master_repo_name:
         for d in target_repos:
-            if d.name == master_repo_name and (d / sync_filepath).exists():
-                return d
+            if d.name == master_repo_name:
+                if (d / sync_filepath).exists():
+                    return d
+                print(
+                    f"[WARN] master_repo '{master_repo_name}' は "
+                    f"'{sync_filepath}' を含まないため、多数派ハッシュのリポジトリにフォールバックします。"
+                )
+                break
     if majority_hash is None:
         return None
     return next(
@@ -225,11 +231,20 @@ def show_difft(path_a: Path, path_b: Path) -> None:
         ["diff", "-u", str(path_a), str(path_b)],
     ):
         try:
-            subprocess.run(cmd, check=False)
-            return
+            completed = subprocess.run(cmd, check=False)
         except FileNotFoundError:
             continue
-    print("  [INFO] difft/diff コマンドが見つからない。内容比較をスキップする。")
+        # difft: treat any non-zero exit code as an error and fall back
+        if cmd[0] == "difft":
+            if completed.returncode == 0:
+                return
+            continue
+        # diff: 0 = no differences, 1 = files differ, >1 = error
+        if cmd[0] == "diff":
+            if completed.returncode in (0, 1):
+                return
+            continue
+    print("  [INFO] difft/diff コマンドが見つからない、または実行に失敗したため、内容比較をスキップする。")
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +492,7 @@ def main() -> None:
 
     # repo_dir -> [(sync_filepath, master_fp)]
     copy_plan: dict[Path, list[tuple[Path, Path]]] = defaultdict(list)
+    actual_master_repo_names: set[str] = set()
 
     for sync_filepath in sync_filepaths:
         majority_hash, outliers = detect_outliers(target_repos, sync_filepath)
@@ -487,6 +503,7 @@ def main() -> None:
             print(f"  [ERROR] {sync_filepath.as_posix()} : コピー元リポジトリが特定できなかった。")
             continue
         print(f"  コピー元: {master_repo.name}")
+        actual_master_repo_names.add(master_repo.name)
         for repo_dir in outliers:
             local_fp = repo_dir / sync_filepath
             master_fp = master_repo / sync_filepath
@@ -502,9 +519,10 @@ def main() -> None:
         sys.exit(0)
 
     repo_names = [d.name for d in sorted(copy_plan.keys())]
+    source_label = "、".join(sorted(actual_master_repo_names)) if actual_master_repo_names else (master_repo_name or "多数派")
     if not confirm_action(
         repo_names,
-        f"上記リポジトリに {master_repo_name or '多数派'} リポジトリのファイルをコピーして commit & push してよいか？"
+        f"上記リポジトリに {source_label} リポジトリのファイルをコピーして commit & push してよいか？"
     ):
         print("[ABORT] キャンセルした。")
         sys.exit(0)
