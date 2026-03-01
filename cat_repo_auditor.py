@@ -66,6 +66,16 @@ def load_config(config_path="config.toml"):
 DEEPWIKI_PATTERNS = ["deepwiki.com", "deepwiki", "DeepWiki"]
 
 # ---------------------------------------------------------------------------
+# パス定数
+# ---------------------------------------------------------------------------
+
+CACHE_DIR       = Path("cache")
+HISTORY_FILE    = CACHE_DIR / "history.json"
+REPO_CACHE_FILE = CACHE_DIR / "repositories.json"
+CONFIG_DIR      = Path("config")
+REPO_CONFIG_FILE = CONFIG_DIR / "repositories.toml"
+
+# ---------------------------------------------------------------------------
 # ANSI カラー
 # ---------------------------------------------------------------------------
 
@@ -161,10 +171,135 @@ def fetch_root_listing(repo, token, github_user):
 
 
 # ---------------------------------------------------------------------------
+# キャッシュ / 履歴 / リポジトリ設定
+# ---------------------------------------------------------------------------
+
+def _ensure_dir(path: Path) -> None:
+    """ディレクトリが存在しない場合は作成する。"""
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def load_history() -> dict:
+    """cache/history.json を読み込む。存在しない場合は空dictを返す。"""
+    if not HISTORY_FILE.exists():
+        return {}
+    try:
+        return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_history() -> None:
+    """現在日時を cache/history.json に保存する。"""
+    _ensure_dir(CACHE_DIR)
+    data = {"last_saved": datetime.now().isoformat()}
+    HISTORY_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def is_cache_from_today(history: dict) -> bool:
+    """キャッシュが今日のものであれば True を返す。"""
+    last_saved = history.get("last_saved")
+    if not last_saved:
+        return False
+    try:
+        saved_date = datetime.fromisoformat(last_saved).date()
+        return saved_date == datetime.now().date()
+    except Exception:
+        return False
+
+
+def load_repo_cache() -> list | None:
+    """cache/repositories.json を読み込む。失敗時は None を返す。"""
+    if not REPO_CACHE_FILE.exists():
+        return None
+    try:
+        return json.loads(REPO_CACHE_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def save_repo_cache(repos: list) -> None:
+    """リポジトリ一覧を cache/repositories.json に保存する。"""
+    _ensure_dir(CACHE_DIR)
+    REPO_CACHE_FILE.write_text(
+        json.dumps(repos, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+_REPO_CONFIG_ENTRY = """\
+[[repositories]]
+    repository = '{name}'
+#    translate_readme = true
+#    check_large_files = true
+"""
+
+
+def load_known_repo_names() -> list[str]:
+    """config/repositories.toml から既知のリポジトリ名一覧を返す。"""
+    if not REPO_CONFIG_FILE.exists():
+        return []
+    if tomllib is None:
+        return []
+    try:
+        with open(REPO_CONFIG_FILE, "rb") as f:
+            cfg = tomllib.load(f)
+        return [r["repository"] for r in cfg.get("repositories", []) if "repository" in r]
+    except (OSError, ValueError):
+        return []
+
+
+def append_repos_to_config(new_repo_names: list[str]) -> None:
+    """新規リポジトリを config/repositories.toml に追記する。"""
+    if not new_repo_names:
+        return
+    _ensure_dir(CONFIG_DIR)
+    with open(REPO_CONFIG_FILE, "a", encoding="utf-8") as f:
+        for name in new_repo_names:
+            f.write("\n" + _REPO_CONFIG_ENTRY.format(name=name))
+
+
+def print_repo_config() -> None:
+    """config/repositories.toml の設定内容を表示する。"""
+    print(f"\n{C.TITLE}{C.BOLD}=== リポジトリ設定 (config/repositories.toml) ==={C.RESET}")
+    if not REPO_CONFIG_FILE.exists():
+        print(f"  {dim('(未作成: リポジトリ一覧取得後に生成される)')}")
+        return
+    if tomllib is None:
+        print(f"  {dim('(TOML パーサーがないため読み込めない)')}")
+        return
+    try:
+        with open(REPO_CONFIG_FILE, "rb") as f:
+            cfg = tomllib.load(f)
+    except (OSError, ValueError):
+        print(f"  {dim('(読み込み失敗)')}")
+        return
+    repos_cfg = cfg.get("repositories", [])
+    if not repos_cfg:
+        print(f"  {dim('(設定なし)')}")
+        return
+    for r in repos_cfg:
+        name = r.get("repository", "?")
+        translate  = r.get("translate_readme",  False)
+        check_large = r.get("check_large_files", False)
+        flags = [
+            ok("translate_readme")  if translate   else dim("translate_readme"),
+            ok("check_large_files") if check_large else dim("check_large_files"),
+        ]
+        print(f"  {repo(name)}: {' | '.join(flags)}")
+
+
+# ---------------------------------------------------------------------------
 # リポジトリ一覧
 # ---------------------------------------------------------------------------
 
 def fetch_repos(token, github_user):
+    history = load_history()
+    if is_cache_from_today(history):
+        cached = load_repo_cache()
+        if cached is not None:
+            print(f"{C.ORANGE}[1/3]{C.RESET} {github_user} のリポジトリをキャッシュから取得...")
+            print(f"      {len(cached)} 件 (cache/repositories.json)")
+            return cached
     print(f"{C.ORANGE}[1/3]{C.RESET} {github_user} のリポジトリを取得中...")
     url = (
         f"https://api.github.com/users/{github_user}/repos"
@@ -175,6 +310,7 @@ def fetch_repos(token, github_user):
         print(f"{C.NG_RED}ERROR{C.RESET}: リポジトリの取得に失敗した", file=sys.stderr)
         sys.exit(1)
     print(f"      {len(repos)} 件取得")
+    save_repo_cache(repos)
     return repos
 
 
@@ -417,11 +553,23 @@ def main():
     print(f"{C.DIM}実行日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{C.RESET}")
     print(f"{C.DIM}対象ユーザー:{C.RESET} {C.REPO}{github_user}{C.RESET}")
 
+    print_repo_config()
+    print()
+
     token = get_token_from_gh()
     print(f"{C.DIM}認証:{C.RESET} {ok('gh auth token で取得済み')}")
     print()
 
     repos   = fetch_repos(token, github_user)
+
+    # 新規リポジトリを config/repositories.toml に追記する
+    repo_names   = [r["name"] for r in repos]
+    known_names  = load_known_repo_names()
+    new_names    = [n for n in repo_names if n not in known_names]
+    if new_names:
+        append_repos_to_config(new_names)
+        print(f"{C.ORANGE}新規リポジトリを config/repositories.toml に追記した:{C.RESET} {', '.join(new_names)}")
+
     results = process_repos(repos, token, github_user)
 
     output = {
@@ -437,6 +585,7 @@ def main():
     )
 
     print_summary(results, str(output_path))
+    save_history()
 
 
 if __name__ == "__main__":

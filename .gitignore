@@ -207,6 +207,7 @@ marimo/_lsp/
 __marimo__/
 
 #
+cache/
 config.toml
 repo_analysis.json
 github_local_checker_result.json
