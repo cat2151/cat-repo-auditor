@@ -4,7 +4,6 @@ import os
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -20,6 +19,7 @@ from cat_repo_auditor.cache import (
     save_repo_cache,
     load_known_repo_names,
     append_repos_to_config,
+    print_repo_config,
 )
 
 
@@ -114,3 +114,44 @@ def test_append_repos_to_config_deduplicates():
 def test_append_repos_to_config_empty_does_nothing():
     append_repos_to_config([])
     assert load_known_repo_names() == []
+
+
+# ---- print_repo_config ----
+
+def test_print_repo_config_file_missing(capsys):
+    # autouse fixture patches REPO_CONFIG_FILE to a path that doesn't exist
+    print_repo_config()
+    out = capsys.readouterr().out
+    assert "未作成" in out
+
+
+def test_print_repo_config_with_repos(tmp_path, capsys):
+    # autouse fixture already patched REPO_CONFIG_FILE to tmp_path/config/repositories.toml
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "repositories.toml").write_bytes(
+        b'[[repositories]]\n    repository = "my-repo"\n'
+    )
+    print_repo_config()
+    out = capsys.readouterr().out
+    assert "my-repo" in out
+
+
+def test_print_repo_config_empty_repos(tmp_path, capsys):
+    # Empty TOML file → no [[repositories]] → "(設定なし)"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "repositories.toml").write_bytes(b"")
+    print_repo_config()
+    out = capsys.readouterr().out
+    assert "設定なし" in out
+
+
+def test_print_repo_config_load_failure(tmp_path, capsys):
+    # Invalid TOML → "(読み込み失敗)"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "repositories.toml").write_bytes(b"[invalid toml !!!")
+    print_repo_config()
+    out = capsys.readouterr().out
+    assert "読み込み失敗" in out

@@ -6,15 +6,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-try:
-    import tomllib          # Python 3.11+
-except ImportError:
-    try:
-        import tomli as tomllib  # pip install tomli
-    except ImportError:
-        tomllib = None
-
 from .colors import C, ok, dim, repo
+from .config_loader import tomllib
 from .constants import CACHE_DIR, HISTORY_FILE, REPO_CACHE_FILE, CONFIG_DIR, REPO_CONFIG_FILE
 
 

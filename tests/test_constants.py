@@ -11,6 +11,7 @@ from cat_repo_auditor.constants import (
     REPO_CACHE_FILE,
     CONFIG_DIR,
     REPO_CONFIG_FILE,
+    DEEPWIKI_PATTERNS,
 )
 
 
@@ -32,3 +33,8 @@ def test_config_dir():
 
 def test_repo_config_file():
     assert REPO_CONFIG_FILE == Path("config") / "repositories.toml"
+
+
+def test_deepwiki_patterns_contains_expected():
+    assert "deepwiki.com" in DEEPWIKI_PATTERNS
+    assert "DeepWiki" in DEEPWIKI_PATTERNS

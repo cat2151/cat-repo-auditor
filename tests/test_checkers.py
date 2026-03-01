@@ -28,9 +28,7 @@ def test_check_deepwiki_detects_pattern():
 
 
 def test_check_deepwiki_no_match():
-    result = check_deepwiki("No deepwiki here")
-    # 'deepwiki' is a substring of DEEPWIKI_PATTERNS, so this will match
-    # Let's use content without any pattern
+    # Use content without any deepwiki-related pattern so it should not match
     result = check_deepwiki("No relevant content here at all")
     assert result["has_deepwiki"] is False
     assert result["matched_patterns"] == []

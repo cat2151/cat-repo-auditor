@@ -1,18 +1,12 @@
 """config_loader モジュールのテスト。"""
 import sys
 import os
-import tomllib
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from cat_repo_auditor.config_loader import DEEPWIKI_PATTERNS, load_config
-
-
-def test_deepwiki_patterns_contains_expected():
-    assert "deepwiki.com" in DEEPWIKI_PATTERNS
-    assert "DeepWiki" in DEEPWIKI_PATTERNS
+from cat_repo_auditor.config_loader import load_config
 
 
 def test_load_config_missing_file(tmp_path):

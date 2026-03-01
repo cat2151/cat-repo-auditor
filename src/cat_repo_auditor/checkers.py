@@ -7,7 +7,7 @@ import base64
 import time
 from fnmatch import fnmatch
 
-from .config_loader import DEEPWIKI_PATTERNS
+from .constants import DEEPWIKI_PATTERNS
 from .github_api import github_request, file_exists, fetch_dir_listing
 
 

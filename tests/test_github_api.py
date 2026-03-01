@@ -2,11 +2,15 @@
 import sys
 import os
 import json
+import subprocess
 import urllib.error
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from cat_repo_auditor.github_api import (
+    get_token_from_gh,
     github_request,
     file_exists,
     fetch_dir_listing,
@@ -102,3 +106,29 @@ def test_fetch_root_listing_returns_empty_when_not_list(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", _make_urlopen({"not": "a list"}))
     result = fetch_root_listing("repo", "token", "user")
     assert result == []
+
+
+# ---- get_token_from_gh ----
+
+def test_get_token_from_gh_success(monkeypatch):
+    completed = subprocess.CompletedProcess(
+        args=["gh", "auth", "token"], returncode=0, stdout="ghp_testtoken\n", stderr=""
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: completed)
+    assert get_token_from_gh() == "ghp_testtoken"
+
+
+def test_get_token_from_gh_not_found(monkeypatch):
+    def _raise(cmd, **kw):
+        raise FileNotFoundError
+    monkeypatch.setattr(subprocess, "run", _raise)
+    with pytest.raises(SystemExit):
+        get_token_from_gh()
+
+
+def test_get_token_from_gh_timeout(monkeypatch):
+    def _raise(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 10)
+    monkeypatch.setattr(subprocess, "run", _raise)
+    with pytest.raises(SystemExit):
+        get_token_from_gh()

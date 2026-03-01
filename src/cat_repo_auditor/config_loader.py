@@ -15,8 +15,6 @@ except ImportError:
 
 from .colors import C
 
-DEEPWIKI_PATTERNS = ["deepwiki.com", "deepwiki", "DeepWiki"]
-
 
 def load_config(config_path: str = "config.toml") -> dict:
     """カレントディレクトリの config.toml を読み込む。
