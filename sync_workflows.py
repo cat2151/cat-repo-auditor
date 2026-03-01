@@ -231,8 +231,9 @@ def show_difft(path_a: Path, path_b: Path) -> None:
         path_b: 比較先ファイル (新/local など)。
     """
     try:
+        # --color always で ANSI カラーを強制する（capture_output 時も色を保持するため）。
         completed = subprocess.run(
-            ["difft", str(path_a), str(path_b)],
+            ["difft", "--color", "always", str(path_a), str(path_b)],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -241,6 +242,8 @@ def show_difft(path_a: Path, path_b: Path) -> None:
         )
         if completed.stdout:
             print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, file=sys.stderr, end="")
         if completed.returncode == 0:
             # difft が "No changes." を報告した場合、CRLF 等の差異が隠れている可能性がある。
             # --language text で再試行してテキストレベルの差異を表示する。
