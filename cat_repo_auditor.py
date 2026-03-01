@@ -184,7 +184,10 @@ def load_history() -> dict:
     if not HISTORY_FILE.exists():
         return {}
     try:
-        return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        return data
     except (json.JSONDecodeError, OSError):
         return {}
 
@@ -213,9 +216,15 @@ def load_repo_cache() -> list | None:
     if not REPO_CACHE_FILE.exists():
         return None
     try:
-        return json.loads(REPO_CACHE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(REPO_CACHE_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    if not isinstance(data, list):
+        return None
+    for item in data:
+        if not isinstance(item, dict) or "name" not in item:
+            return None
+    return data
 
 
 def save_repo_cache(repos: list) -> None:
@@ -250,12 +259,15 @@ def load_known_repo_names() -> list[str]:
 
 def append_repos_to_config(new_repo_names: list[str]) -> None:
     """新規リポジトリを config/repositories.toml に追記する。"""
-    if not new_repo_names:
+    normalized_names = sorted(set(new_repo_names))
+    if not normalized_names:
         return
     _ensure_dir(CONFIG_DIR)
+    file_is_empty = not REPO_CONFIG_FILE.exists() or REPO_CONFIG_FILE.stat().st_size == 0
     with open(REPO_CONFIG_FILE, "a", encoding="utf-8") as f:
-        for name in new_repo_names:
-            f.write("\n" + _REPO_CONFIG_ENTRY.format(name=name))
+        for i, name in enumerate(normalized_names):
+            prefix = "" if file_is_empty and i == 0 else "\n"
+            f.write(prefix + _REPO_CONFIG_ENTRY.format(name=name))
 
 
 def print_repo_config() -> None:
@@ -311,6 +323,7 @@ def fetch_repos(token, github_user):
         sys.exit(1)
     print(f"      {len(repos)} 件取得")
     save_repo_cache(repos)
+    save_history()
     return repos
 
 
@@ -585,7 +598,6 @@ def main():
     )
 
     print_summary(results, str(output_path))
-    save_history()
 
 
 if __name__ == "__main__":
