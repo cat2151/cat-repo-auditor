@@ -5,10 +5,19 @@ sync_workflows.py
 README.ja.md を持つ git リポジトリを対象に、
 config.toml の sync_filepaths に列挙されたファイルについて
   - 欠落している
-  - 多数派ハッシュと異なる
-のいずれかであれば、多数派ファイルをコピーして commit & push する。
+  - コピー元（master_repo または多数派）と異なる
+のいずれかであれば、コピー元ファイルをコピーして commit & push する。
+
+差分は difft（利用可能な場合）または diff で可視化する。
 
 実施前に y[/n] で確認プロンプトが表示される。
+
+config.toml の設定例:
+    [sync]
+    master_repo = "github-actions"   # コピー元リポジトリ名（省略時は多数派を使用）
+    sync_filepaths = [
+        ".github/workflows/call-check-large-files.yml",
+    ]
 
 使い方:
     python sync_workflows.py
@@ -18,6 +27,7 @@ import sys
 import hashlib
 import shutil
 import subprocess
+import tempfile
 import tomllib
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -32,18 +42,24 @@ PREREQUISITE = "README.ja.md"   # 処理対象の前提条件ファイル
 # 設定読み込み
 # ---------------------------------------------------------------------------
 
-def load_sync_filepaths() -> list[Path]:
-    """config.toml から sync_filepaths を読み込む。"""
+def load_sync_config() -> tuple[list[Path], str | None]:
+    """config.toml から sync_filepaths と master_repo を読み込む。
+
+    Returns:
+        (sync_filepaths, master_repo): sync_filepaths は同期対象ファイルのリスト、
+        master_repo はコピー元リポジトリ名 (設定なしの場合は None)。
+    """
     if not CONFIG_FILE.exists():
         print(f"[ERROR] config.toml が見つからない: {CONFIG_FILE}")
         sys.exit(1)
     with open(CONFIG_FILE, "rb") as f:
         config = tomllib.load(f)
-    paths = config.get("sync", {}).get("sync_filepaths", [])
+    sync = config.get("sync", {})
+    paths = sync.get("sync_filepaths", [])
     if not paths:
         print("[ERROR] config.toml に sync_filepaths が設定されていない。")
         sys.exit(1)
-    return [Path(p) for p in paths]
+    return [Path(p) for p in paths], sync.get("master_repo", None)
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +187,20 @@ def compute_majority_hash(
 def find_master_repo(
     target_repos: list[Path],
     sync_filepath: Path,
-    majority_hash: str,
+    majority_hash: str | None,
+    master_repo_name: str | None = None,
 ) -> Path | None:
-    """多数派ハッシュを持つ最初のリポジトリを返す。"""
+    """コピー元リポジトリを返す。
+
+    master_repo_name が指定されている場合はその名前のリポジトリを優先する。
+    見つからない場合は多数派ハッシュを持つ最初のリポジトリを返す。
+    """
+    if master_repo_name:
+        for d in target_repos:
+            if d.name == master_repo_name and (d / sync_filepath).exists():
+                return d
+    if majority_hash is None:
+        return None
     return next(
         (d for d in target_repos
          if (d / sync_filepath).exists()
@@ -183,16 +210,39 @@ def find_master_repo(
 
 
 # ---------------------------------------------------------------------------
+# 差分の可視化
+# ---------------------------------------------------------------------------
+
+def show_difft(path_a: Path, path_b: Path) -> None:
+    """difft を使って2ファイルの差分を表示する。difft がなければ diff にフォールバック。
+
+    Args:
+        path_a: 比較元ファイル (旧/remote など)。
+        path_b: 比較先ファイル (新/local など)。
+    """
+    for cmd in (
+        ["difft", str(path_a), str(path_b)],
+        ["diff", "-u", str(path_a), str(path_b)],
+    ):
+        try:
+            subprocess.run(cmd, check=False)
+            return
+        except FileNotFoundError:
+            continue
+    print("  [INFO] difft/diff コマンドが見つからない。内容比較をスキップする。")
+
+
+# ---------------------------------------------------------------------------
 # remote vs local 差分チェック（autocrlf 迂回のためバイト比較）
 # ---------------------------------------------------------------------------
 
 def get_uncommitted_vs_remote(
     repo_dir: Path,
     sync_filepaths: list[Path],
-) -> list[tuple[Path, str, str]]:
+) -> list[tuple[Path, str, str, bytes]]:
     """
     worktree のファイルと remote HEAD をバイト比較し、
-    差異があるものを (filepath, local_hash, remote_hash) で返す。
+    差異があるものを (filepath, local_hash, remote_hash, remote_bytes) で返す。
     ファイルが local に存在しない場合は対象外（Phase 2 が担当）。
     """
     results = []
@@ -206,7 +256,7 @@ def get_uncommitted_vs_remote(
         local_hash  = file_sha256(local_path)
         remote_hash = bytes_sha256(remote_bytes)
         if local_hash != remote_hash:
-            results.append((fp, local_hash, remote_hash))
+            results.append((fp, local_hash, remote_hash, remote_bytes))
     return results
 
 
@@ -217,10 +267,10 @@ def get_uncommitted_vs_remote(
 def show_remote_local_status(
     target_repos: list[Path],
     sync_filepaths: list[Path],
-) -> dict[Path, list[tuple[Path, str, str]]]:
+) -> dict[Path, list[tuple[Path, str, str, bytes]]]:
     """
     対象リポジトリを fetch し、remote/local の差分状態を表示する。
-    未commit の差分がある repo_dir -> [(filepath, local_hash, remote_hash)] を返す。
+    未commit の差分がある repo_dir -> [(filepath, local_hash, remote_hash, remote_bytes)] を返す。
     """
     print("=" * 60)
     print("[PHASE 1] remote vs local 差分チェック")
@@ -230,7 +280,7 @@ def show_remote_local_status(
         print(f"    {d.name}")
     print()
 
-    uncommitted_map: dict[Path, list[tuple[Path, str, str]]] = {}
+    uncommitted_map: dict[Path, list[tuple[Path, str, str, bytes]]] = {}
 
     for repo_dir in target_repos:
         print(f"  {repo_dir.name} ... fetch中", end=" ", flush=True)
@@ -242,10 +292,21 @@ def show_remote_local_status(
             print(f"    [OK] 差分なし")
             continue
 
-        for fp, lh, rh in diffs:
+        for fp, lh, rh, remote_bytes in diffs:
             print(f"    [!] 差分あり: {fp.as_posix()}")
             print(f"        local  : {lh}")
             print(f"        remote : {rh}")
+            print(f"        ※ localの変更をremoteにcommit & pushする予定")
+            with tempfile.NamedTemporaryFile(
+                suffix=fp.suffix or ".txt", delete=False, prefix="remote_"
+            ) as tmp:
+                tmp.write(remote_bytes)
+                tmp_path = Path(tmp.name)
+            try:
+                print(f"        --- 差分内容 (remote → local) ---")
+                show_difft(tmp_path, repo_dir / fp)
+            finally:
+                tmp_path.unlink(missing_ok=True)
         uncommitted_map[repo_dir] = diffs
 
     print()
@@ -368,13 +429,15 @@ def sync_repo(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    sync_filepaths = load_sync_filepaths()
+    sync_filepaths, master_repo_name = load_sync_config()
     parent         = Path.cwd().parent
     siblings       = sorted(p for p in parent.iterdir() if p.is_dir())
 
     print(f"[INFO] 親ディレクトリ    : {parent}")
     print(f"[INFO] 前提条件ファイル  : {PREREQUISITE}")
     print(f"[INFO] 対象 sync ファイル: {len(sync_filepaths)} 件")
+    if master_repo_name:
+        print(f"[INFO] コピー元リポジトリ: {master_repo_name}")
     print()
 
     target_repos = collect_target_repos(siblings)
@@ -392,7 +455,7 @@ def main() -> None:
 
     if uncommitted_map:
         repo_names = [d.name for d in sorted(uncommitted_map.keys())]
-        if not confirm_action(repo_names, "上記リポジトリの変更を commit & push してよいか？"):
+        if not confirm_action(repo_names, "上記リポジトリのlocalの変更をremoteにcommit & pushしてよいか？"):
             print("[ABORT] キャンセルした。")
             sys.exit(0)
         print()
@@ -401,7 +464,7 @@ def main() -> None:
         print("=" * 60)
         print()
         for repo_dir in sorted(uncommitted_map.keys()):
-            filepaths = [fp for fp, _, _ in uncommitted_map[repo_dir]]
+            filepaths = [fp for fp, _, _, _ in uncommitted_map[repo_dir]]
             commit_and_push_repo(repo_dir, filepaths)
         print("[OK] 未commit 分の同期が完了した。")
         print()
@@ -419,12 +482,18 @@ def main() -> None:
         majority_hash, outliers = detect_outliers(target_repos, sync_filepath)
         if not outliers:
             continue
-        master_repo = find_master_repo(target_repos, sync_filepath, majority_hash)
+        master_repo = find_master_repo(target_repos, sync_filepath, majority_hash, master_repo_name)
         if master_repo is None:
-            print(f"  [ERROR] {sync_filepath.as_posix()} : 多数派リポジトリが特定できなかった。")
+            print(f"  [ERROR] {sync_filepath.as_posix()} : コピー元リポジトリが特定できなかった。")
             continue
+        print(f"  コピー元: {master_repo.name}")
         for repo_dir in outliers:
-            copy_plan[repo_dir].append((sync_filepath, master_repo / sync_filepath))
+            local_fp = repo_dir / sync_filepath
+            master_fp = master_repo / sync_filepath
+            copy_plan[repo_dir].append((sync_filepath, master_fp))
+            if local_fp.exists():
+                print(f"  --- 差分内容 ({repo_dir.name}/{sync_filepath.as_posix()}: local → {master_repo.name}) ---")
+                show_difft(local_fp, master_fp)
 
     print()
 
@@ -435,7 +504,7 @@ def main() -> None:
     repo_names = [d.name for d in sorted(copy_plan.keys())]
     if not confirm_action(
         repo_names,
-        "上記リポジトリに多数派ファイルをコピーして commit & push してよいか？"
+        f"上記リポジトリに {master_repo_name or '多数派'} リポジトリのファイルをコピーして commit & push してよいか？"
     ):
         print("[ABORT] キャンセルした。")
         sys.exit(0)
