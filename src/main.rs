@@ -436,6 +436,7 @@ fn main() -> Result<()> {
                         pages, pages_cat,
                         deepwiki, deepwiki_cat,
                         cargo_install, cargo_cat,
+                        cargo_installed_hash,
                         wf_workflows, wf_cat,
                     }) => {
                         if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
@@ -449,6 +450,7 @@ fn main() -> Result<()> {
                             r.deepwiki_checked_at        = deepwiki_cat;
                             r.cargo_install              = cargo_install;
                             r.cargo_checked_at           = cargo_cat;
+                            r.cargo_installed_hash       = cargo_installed_hash;
                             r.wf_workflows               = wf_workflows;
                             r.wf_checked_at              = wf_cat;
                         }
