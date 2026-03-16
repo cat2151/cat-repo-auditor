@@ -201,6 +201,13 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     draw_left(f, app, panes[0]);
     draw_right(f, app, panes[1]);
 
+    // ── cargo old comparison box ──────────────────────────────────────────────
+    if let Some(idx) = app.selected_repo_idx() {
+        if app.repos[idx].cargo_install == Some(false) {
+            draw_cargo_old_box(f, app, idx, area);
+        }
+    }
+
     if app.show_help {
         draw_help_dialog(f, app, area);
     }
@@ -613,6 +620,47 @@ fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
             .collect();
         f.render_widget(Paragraph::new(stag_lines).style(Style::default().bg(MK_BG)), stag_inner);
     }
+}
+
+// ── cargo old comparison box ──────────────────────────────────────────────────
+
+fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area: Rect) {
+    let repo = &app.repos[repo_idx];
+    let inst  = if repo.cargo_installed_hash.is_empty() { "?" } else { &repo.cargo_installed_hash };
+    let local = if repo.cargo_local_hash.is_empty()     { "?" } else { &repo.cargo_local_hash };
+
+    // Box width: border(2) + " installed: " (12) + hash(40) + padding(1) = 55
+    let content_w: u16 = 55;
+    let box_w = content_w + 2; // borders
+    let box_h: u16 = 4; // top border + 2 lines + bottom border
+
+    // Place in bottom-right, above the bottom status bar (outer[2] is 1 line tall)
+    let x = area.x + area.width.saturating_sub(box_w + 1);
+    let y = area.y + area.height.saturating_sub(box_h + 1);
+    let rect = Rect { x, y, width: box_w.min(area.width), height: box_h.min(area.height) };
+
+    f.render_widget(Clear, rect);
+    let block = Block::default()
+        .title(" cgo old: commit hash ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(MK_ORANGE))
+        .style(Style::default().bg(MK_BG));
+    let inner = block.inner(rect);
+    f.render_widget(block, rect);
+
+    let label_w: u16 = 12; // length of " installed: " / "     local: " labels
+    let max_w = inner.width.saturating_sub(label_w) as usize;
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(" installed: ", Style::default().fg(MK_COMMENT)),
+            Span::styled(truncate(inst,  max_w), Style::default().fg(MK_ORANGE)),
+        ]),
+        Line::from(vec![
+            Span::styled("     local: ", Style::default().fg(MK_COMMENT)),
+            Span::styled(truncate(local, max_w), Style::default().fg(MK_GREEN)),
+        ]),
+    ];
+    f.render_widget(Paragraph::new(lines).style(Style::default().bg(MK_BG)), inner);
 }
 
 // ── help dialog ──────────────────────────────────────────────────────────────

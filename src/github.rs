@@ -71,6 +71,12 @@ pub struct RepoInfo {
     /// local git HEAD hash when cargo_install was last checked
     #[serde(default)]
     pub cargo_checked_at: String,
+    /// installed commit hash from .crates2.json (only meaningful when cargo_install == Some(false))
+    #[serde(default)]
+    pub cargo_installed_hash: String,
+    /// local HEAD hash at the time of the last cargo check
+    #[serde(default)]
+    pub cargo_local_hash: String,
 
     /// All 3 required workflow yml files present in .github/workflows/
     #[serde(default)]
@@ -213,6 +219,8 @@ pub enum FetchProgress {
         deepwiki_cat:           String,
         cargo_install:          Option<bool>,
         cargo_cat:              String,
+        cargo_installed_hash:   String,
+        cargo_local_hash:       String,
         wf_workflows:           Option<bool>,
         wf_cat:                 String,
     },
@@ -335,11 +343,14 @@ pub fn fetch_repos_with_progress(
                     (repo.deepwiki, repo.deepwiki_checked_at.clone())
                 };
 
-                let (cargo_install, cargo_cat) = if needs_cargo {
-                    let v = check_cargo_git_install(&owner, name, &config.local_base_dir);
-                    (v, local_head.clone())
+                let (cargo_install, cargo_cat, cargo_installed_hash, cargo_local_hash) = if needs_cargo {
+                    match check_cargo_git_install(&owner, name, &config.local_base_dir) {
+                        Some((ok, inst, loc)) => (Some(ok), local_head.clone(), inst, loc),
+                        None => (None, local_head.clone(), String::new(), String::new()),
+                    }
                 } else {
-                    (repo.cargo_install, repo.cargo_checked_at.clone())
+                    (repo.cargo_install, repo.cargo_checked_at.clone(),
+                     repo.cargo_installed_hash.clone(), repo.cargo_local_hash.clone())
                 };
 
                 let (wf_workflows, wf_cat) = if needs_wf {
@@ -360,6 +371,8 @@ pub fn fetch_repos_with_progress(
                     r.deepwiki_checked_at          = deepwiki_cat.clone();
                     r.cargo_install                = cargo_install;
                     r.cargo_checked_at             = cargo_cat.clone();
+                    r.cargo_installed_hash         = cargo_installed_hash.clone();
+                    r.cargo_local_hash             = cargo_local_hash.clone();
                     r.wf_workflows                 = wf_workflows;
                     r.wf_checked_at                = wf_cat.clone();
                 }
@@ -371,6 +384,7 @@ pub fn fetch_repos_with_progress(
                     pages,               pages_cat,
                     deepwiki,            deepwiki_cat,
                     cargo_install,       cargo_cat,
+                    cargo_installed_hash, cargo_local_hash,
                     wf_workflows,        wf_cat,
                 });
             }
@@ -490,7 +504,7 @@ fn do_fetch(
              readme_ja_badge, readme_ja_badge_checked_at,
              pages, pages_checked_at,
              deepwiki, deepwiki_checked_at,
-             cargo_install, cargo_checked_at,
+             cargo_install, cargo_checked_at, cargo_installed_hash, cargo_local_hash,
              wf_workflows, wf_checked_at) = history.repos.iter()
             .find(|h| h.name == r.name)
             .map(|h| (
@@ -499,11 +513,13 @@ fn do_fetch(
                 h.pages,              h.pages_checked_at.clone(),
                 h.deepwiki,           h.deepwiki_checked_at.clone(),
                 h.cargo_install,      h.cargo_checked_at.clone(),
+                h.cargo_installed_hash.clone(), h.cargo_local_hash.clone(),
                 h.wf_workflows,       h.wf_checked_at.clone(),
             ))
             .unwrap_or((None, String::new(), None, String::new(),
                         None, String::new(), None, String::new(),
-                        None, String::new(), None, String::new()));
+                        None, String::new(), String::new(), String::new(),
+                        None, String::new()));
 
         repo_infos.push(RepoInfo {
             name: r.name.clone(),
@@ -521,6 +537,7 @@ fn do_fetch(
             pages,                pages_checked_at,
             deepwiki,             deepwiki_checked_at,
             cargo_install,        cargo_checked_at,
+            cargo_installed_hash, cargo_local_hash,
             wf_workflows,         wf_checked_at,
             issues: r.issues.nodes.into_iter().map(|i| {
                 let raw_i = i.updated_at.clone();
@@ -701,10 +718,10 @@ pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
 /// Compare commit hash of `cargo install --git` entry against local HEAD.
 /// Key format: "crate_name version (git+https://github.com/owner/repo#COMMIT_HASH)"
 /// Returns:
-///   None          – no git+…#hash entry for this repo found in .crates2.json
-///   Some(true)    – installed hash == local HEAD
-///   Some(false)   – installed hash != local HEAD (old)
-pub fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> Option<bool> {
+///   None                         – no git+…#hash entry for this repo found in .crates2.json
+///   Some((true,  inst, local))   – installed hash == local HEAD
+///   Some((false, inst, local))   – installed hash != local HEAD (old)
+pub fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> Option<(bool, String, String)> {
     let crates2_path = std::env::var("CARGO_HOME")
         .map(|h| format!("{h}/.crates2.json"))
         .unwrap_or_else(|_| {
@@ -742,7 +759,7 @@ pub fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> 
     let local_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
 
     // Compare: installed_hash may be full (40 chars) – exact match
-    Some(installed_hash == local_hash)
+    Some((installed_hash == local_hash, installed_hash, local_hash))
 }
 
 // ──────────────────────────────────────────────
