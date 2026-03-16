@@ -627,11 +627,13 @@ fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
 fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area: Rect) {
     let repo = &app.repos[repo_idx];
     let inst  = if repo.cargo_installed_hash.is_empty() { "?" } else { &repo.cargo_installed_hash };
-    let local = if repo.cargo_local_hash.is_empty()     { "?" } else { &repo.cargo_local_hash };
+    // cargo_checked_at stores the local HEAD hash used in the last comparison
+    let local = if repo.cargo_checked_at.is_empty()     { "?" } else { &repo.cargo_checked_at };
 
-    // Box width: border(2) + " installed: " (12) + hash(40) + padding(1) = 55
-    let content_w: u16 = 55;
-    let box_w = content_w + 2; // borders
+    // Inner content width: " installed: " (12) + hash up to 40 chars + 1 padding = 53
+    // Box width (including borders): 53 + 2 = 55
+    let content_w: u16 = 53;
+    let box_w = content_w + 2; // +2 for left/right borders
     let box_h: u16 = 4; // top border + 2 lines + bottom border
 
     // Place in bottom-right, above the bottom status bar (outer[2] is 1 line tall)
