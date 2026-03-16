@@ -26,3 +26,32 @@ impl History {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let tmp = std::env::temp_dir()
+            .join(format!("cat_repo_auditor_history_test_{}.json", std::process::id()));
+        let path_str = tmp.to_str().unwrap();
+
+        let mut history = History::default();
+        history.etags.insert(String::from("owner"), String::from("etag123"));
+
+        history.save(path_str).unwrap();
+        let loaded = History::load(path_str).unwrap();
+
+        assert_eq!(loaded.etags.get("owner").unwrap(), "etag123");
+        assert!(loaded.repos.is_empty());
+        assert!(loaded.rate_limit.is_none());
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn load_nonexistent_file_returns_error() {
+        let result = History::load("/nonexistent/path/history.json");
+        assert!(result.is_err());
+    }
+}
