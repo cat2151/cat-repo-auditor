@@ -1,0 +1,3 @@
+- Rustとpython を見つけて迷ったときは、
+  - Rustに集中すること。
+  - python/ のソースは参照しないこと（deplicated code。そのうち削除の想定なので、context windowのムダになる）
