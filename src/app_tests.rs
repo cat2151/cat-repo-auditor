@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     config::Config,
     github::{IssueOrPr, LocalStatus, RepoInfo},
-    ui::RepoRow,
+    ui::{Focus, RepoRow, SearchState},
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
