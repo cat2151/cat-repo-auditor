@@ -4,7 +4,7 @@ use crate::{
     ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_right},
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
-pub use crate::ui_types::{
+pub(crate) use crate::ui_types::{
     build_detail_items, build_rows, Focus,
     MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN,
     MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,

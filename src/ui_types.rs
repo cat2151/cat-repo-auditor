@@ -2,23 +2,23 @@ use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
 use ratatui::style::Color;
 
 // ── Monokai palette ──────────────────────────────────────────────────────────
-pub const MK_BG:      Color = Color::Rgb(39,  40,  34);
-pub const MK_BG_SEL:  Color = Color::Rgb(73,  72,  62);
-pub const MK_BG_DIM:  Color = Color::Rgb(55,  56,  48);
-pub const MK_FG:      Color = Color::Rgb(248, 248, 242);
-pub const MK_COMMENT: Color = Color::Rgb(153, 153, 119);
-pub const MK_YELLOW:  Color = Color::Rgb(230, 219, 116);
-pub const MK_GREEN:   Color = Color::Rgb(166, 226, 46);
-pub const MK_ORANGE:  Color = Color::Rgb(253, 151, 31);
-pub const MK_RED:     Color = Color::Rgb(249, 38,  114);
-pub const MK_PURPLE:  Color = Color::Rgb(174, 129, 255);
-pub const MK_CYAN:    Color = Color::Rgb(102, 217, 239);
-pub const MK_BLUE:    Color = Color::Rgb(102, 153, 204);
+pub(crate) const MK_BG:      Color = Color::Rgb(39,  40,  34);
+pub(crate) const MK_BG_SEL:  Color = Color::Rgb(73,  72,  62);
+pub(crate) const MK_BG_DIM:  Color = Color::Rgb(55,  56,  48);
+pub(crate) const MK_FG:      Color = Color::Rgb(248, 248, 242);
+pub(crate) const MK_COMMENT: Color = Color::Rgb(153, 153, 119);
+pub(crate) const MK_YELLOW:  Color = Color::Rgb(230, 219, 116);
+pub(crate) const MK_GREEN:   Color = Color::Rgb(166, 226, 46);
+pub(crate) const MK_ORANGE:  Color = Color::Rgb(253, 151, 31);
+pub(crate) const MK_RED:     Color = Color::Rgb(249, 38,  114);
+pub(crate) const MK_PURPLE:  Color = Color::Rgb(174, 129, 255);
+pub(crate) const MK_CYAN:    Color = Color::Rgb(102, 217, 239);
+pub(crate) const MK_BLUE:    Color = Color::Rgb(102, 153, 204);
 
 // ── RepoRow ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-pub enum RepoRow {
+pub(crate) enum RepoRow {
     Separator(String),
     Repo(usize),
 }
@@ -39,7 +39,7 @@ fn group_label(g: u8) -> &'static str {
     }
 }
 
-pub fn build_rows(repos: &[RepoInfo]) -> Vec<RepoRow> {
+pub(crate) fn build_rows(repos: &[RepoInfo]) -> Vec<RepoRow> {
     let mut rows: Vec<RepoRow> = vec![];
     let mut cur_group: Option<u8> = None;
     for (i, repo) in repos.iter().enumerate() {
@@ -57,24 +57,24 @@ pub fn build_rows(repos: &[RepoInfo]) -> Vec<RepoRow> {
 // ── SearchState ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SearchState { Off, Active }
+pub(crate) enum SearchState { Off, Active }
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Focus { Repos, Detail }
+pub(crate) enum Focus { Repos, Detail }
 
 // ── DetailItem ───────────────────────────────────────────────────────────────
 
-pub struct DetailItem {
-    pub is_pr:    bool,
-    pub is_child: bool,
-    pub number:   u64,
-    pub url:      String,
-    pub title:    String,
-    pub updated:  String,
+pub(crate) struct DetailItem {
+    pub(crate) is_pr:    bool,
+    pub(crate) is_child: bool,
+    pub(crate) number:   u64,
+    pub(crate) url:      String,
+    pub(crate) title:    String,
+    pub(crate) updated:  String,
 }
 
-pub fn build_detail_items(repo: &RepoInfo) -> Vec<DetailItem> {
+pub(crate) fn build_detail_items(repo: &RepoInfo) -> Vec<DetailItem> {
     use std::collections::{HashMap, HashSet};
     let open_issue_numbers: HashSet<u64> = repo.issues.iter().map(|i| i.number).collect();
     let mut attached: HashMap<u64, Vec<&IssueOrPr>> = HashMap::new();
