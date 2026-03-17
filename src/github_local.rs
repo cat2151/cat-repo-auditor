@@ -1,5 +1,6 @@
 use crate::github::LocalStatus;
 use anyhow::{bail, Context, Result};
+use std::io::Write;
 use std::process::Command;
 
 // ──────────────────────────────────────────────
@@ -234,17 +235,40 @@ pub fn open_url(url: &str) -> Result<()> {
 // Cargo install checks
 // ──────────────────────────────────────────────
 
+/// Returns the effective CARGO_HOME path.
+fn get_cargo_home() -> String {
+    std::env::var("CARGO_HOME").unwrap_or_else(|_| {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .unwrap_or_default();
+        format!("{home}/.cargo")
+    })
+}
+
+/// Append a timestamped error message to the local config logs/log.txt.
+fn append_error_log(msg: &str) {
+    let log_path = crate::config::Config::config_path()
+        .parent()
+        .map(|p| p.join("logs").join("log.txt"))
+        .unwrap_or_else(|| std::path::PathBuf::from("logs/log.txt"));
+    if let Some(parent) = log_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let _ = writeln!(f, "[{now}] {msg}");
+    }
+}
+
 /// Get the installed binary names for a git-installed crate from .crates2.json.
 /// Returns None if not found.
 pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
-    let crates2_path = std::env::var("CARGO_HOME")
-        .map(|h| format!("{h}/.crates2.json"))
-        .unwrap_or_else(|_| {
-            let home = std::env::var("USERPROFILE")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_default();
-            format!("{home}/.cargo/.crates2.json")
-        });
+    let cargo_home = get_cargo_home();
+    let crates2_path = format!("{cargo_home}/.crates2.json");
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
@@ -266,43 +290,84 @@ pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
     None
 }
 
-/// Compare commit hash of `cargo install --git` entry against local HEAD.
-/// Key format: "crate_name version (git+https://github.com/owner/repo#COMMIT_HASH)"
+/// Compare the commit hash of a `cargo install --git` entry against local HEAD.
+///
+/// Method:
+///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name.
+///   2. Find `$CARGO_HOME/git/checkouts/<app_name>*` (prefix match).
+///      Multiple matches → log error to `logs/log.txt` and return None.
+///   3. Run `git rev-parse HEAD` in the first sub-directory of the checkout to
+///      obtain the actually-installed commit hash.
+///   4. Run `git rev-parse HEAD` in the local clone and compare.
+///
 /// Returns:
 ///   None                         – repo not installed via `cargo install --git`, OR
 ///                                  .crates2.json is missing/unreadable/unparseable, OR
-///                                  `git rev-parse HEAD` failed for the local repo
+///                                  checkout directory not found, OR
+///                                  `git rev-parse HEAD` failed
 ///   Some((true,  inst, local))   – installed hash == local HEAD
-///   Some((false, inst, local))   – installed hash != local HEAD (old)
+///   Some((false, inst, local))   – installed hash != local HEAD (stale install)
 pub(crate) fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> Option<(bool, String, String)> {
-    let crates2_path = std::env::var("CARGO_HOME")
-        .map(|h| format!("{h}/.crates2.json"))
-        .unwrap_or_else(|_| {
-            let home = std::env::var("USERPROFILE")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_default();
-            format!("{home}/.cargo/.crates2.json")
-        });
+    check_cargo_git_install_inner(owner, repo_name, base_dir, &get_cargo_home())
+}
+
+pub(crate) fn check_cargo_git_install_inner(owner: &str, repo_name: &str, base_dir: &str, cargo_home: &str) -> Option<(bool, String, String)> {
+    let crates2_path = format!("{cargo_home}/.crates2.json");
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
     let installs = json.get("installs")?.as_object()?;
 
-    // Build the substring we look for in the key
-    // e.g. "git+https://github.com/cat2151/clap-mml-render-tui#"
     let needle = format!("git+https://github.com/{owner}/{repo_name}#");
 
-    let installed_hash = installs.keys()
-        .find_map(|key| {
-            // key: "name ver (git+https://...#HASH)"
-            let src = key.trim_end_matches(')');
-            let idx = src.find(needle.as_str())?;
-            let hash_part = &src[idx + needle.len()..];
-            if hash_part.is_empty() { return None; }
-            Some(hash_part.to_string())
-        })?;
+    // Get crate (app) name – first whitespace-separated token of the matching key.
+    // Key format: "crate_name version (git+https://github.com/owner/repo#HASH)"
+    let app_name = installs.keys().find_map(|key| {
+        let src = key.trim_end_matches(')');
+        if !src.contains(needle.as_str()) { return None; }
+        key.split_whitespace().next().map(|s| s.to_string())
+    })?;
 
-    // Get local HEAD hash
+    // Find matching checkout directory: $CARGO_HOME/git/checkouts/<app_name>*
+    let checkouts_dir = std::path::Path::new(cargo_home).join("git").join("checkouts");
+    let matches: Vec<std::path::PathBuf> = match std::fs::read_dir(&checkouts_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .filter(|e| e.file_name().to_string_lossy().starts_with(app_name.as_str()))
+            .map(|e| e.path())
+            .collect(),
+        Err(_) => return None,
+    };
+
+    if matches.len() > 1 {
+        append_error_log(&format!(
+            "cargo check: multiple checkouts found for '{}': {:?}",
+            app_name,
+            matches.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
+        ));
+        return None;
+    }
+
+    let checkout_base = matches.into_iter().next()?;
+
+    // The actual git checkout lives in the first sub-directory of checkout_base.
+    let sub_dir = std::fs::read_dir(&checkout_base)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().is_dir())
+        .map(|e| e.path())?;
+
+    // Obtain the installed commit hash from the cargo checkout.
+    let out = Command::new("git")
+        .args(["-C", sub_dir.to_str()?, "rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !out.status.success() { return None; }
+    let installed_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if installed_hash.is_empty() { return None; }
+
+    // Obtain local HEAD hash.
     let repo_path = format!("{}/{}", base_dir.trim_end_matches(|c| c == '/' || c == '\\'), repo_name);
     let out = Command::new("git")
         .args(["-C", &repo_path, "rev-parse", "HEAD"])
@@ -311,7 +376,6 @@ pub(crate) fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &s
     if !out.status.success() { return None; }
     let local_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
 
-    // Compare: installed_hash may be full (40 chars) – exact match
     Some((installed_hash == local_hash, installed_hash, local_hash))
 }
 
@@ -323,14 +387,8 @@ pub(crate) fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &s
 /// crates2.json installed hash vs remote HEAD of the git repo.
 /// Returns Some("owner/repo") if update is available, None if up-to-date or not installed.
 pub fn check_self_update() -> Option<String> {
-    let crates2_path = std::env::var("CARGO_HOME")
-        .map(|h| format!("{h}/.crates2.json"))
-        .unwrap_or_else(|_| {
-            let home = std::env::var("USERPROFILE")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_default();
-            format!("{home}/.cargo/.crates2.json")
-        });
+    let cargo_home = get_cargo_home();
+    let crates2_path = format!("{cargo_home}/.crates2.json");
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
