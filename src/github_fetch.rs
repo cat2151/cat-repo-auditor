@@ -179,9 +179,8 @@ pub(crate) fn do_fetch(
         .collect();
 
     let total = filtered.len();
-    let filtered_vec: Vec<GqlRepo> = filtered.into_iter().collect();
     let mut repo_infos: Vec<RepoInfo> = Vec::with_capacity(total);
-    for (scan_i, r) in filtered_vec.into_iter().enumerate() {
+    for (scan_i, r) in filtered.into_iter().enumerate() {
         let _ = tx.send(FetchProgress::PhaseProgress {
             tag: "scan", cur: scan_i + 1, total,
         });

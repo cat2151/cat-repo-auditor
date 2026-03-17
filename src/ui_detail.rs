@@ -52,7 +52,7 @@ pub(crate) fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
     // summary(1) + hint(1) + issue/PR section + staging section
     let has_staging = !staging_files.is_empty();
     let staging_height = if has_staging {
-        (repo.staging_files.len() + 2).min(inner.height as usize / 3) as u16
+        (staging_files.len() + 2).min(inner.height as usize / 3) as u16
     } else { 0 };
 
     let vert = Layout::default()
@@ -94,8 +94,6 @@ pub(crate) fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
         app.adjust_detail_scroll(visible);
         let d_scroll = app.detail_scroll;
         let d_sel    = app.detail_selected;
-        // re-borrow repo after mutable borrow is done
-        let _repo = &app.repos[repo_idx];
 
         let lines: Vec<Line> = items.iter()
             .enumerate()
