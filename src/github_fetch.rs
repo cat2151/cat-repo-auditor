@@ -257,9 +257,10 @@ pub(crate) fn do_fetch(
     } // end for scan loop
 
     fn group_key(r: &RepoInfo) -> u8 {
-        if r.is_private                            { return 3; }
-        if r.local_status == LocalStatus::NotFound { return 2; }
-        if r.open_issues == 0 && r.open_prs == 0  { return 1; }
+        if r.is_private                            { return 4; }
+        if r.local_status == LocalStatus::NotFound { return 3; }
+        if r.open_issues == 0 && r.open_prs == 0  { return 2; }
+        if r.open_prs == 0                         { return 1; }
         0
     }
 

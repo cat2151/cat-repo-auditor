@@ -61,18 +61,38 @@ fn make_pr(number: u64, title: &str, repo_full: &str, closes: Option<u64>) -> Is
 
 #[test]
 fn build_rows_single_group_no_separator() {
-    // Repos with open_issues=1 land in group 0; when all repos are in the same
+    // Repos with open_prs=1 land in group 0; when all repos are in the same
     // group (group 0) build_rows must not insert any separator.
     let mut a = make_repo("a");
-    a.open_issues = 1;
+    a.open_prs = 1;
     let mut b = make_repo("b");
-    b.open_issues = 1;
+    b.open_prs = 1;
     let repos = vec![a, b];
     let rows = build_rows(&repos);
     let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
     let repo_count = rows.iter().filter(|r| matches!(r, RepoRow::Repo(_))).count();
     assert_eq!(sep_count, 0, "no separator expected when all repos are in group 0");
     assert_eq!(repo_count, 2);
+}
+
+#[test]
+fn build_rows_no_open_prs_repos_get_separator() {
+    // Repos with open_issues>0 but open_prs=0 land in group 1 ("no open PRs")
+    // and get a separator.
+    let mut with_pr = make_repo("has-pr");
+    with_pr.open_prs = 1;
+    let mut no_pr = make_repo("no-pr");
+    no_pr.open_issues = 1;
+
+    let repos = vec![with_pr, no_pr];
+    let rows = build_rows(&repos);
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
+    assert_eq!(sep_count, 1, "expected one separator between open-PR and no-PR groups");
+    // separator label should contain "no open PRs"
+    let has_label = rows.iter().any(|r| {
+        if let RepoRow::Separator(label) = r { label.contains("no open PRs") } else { false }
+    });
+    assert!(has_label, "separator label should mention 'no open PRs'");
 }
 
 #[test]
