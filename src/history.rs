@@ -26,3 +26,7 @@ impl History {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

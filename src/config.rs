@@ -105,3 +105,7 @@ impl Config {
         String::from(".")
     }
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;

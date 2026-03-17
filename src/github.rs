@@ -983,3 +983,7 @@ fn fnv1a(s: &str) -> u64 {
     }
     hash
 }
+
+#[cfg(test)]
+#[path = "github_tests.rs"]
+mod tests;
