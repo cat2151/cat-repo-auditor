@@ -72,7 +72,7 @@ fn make_pr(number: u64, title: &str, repo_full: &str, closes: Option<u64>) -> Is
 
 fn make_active_repo(name: &str) -> RepoInfo {
     let mut r = make_repo(name);
-    r.open_issues = 1; // group 0: no separator, cursor starts at 0
+    r.open_prs = 1; // group 0: no separator, cursor starts at 0
     r
 }
 

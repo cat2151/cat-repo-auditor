@@ -24,17 +24,19 @@ pub(crate) enum RepoRow {
 }
 
 fn group_key(r: &RepoInfo) -> u8 {
-    if r.is_private                              { return 3; }
-    if r.local_status == LocalStatus::NotFound { return 2; }
-    if r.open_issues == 0 && r.open_prs == 0     { return 1; }
+    if r.is_private                              { return 4; }
+    if r.local_status == LocalStatus::NotFound { return 3; }
+    if r.open_issues == 0 && r.open_prs == 0     { return 2; }
+    if r.open_prs == 0                           { return 1; }
     0
 }
 
 fn group_label(g: u8) -> &'static str {
     match g {
-        1 => "── no open issues / PRs ──────────────────",
-        2 => "── no local clone ────────────────────────",
-        3 => "── private ───────────────────────────────",
+        1 => "── no open PRs ───────────────────────────",
+        2 => "── no open issues / PRs ──────────────────",
+        3 => "── no local clone ────────────────────────",
+        4 => "── private ───────────────────────────────",
         _ => "",
     }
 }
