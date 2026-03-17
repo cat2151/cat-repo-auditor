@@ -1,8 +1,11 @@
 mod app;
 mod config;
 mod github;
+mod github_fetch;
+mod github_local;
 mod history;
 mod ui;
+mod ui_detail;
 
 use anyhow::Result;
 use crossterm::{
@@ -16,7 +19,8 @@ use std::{io, sync::mpsc, time::{Duration, Instant}};
 use crate::{
     app::{App, READY_MSG},
     config::Config,
-    github::{check_self_update, fetch_repos_with_progress, get_cargo_bins, launch_app, launch_lazygit, open_url, FetchProgress},
+    github::{fetch_repos_with_progress, FetchProgress},
+    github_local::{check_self_update, get_cargo_bins, launch_app, launch_lazygit, open_url},
     history::History,
     ui::{draw_ui, Focus, SearchState},
 };
