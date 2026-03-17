@@ -61,15 +61,17 @@ fn make_pr(number: u64, title: &str, repo_full: &str, closes: Option<u64>) -> Is
 
 #[test]
 fn build_rows_single_group_no_separator() {
-    let repos = vec![
-        make_repo("a"),
-        make_repo("b"),
-    ];
+    // Repos with open_issues=1 land in group 0; when all repos are in the same
+    // group (group 0) build_rows must not insert any separator.
+    let mut a = make_repo("a");
+    a.open_issues = 1;
+    let mut b = make_repo("b");
+    b.open_issues = 1;
+    let repos = vec![a, b];
     let rows = build_rows(&repos);
-    // Both repos are in group 0 (have issues/PRs check: both have 0 open but
-    // group 0 is "has open items". Both have 0 so they fall into group 1 "no open items".
-    // But there's only one group, so there should be one separator + 2 repos.
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
     let repo_count = rows.iter().filter(|r| matches!(r, RepoRow::Repo(_))).count();
+    assert_eq!(sep_count, 0, "no separator expected when all repos are in group 0");
     assert_eq!(repo_count, 2);
 }
 
