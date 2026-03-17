@@ -51,7 +51,11 @@ mod tests {
 
     #[test]
     fn load_nonexistent_file_returns_error() {
-        let result = History::load("/nonexistent/path/history.json");
+        let path = std::env::temp_dir()
+            .join(format!("cat_repo_auditor_no_such_file_{}.json", std::process::id()));
+        // Ensure the file does not exist before testing
+        std::fs::remove_file(&path).ok();
+        let result = History::load(path.to_str().unwrap());
         assert!(result.is_err());
     }
 }
