@@ -1,4 +1,4 @@
-use crate::{github::{LocalStatus, RepoInfo}, App};
+use crate::{app::App, github::{LocalStatus, RepoInfo}};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
