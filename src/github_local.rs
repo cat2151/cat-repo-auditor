@@ -294,10 +294,10 @@ pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
 ///
 /// Method:
 ///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name.
-///   2. Find `$CARGO_HOME/git/checkouts/<app_name>*` (prefix match).
-///      Multiple matches → log error to `logs/log.txt` and return None.
-///   3. Run `git rev-parse HEAD` in the first sub-directory of the checkout to
-///      obtain the actually-installed commit hash.
+///   2. Find `$CARGO_HOME/git/checkouts/<app_name>-*` (prefix match with "-" delimiter).
+///      Multiple matches → call `log_fn` and return None.
+///   3. Sort sub-directories of the checkout deterministically; run `git rev-parse HEAD`
+///      in the last (lexicographically greatest) one to obtain the installed commit hash.
 ///   4. Run `git rev-parse HEAD` in the local clone and compare.
 ///
 /// Returns:
@@ -308,10 +308,16 @@ pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
 ///   Some((true,  inst, local))   – installed hash == local HEAD
 ///   Some((false, inst, local))   – installed hash != local HEAD (stale install)
 pub(crate) fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> Option<(bool, String, String)> {
-    check_cargo_git_install_inner(owner, repo_name, base_dir, &get_cargo_home())
+    check_cargo_git_install_inner(owner, repo_name, base_dir, &get_cargo_home(), |msg| append_error_log(msg))
 }
 
-pub(crate) fn check_cargo_git_install_inner(owner: &str, repo_name: &str, base_dir: &str, cargo_home: &str) -> Option<(bool, String, String)> {
+pub(crate) fn check_cargo_git_install_inner(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_home: &str,
+    mut log_fn: impl FnMut(&str),
+) -> Option<(bool, String, String)> {
     let crates2_path = format!("{cargo_home}/.crates2.json");
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
@@ -328,20 +334,28 @@ pub(crate) fn check_cargo_git_install_inner(owner: &str, repo_name: &str, base_d
         key.split_whitespace().next().map(|s| s.to_string())
     })?;
 
-    // Find matching checkout directory: $CARGO_HOME/git/checkouts/<app_name>*
+    // Find matching checkout directory: $CARGO_HOME/git/checkouts/<app_name>-*
+    // Cargo names checkout dirs as "{crate_name}-{hash}", so match with trailing "-"
+    // to avoid false-positives from crates sharing a name prefix (e.g. "foo" vs "foo-bar").
+    // The exact-name fallback handles any hypothetical future Cargo version that omits the suffix.
     let checkouts_dir = std::path::Path::new(cargo_home).join("git").join("checkouts");
+    let prefix_with_dash = format!("{app_name}-");
     let matches: Vec<std::path::PathBuf> = match std::fs::read_dir(&checkouts_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_dir())
-            .filter(|e| e.file_name().to_string_lossy().starts_with(app_name.as_str()))
+            .filter(|e| {
+                let name = e.file_name();
+                let s = name.to_string_lossy();
+                s.as_ref() == app_name.as_str() || s.starts_with(prefix_with_dash.as_str())
+            })
             .map(|e| e.path())
             .collect(),
         Err(_) => return None,
     };
 
     if matches.len() > 1 {
-        append_error_log(&format!(
+        log_fn(&format!(
             "cargo check: multiple checkouts found for '{}': {:?}",
             app_name,
             matches.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
@@ -351,12 +365,17 @@ pub(crate) fn check_cargo_git_install_inner(owner: &str, repo_name: &str, base_d
 
     let checkout_base = matches.into_iter().next()?;
 
-    // The actual git checkout lives in the first sub-directory of checkout_base.
-    let sub_dir = std::fs::read_dir(&checkout_base)
+    // Collect and sort subdirectories for deterministic selection.
+    // Cargo names each checkout subdir by a short hash; we pick the lexicographically last one,
+    // which is consistent across runs even if multiple subdirs exist.
+    let mut sub_dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&checkout_base)
         .ok()?
         .filter_map(|e| e.ok())
-        .find(|e| e.path().is_dir())
-        .map(|e| e.path())?;
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.path())
+        .collect();
+    sub_dirs.sort();
+    let sub_dir = sub_dirs.into_iter().next_back()?;
 
     // Obtain the installed commit hash from the cargo checkout.
     let out = Command::new("git")
