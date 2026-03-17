@@ -6,6 +6,7 @@ mod github_local;
 mod history;
 mod ui;
 mod ui_detail;
+mod ui_types;
 
 use anyhow::Result;
 use crossterm::{
