@@ -7,6 +7,12 @@ fn history_path_ends_with_history_json() {
 }
 
 #[test]
+fn config_path_ends_with_config_toml() {
+    let path = Config::config_path();
+    assert_eq!(path.file_name().unwrap(), "config.toml");
+}
+
+#[test]
 fn resolved_app_run_dir_returns_config_value_when_set() {
     let config = Config {
         owner: String::from("owner"),
@@ -23,6 +29,18 @@ fn resolved_app_run_dir_falls_back_when_not_set() {
         owner: String::from("owner"),
         local_base_dir: String::from("/base"),
         app_run_dir: None,
+        auto_pull: false,
+    };
+    let result = config.resolved_app_run_dir();
+    assert!(!result.is_empty());
+}
+
+#[test]
+fn resolved_app_run_dir_empty_string_falls_back() {
+    let config = Config {
+        owner: String::from("owner"),
+        local_base_dir: String::from("/base"),
+        app_run_dir: Some(String::new()),
         auto_pull: false,
     };
     let result = config.resolved_app_run_dir();

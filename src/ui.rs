@@ -813,3 +813,7 @@ fn format_reset(reset_at: &str) -> String {
         } else { String::from("now") }
     } else { reset_at.to_string() }
 }
+
+#[cfg(test)]
+#[path = "ui_tests.rs"]
+mod tests;
