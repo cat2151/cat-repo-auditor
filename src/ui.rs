@@ -235,18 +235,18 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                 }};
                 let local_no_git = matches!(repo.local_status, LocalStatus::NotFound | LocalStatus::NoGit);
 
-                let (ja_str, ja_col) = if is_checking && repo.readme_ja_badge_checked_at.is_empty() {
+                let (ja_str, ja_col) = if is_checking && !local_no_git && repo.readme_ja_badge_checked_at.is_empty() {
                     pending
                 } else {
                     local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
                 };
 
-                let (wki_str, wki_col) = if is_checking && repo.deepwiki_checked_at.is_empty() {
+                let (wki_str, wki_col) = if is_checking && !local_no_git && repo.deepwiki_checked_at.is_empty() {
                     pending
                 } else {
                     local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
                 };
-                let (wf_str, wf_col) = if is_checking && repo.wf_checked_at.is_empty() {
+                let (wf_str, wf_col) = if is_checking && !local_no_git && repo.wf_checked_at.is_empty() {
                     pending
                 } else {
                     local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
