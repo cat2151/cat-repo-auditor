@@ -14,16 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build
-      - run: cargo test
+      - run: cargo build --locked
+      - run: cargo test --locked
 
   install:
     # Verifies that `cargo install --force --git URL` works after each push to main.
     # This is an integration test for the install command that users run.
+    needs: build
     runs-on: ubuntu-latest
     permissions: {}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: dtolnay/rust-toolchain@stable
       - run: |
-          cargo install --force --git https://github.com/cat2151/cat-repo-auditor
+          cargo install --force --git https://github.com/cat2151/cat-repo-auditor --branch main
