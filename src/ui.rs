@@ -5,7 +5,7 @@ use crate::{
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
 pub(crate) use crate::ui_types::{
-    build_detail_items, build_rows, Focus,
+    build_detail_items, build_rows, local_check_cell, Focus,
     MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN,
     MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
     RepoRow, SearchState,
@@ -233,28 +233,24 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                     Some(false) => ("✘", MK_COMMENT),
                     None        => ("?", MK_ORANGE),
                 }};
-                let (ja_str, ja_col) = if is_checking && repo.readme_ja_badge_checked_at.is_empty() {
-                    pending
-                } else { match repo.readme_ja_badge {
-                    Some(true)  => ("✔", MK_YELLOW),
-                    Some(false) => ("✘", MK_COMMENT),
-                    None        => ("?", MK_ORANGE),
-                }};
+                let local_no_git = matches!(repo.local_status, LocalStatus::NotFound | LocalStatus::NoGit);
 
-                let (wki_str, wki_col) = if is_checking && repo.deepwiki_checked_at.is_empty() {
+                let (ja_str, ja_col) = if is_checking && !local_no_git && repo.readme_ja_badge_checked_at.is_empty() {
                     pending
-                } else { match repo.deepwiki {
-                    Some(true)  => ("✔", MK_PURPLE),
-                    Some(false) => ("✘", MK_COMMENT),
-                    None        => ("?", MK_ORANGE),
-                }};
-                let (wf_str, wf_col) = if is_checking && repo.wf_checked_at.is_empty() {
+                } else {
+                    local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
+                };
+
+                let (wki_str, wki_col) = if is_checking && !local_no_git && repo.deepwiki_checked_at.is_empty() {
                     pending
-                } else { match repo.wf_workflows {
-                    Some(true)  => ("✔", MK_GREEN),
-                    Some(false) => ("✘", MK_COMMENT),
-                    None        => ("?", MK_ORANGE),
-                }};
+                } else {
+                    local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
+                };
+                let (wf_str, wf_col) = if is_checking && !local_no_git && repo.wf_checked_at.is_empty() {
+                    pending
+                } else {
+                    local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
+                };
 
                 // cargo: None=not in crates2 → empty, Some(true)=ok, Some(false)=old
                 let (cgo_str, cgo_col) = if is_checking && repo.cargo_checked_at.is_empty() {

@@ -209,3 +209,48 @@ fn build_detail_items_empty_repo() {
     let items = build_detail_items(&repo);
     assert!(items.is_empty());
 }
+
+// ── local_check_cell ──────────────────────────────────────────────────────────
+
+#[test]
+fn local_check_cell_none_with_local_shows_question_mark() {
+    let (s, c) = local_check_cell(false, None, MK_YELLOW);
+    assert_eq!(s, "?");
+    assert_eq!(c, MK_ORANGE);
+}
+
+#[test]
+fn local_check_cell_none_no_git_shows_gray_dash() {
+    let (s, c) = local_check_cell(true, None, MK_YELLOW);
+    assert_eq!(s, "-");
+    assert_eq!(c, MK_COMMENT);
+}
+
+#[test]
+fn local_check_cell_some_true_shows_checkmark_with_true_col() {
+    let (s, c) = local_check_cell(false, Some(true), MK_YELLOW);
+    assert_eq!(s, "✔");
+    assert_eq!(c, MK_YELLOW);
+}
+
+#[test]
+fn local_check_cell_some_true_no_git_still_shows_checkmark() {
+    // A previously cached true value should still show even if no local git
+    let (s, c) = local_check_cell(true, Some(true), MK_PURPLE);
+    assert_eq!(s, "✔");
+    assert_eq!(c, MK_PURPLE);
+}
+
+#[test]
+fn local_check_cell_some_false_shows_cross_gray() {
+    let (s, c) = local_check_cell(false, Some(false), MK_YELLOW);
+    assert_eq!(s, "✘");
+    assert_eq!(c, MK_COMMENT);
+}
+
+#[test]
+fn local_check_cell_some_false_no_git_shows_cross_gray() {
+    let (s, c) = local_check_cell(true, Some(false), MK_YELLOW);
+    assert_eq!(s, "✘");
+    assert_eq!(c, MK_COMMENT);
+}
