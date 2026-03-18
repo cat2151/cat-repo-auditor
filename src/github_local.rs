@@ -398,49 +398,6 @@ pub(crate) fn check_cargo_git_install_inner(
     Some((installed_hash == local_hash, installed_hash, local_hash))
 }
 
-// ──────────────────────────────────────────────
-// Self-update check
-// ──────────────────────────────────────────────
-
-/// Check if a newer version of gh-tui is available by comparing
-/// crates2.json installed hash vs remote HEAD of the git repo.
-/// Returns Some("owner/repo") if update is available, None if up-to-date or not installed.
-pub fn check_self_update() -> Option<String> {
-    let cargo_home = get_cargo_home();
-    let crates2_path = format!("{cargo_home}/.crates2.json");
-
-    let content = std::fs::read_to_string(&crates2_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let installs = json.get("installs")?.as_object()?;
-
-    // Find gh-tui entry with git+ URL
-    let (installed_hash, owner_repo) = installs.keys().find_map(|key| {
-        let mut parts = key.splitn(3, ' ');
-        let name = parts.next()?;
-        if name != "cat-repo-auditor" { return None; }
-        let src = key.trim_end_matches(')');
-        let git_prefix = "git+https://github.com/";
-        let idx = src.find(git_prefix)?;
-        let rest = &src[idx + git_prefix.len()..];
-        // rest = "owner/repo#HASH"
-        let hash_idx = rest.find('#')?;
-        let owner_repo = &rest[..hash_idx];
-        let hash = &rest[hash_idx + 1..];
-        if hash.is_empty() { return None; }
-        Some((hash.to_string(), owner_repo.to_string()))
-    })?;
-
-    // Get remote HEAD via gh api
-    let endpoint = format!("/repos/{owner_repo}/commits/HEAD");
-    let out = Command::new("gh")
-        .args(["api", &endpoint, "--jq", ".sha"])
-        .output().ok()?;
-    if !out.status.success() { return None; }
-    let remote_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
-
-    if remote_hash.is_empty() || remote_hash == installed_hash { return None; }
-    Some(owner_repo)
-}
 
 #[cfg(test)]
 #[path = "github_local_tests.rs"]

@@ -4,6 +4,7 @@ mod github;
 mod github_fetch;
 mod github_local;
 mod history;
+mod self_update;
 mod ui;
 mod ui_detail;
 mod ui_types;
@@ -21,7 +22,8 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::{fetch_repos_with_progress, FetchProgress},
-    github_local::{check_self_update, get_cargo_bins, launch_app, launch_lazygit, open_url},
+    github_local::{get_cargo_bins, launch_app, launch_lazygit, open_url},
+    self_update::check_self_update,
     history::History,
     ui::{draw_ui, Focus, SearchState},
 };
