@@ -405,12 +405,8 @@ fn main() -> Result<()> {
     // Print update notice after terminal restore (visible in shell)
     if let Some(ref repo) = app.update_available {
         println!();
-        println!("┌─────────────────────────────────────────────────────┐");
-        println!("│  gh-tui update available!                           │");
-        println!("│  Run:                                               │");
-        println!("│    cargo install --force --git                      │");
-        println!("│      https://github.com/{repo:<37}│");
-        println!("└─────────────────────────────────────────────────────┘");
+        println!("gh-tui update available!");
+        println!("Run: cargo install --force --git https://github.com/{repo}");
         println!();
     }
 
