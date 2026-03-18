@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build
+      - run: cargo test
+
+  install:
+    # Verifies that `cargo install --force --git URL` works after each push to main.
+    # This is an integration test for the install command that users run.
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          cargo install --force --git https://github.com/cat2151/cat-repo-auditor
