@@ -76,6 +76,23 @@ pub(crate) struct DetailItem {
     pub(crate) updated:  String,
 }
 
+/// Returns the display string and color for a local-file-dependent check column
+/// (ja / wki / wf).  When the local clone is absent or has no git, and the
+/// value has never been determined (None), the column shows a gray "-" to
+/// indicate that no investigation is needed rather than an orange "?".
+///
+/// * `local_no_git` – true when `local_status` is `NotFound` or `NoGit`
+/// * `value`        – the cached check result (`None` = not yet checked)
+/// * `true_col`     – accent colour shown when `value` is `Some(true)`
+pub(crate) fn local_check_cell(local_no_git: bool, value: Option<bool>, true_col: Color) -> (&'static str, Color) {
+    match value {
+        Some(true)  => ("✔", true_col),
+        Some(false) => ("✘", MK_COMMENT),
+        None if local_no_git => ("-", MK_COMMENT),
+        None        => ("?", MK_ORANGE),
+    }
+}
+
 pub(crate) fn build_detail_items(repo: &RepoInfo) -> Vec<DetailItem> {
     use std::collections::{HashMap, HashSet};
     let open_issue_numbers: HashSet<u64> = repo.issues.iter().map(|i| i.number).collect();
