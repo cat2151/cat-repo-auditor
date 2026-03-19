@@ -219,6 +219,52 @@ fn cargo_install_returns_some_false_when_hashes_differ() {
 }
 
 #[test]
+fn cargo_install_picks_latest_mtime_subdir() {
+    // When there are multiple sub-directories under the checkout base, the function
+    // must use the one whose modification timestamp is the most recent, not the one
+    // that comes last in lexicographic order.
+    let tmp = std::env::temp_dir()
+        .join(format!("cargo_test_mtime_{}", std::process::id()));
+
+    // Set up local git repo
+    let local_repo = tmp.join("repos").join("myrepo");
+    let local_hash = init_git_repo_with_content(&local_repo, "local-content");
+
+    let cargo_home = tmp.join("cargo_home");
+    let checkouts = cargo_home.join("git").join("checkouts").join("myrepo-abc12345");
+
+    // Create "old" sub-directory first (lexicographically last: "zzzzold1")
+    let old_sub = checkouts.join("zzzzold1");
+    init_git_repo_with_content(&old_sub, "old-content");
+
+    // Sleep long enough for filesystems with 1-second mtime resolution to register
+    // a distinct timestamp for the second directory.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    // Create "new" sub-directory after a small delay (lexicographically first: "aaanew1")
+    // Its mtime will be newer even though its name sorts earlier.
+    let new_sub = checkouts.join("aaanew1");
+    let expected_installed_hash = init_git_repo_with_content(&new_sub, "new-content");
+
+    let json = make_crates2_json("owner", "myrepo", "myrepo");
+    std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+
+    let result = check_cargo_git_install_inner(
+        "owner", "myrepo",
+        tmp.join("repos").to_str().unwrap(),
+        cargo_home.to_str().unwrap(),
+        |_| {},
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    // The result should be based on "aaanew1" (newest mtime), not "zzzzold1"
+    let (_matches, inst, _loc) = result.expect("should return Some");
+    assert_eq!(inst, expected_installed_hash,
+        "should have picked the subdir with the latest mtime (aaanew1), not zzzzold1");
+    assert_ne!(inst, local_hash);
+}
+
+#[test]
 fn check_deepwiki_exists_finds_link_in_readme_ja() {
     let tmp = std::env::temp_dir()
         .join(format!("deepwiki_test_a_{}", std::process::id()));
