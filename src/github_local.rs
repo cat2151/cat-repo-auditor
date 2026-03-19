@@ -296,8 +296,8 @@ pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
 ///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name.
 ///   2. Find `$CARGO_HOME/git/checkouts/<app_name>-*` (prefix match with "-" delimiter).
 ///      Multiple matches → call `log_fn` and return None.
-///   3. Sort sub-directories of the checkout deterministically; run `git rev-parse HEAD`
-///      in the last (lexicographically greatest) one to obtain the installed commit hash.
+///   3. Sort sub-directories of the checkout by modification timestamp; run `git rev-parse HEAD`
+///      in the most recently modified one to obtain the installed commit hash.
 ///   4. Run `git rev-parse HEAD` in the local clone and compare.
 ///
 /// Returns:
@@ -365,17 +365,23 @@ pub(crate) fn check_cargo_git_install_inner(
 
     let checkout_base = matches.into_iter().next()?;
 
-    // Collect and sort subdirectories for deterministic selection.
-    // Cargo names each checkout subdir by a short hash; we pick the lexicographically last one,
-    // which is consistent across runs even if multiple subdirs exist.
-    let mut sub_dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&checkout_base)
+    // Pick the checkout sub-directory with the most recent modification time.
+    // When mtime is unavailable (e.g. unsupported filesystem), fall back to UNIX_EPOCH so
+    // the entry is still considered rather than silently dropped.
+    // Tie-break on path for determinism when timestamps coincide.
+    let sub_dir = std::fs::read_dir(&checkout_base)
         .ok()?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
-        .map(|e| e.path())
-        .collect();
-    sub_dirs.sort();
-    let sub_dir = sub_dirs.into_iter().next_back()?;
+        .map(|e| {
+            let mtime = e.metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            (mtime, e.path())
+        })
+        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
+        .1;
 
     // Obtain the installed commit hash from the cargo checkout.
     let out = Command::new("git")
