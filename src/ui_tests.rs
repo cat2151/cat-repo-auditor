@@ -254,3 +254,26 @@ fn local_check_cell_some_false_no_git_shows_cross_gray() {
     assert_eq!(s, "✘");
     assert_eq!(c, MK_COMMENT);
 }
+
+// ── background task spinner ───────────────────────────────────────────────────
+
+#[test]
+fn build_tasks_display_empty_when_no_tasks() {
+    let s = build_tasks_display(&[], 0);
+    assert_eq!(s, "");
+}
+
+#[test]
+fn build_tasks_display_includes_spinner_and_progress() {
+    let tasks = vec![("gh↓", 2, 0), ("scan", 3, 76)];
+    let s = build_tasks_display(&tasks, 0);
+    assert_eq!(s, "  ⠋ gh↓2  scan3/76");
+}
+
+#[test]
+fn build_tasks_display_spinner_changes_by_second() {
+    let tasks = vec![("scan", 1, 2)];
+    let a = build_tasks_display(&tasks, 0);
+    let b = build_tasks_display(&tasks, 1);
+    assert_ne!(a, b);
+}

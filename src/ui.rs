@@ -17,6 +17,39 @@ use ratatui::{
     Frame,
 };
 
+const SPINNER_FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
+
+fn spinner_frame(unix_seconds: u64) -> &'static str {
+    SPINNER_FRAMES[(unix_seconds as usize) % SPINNER_FRAMES.len()]
+}
+
+/// Build the text displayed in the top status bar for background tasks.
+///
+/// `bg_tasks` items are `(tag, current, total)`, where `total == 0` means
+/// unknown total progress. `unix_seconds` selects the spinner frame so tests
+/// can assert deterministic output.
+fn build_tasks_display<'a, I>(bg_tasks: I, unix_seconds: u64) -> String
+where
+    I: IntoIterator<Item = &'a (&'static str, usize, usize)>,
+{
+    let tasks_str: String = bg_tasks.into_iter()
+        .map(|(tag, cur, total)| {
+            if *total == 0 {
+                format!("{}{}  ", tag, cur)  // gh↓ page num (total unknown)
+            } else {
+                format!("{}{}/{}  ", tag, cur, total)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    if tasks_str.is_empty() {
+        String::new()
+    } else {
+        format!("  {} {}", spinner_frame(unix_seconds), tasks_str.trim_end())
+    }
+}
+
 // ── draw_ui ──────────────────────────────────────────────────────────────────
 
 pub fn draw_ui(f: &mut Frame, app: &mut App) {
@@ -32,22 +65,12 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         .split(area);
 
     // ── rate limit bar ───────────────────────────────────────────────────────
-    // Build background task indicator: "gh↓1 scan3/76 chk5/76"
-    let tasks_str: String = app.bg_tasks.iter()
-        .map(|(tag, cur, total)| {
-            if *total == 0 {
-                format!("{}{}  ", tag, cur)  // gh↓ page num (total unknown)
-            } else {
-                format!("{}{}/{}  ", tag, cur, total)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("");
-    let tasks_display = if tasks_str.is_empty() {
-        String::new()
-    } else {
-        format!("  {}", tasks_str.trim_end())
-    };
+    // Build background task indicator: "⠋ gh↓1 scan3/76 chk5/76"
+    let unix_seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_seconds);
 
     let rl_text = if let Some(rl) = &app.rate_limit {
         format!(
