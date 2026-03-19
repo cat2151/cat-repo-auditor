@@ -23,7 +23,7 @@ use crate::{
     config::Config,
     github::{fetch_repos_with_progress, FetchProgress},
     github_local::{get_cargo_bins, launch_app, launch_lazygit, open_url},
-    self_update::check_self_update,
+    self_update::{check_self_update, run_self_update},
     history::History,
     ui::{draw_ui, Focus, SearchState},
 };
@@ -39,6 +39,16 @@ fn start_fetch(config: Config, history: History) -> mpsc::Receiver<FetchProgress
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
+    // ── subcommand dispatch ───────────────────────────────────────────────
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("update") {
+        let should_exit = run_self_update()?;
+        if should_exit {
+            std::process::exit(0);
+        }
+        return Ok(());
+    }
+
     let config = Config::load()?;
     let history = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
 
