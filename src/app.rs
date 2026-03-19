@@ -2,6 +2,8 @@ use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
 
+const MAX_LOG_LINES: usize = 2_000;
+
 pub const READY_MSG: &str =
     "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  g:lazygit  Shift+L:log  /:search";
 
@@ -259,6 +261,10 @@ impl App {
 
     pub fn append_log_line(&mut self, line: String) {
         self.log_lines.push(line);
+        if self.log_lines.len() > MAX_LOG_LINES {
+            let excess = self.log_lines.len() - MAX_LOG_LINES;
+            self.log_lines.drain(0..excess);
+        }
     }
 
     // ── search ───────────────────────────────────────────────────────────────

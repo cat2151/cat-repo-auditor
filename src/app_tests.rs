@@ -422,3 +422,14 @@ fn append_log_line_adds_line() {
     app.append_log_line(String::from("line2"));
     assert_eq!(app.log_lines, vec!["line1", "line2"]);
 }
+
+#[test]
+fn append_log_line_caps_history() {
+    let mut app = App::new(make_config());
+    for i in 0..2_100 {
+        app.append_log_line(format!("line{i}"));
+    }
+    assert_eq!(app.log_lines.len(), 2_000);
+    assert_eq!(app.log_lines.first().unwrap(), "line100");
+    assert_eq!(app.log_lines.last().unwrap(), "line2099");
+}

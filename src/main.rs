@@ -48,7 +48,10 @@ fn read_log_lines() -> Vec<String> {
         Ok(f) => f,
         Err(_) => return vec![],
     };
-    BufReader::new(f).lines().map_while(Result::ok).collect()
+    BufReader::new(f)
+        .lines()
+        .map_while(std::result::Result::ok)
+        .collect()
 }
 
 fn append_log_line(line: &str) -> io::Result<()> {
@@ -67,6 +70,14 @@ fn append_log_line(line: &str) -> io::Result<()> {
 fn make_x_log_line(repo_full_name: &str, msg: &str) -> String {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S");
     format!("[{now}] x {repo_full_name} {msg}")
+}
+
+fn persist_log_line(app: &mut App, line: String) {
+    if let Err(e) = append_log_line(&line) {
+        app.transient_msg = Some(format!("log write failed: {e}"));
+    } else {
+        app.append_log_line(line);
+    }
 }
 
 #[cfg(test)]
@@ -395,10 +406,7 @@ fn main() -> Result<()> {
                                                     terminal.clear().ok();
                                                     app.transient_msg = Some(format!("launched: {bin}"));
                                                     let line = make_x_log_line(&repo_full_name, &cmd_desc);
-                                                    if let Err(e) = append_log_line(&line) {
-                                                        app.transient_msg = Some(format!("log write failed: {e}"));
-                                                    }
-                                                    app.append_log_line(line);
+                                                    persist_log_line(&mut app, line);
                                                 }
                                                 Err(e) => {
                                                     app.transient_msg = Some(format!("run failed: {e}"));
@@ -406,10 +414,7 @@ fn main() -> Result<()> {
                                                         &repo_full_name,
                                                         &format!("{cmd_desc} => failed: {e}"),
                                                     );
-                                                    if let Err(log_err) = append_log_line(&line) {
-                                                        app.transient_msg = Some(format!("log write failed: {log_err}"));
-                                                    }
-                                                    app.append_log_line(line);
+                                                    persist_log_line(&mut app, line);
                                                 }
                                             }
                                         } else {
@@ -417,46 +422,30 @@ fn main() -> Result<()> {
                                                 &repo_full_name,
                                                 "not run: no installed cargo bin found",
                                             );
-                                            if let Err(e) = append_log_line(&line) {
-                                                app.transient_msg = Some(format!("log write failed: {e}"));
-                                            } else {
-                                                app.transient_msg = Some(String::from("x: no installed cargo bin found"));
-                                            }
-                                            app.append_log_line(line);
+                                            app.transient_msg = Some(String::from("x: no installed cargo bin found"));
+                                            persist_log_line(&mut app, line);
                                         }
                                     } else {
                                         let line = make_x_log_line(
                                             &repo_full_name,
                                             "not run: .crates2.json has no matching install entry",
                                         );
-                                        if let Err(e) = append_log_line(&line) {
-                                            app.transient_msg = Some(format!("log write failed: {e}"));
-                                        } else {
-                                            app.transient_msg = Some(String::from("x: no matching cargo install entry"));
-                                        }
-                                        app.append_log_line(line);
+                                        app.transient_msg = Some(String::from("x: no matching cargo install entry"));
+                                        persist_log_line(&mut app, line);
                                     }
                                 } else {
                                     let line = make_x_log_line(
                                         &repo_full_name,
                                         "not run: cgo is not ok (repo unsupported for x)",
                                     );
-                                    if let Err(e) = append_log_line(&line) {
-                                        app.transient_msg = Some(format!("log write failed: {e}"));
-                                    } else {
-                                        app.transient_msg = Some(String::from("x: unsupported repo (cgo!=ok)"));
-                                    }
-                                    app.append_log_line(line);
+                                    app.transient_msg = Some(String::from("x: unsupported repo (cgo!=ok)"));
+                                    persist_log_line(&mut app, line);
                                 }
                             }
                             else {
                                 let line = make_x_log_line("-", "not run: no repository selected");
-                                if let Err(e) = append_log_line(&line) {
-                                    app.transient_msg = Some(format!("log write failed: {e}"));
-                                } else {
-                                    app.transient_msg = Some(String::from("x: no repository selected"));
-                                }
-                                app.append_log_line(line);
+                                app.transient_msg = Some(String::from("x: no repository selected"));
+                                persist_log_line(&mut app, line);
                             }
                         }
                         KeyCode::Char('/') => {
