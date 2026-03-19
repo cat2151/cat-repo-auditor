@@ -1,8 +1,12 @@
 use std::process::Command;
 
 const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
-const INSTALL_CMD: &str =
-    "cargo install --force --git https://github.com/cat2151/cat-repo-auditor";
+const GIT_URL: &str = "https://github.com/cat2151/cat-repo-auditor";
+
+/// Full `cargo install` command string (used in bat content and printed output).
+fn install_cmd() -> String {
+    format!("cargo install --force --git {GIT_URL}")
+}
 
 /// Pure decision function: returns true if `remote_hash` differs from `build_hash`
 /// and both are non-empty and `build_hash` is not "unknown".
@@ -19,7 +23,8 @@ pub(crate) fn is_update_available(build_hash: &str, remote_hash: &str) -> bool {
 #[cfg(any(target_os = "windows", test))]
 pub(crate) fn update_bat_content() -> String {
     format!(
-        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\n{INSTALL_CMD}\r\ndel \"%~f0\"\r\n"
+        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\n{cmd}\r\ndel \"%~f0\"\r\n",
+        cmd = install_cmd()
     )
 }
 
@@ -35,10 +40,21 @@ pub fn run_self_update() -> anyhow::Result<bool> {
     #[cfg(target_os = "windows")]
     {
         use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
 
-        let bat_path = std::env::temp_dir().join("catrepo_update.bat");
+        // Use PID + timestamp to avoid collisions and TOCTOU/hijack in shared temp.
+        let pid = std::process::id();
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let bat_path = std::env::temp_dir()
+            .join(format!("catrepo_update_{pid}_{ts}.bat"));
         {
-            let mut f = std::fs::File::create(&bat_path)?;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&bat_path)?;
             f.write_all(update_bat_content().as_bytes())?;
         }
 
@@ -56,10 +72,10 @@ pub fn run_self_update() -> anyhow::Result<bool> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        println!("Running: {INSTALL_CMD}");
+        let cmd = install_cmd();
+        println!("Running: {cmd}");
         let status = Command::new("cargo")
-            .args(["install", "--force", "--git",
-                   "https://github.com/cat2151/cat-repo-auditor"])
+            .args(["install", "--force", "--git", GIT_URL])
             .status()?;
         if !status.success() {
             anyhow::bail!("cargo install failed with status: {status}");
