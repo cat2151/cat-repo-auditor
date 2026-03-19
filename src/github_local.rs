@@ -365,22 +365,23 @@ pub(crate) fn check_cargo_git_install_inner(
 
     let checkout_base = matches.into_iter().next()?;
 
-    // Collect subdirectories; pick the one with the most recent modification timestamp.
-    // Cargo names each checkout subdir by a short hash, and the active checkout is the
-    // most recently written directory.  Sorting by mtime and taking the newest is more
-    // reliable than lexicographic order when multiple subdirs exist.
-    let mut sub_dirs: Vec<(std::time::SystemTime, std::path::PathBuf)> =
-        std::fs::read_dir(&checkout_base)
-            .ok()?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_dir())
-            .filter_map(|e| {
-                let mtime = e.metadata().ok()?.modified().ok()?;
-                Some((mtime, e.path()))
-            })
-            .collect();
-    sub_dirs.sort_by_key(|(mtime, _)| *mtime);
-    let sub_dir = sub_dirs.into_iter().next_back().map(|(_, p)| p)?;
+    // Pick the checkout sub-directory with the most recent modification time.
+    // When mtime is unavailable (e.g. unsupported filesystem), fall back to UNIX_EPOCH so
+    // the entry is still considered rather than silently dropped.
+    // Tie-break on path for determinism when timestamps coincide.
+    let sub_dir = std::fs::read_dir(&checkout_base)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let mtime = e.metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            (mtime, e.path())
+        })
+        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
+        .1;
 
     // Obtain the installed commit hash from the cargo checkout.
     let out = Command::new("git")

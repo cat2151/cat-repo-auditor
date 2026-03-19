@@ -237,14 +237,25 @@ fn cargo_install_picks_latest_mtime_subdir() {
     let old_sub = checkouts.join("zzzzold1");
     init_git_repo_with_content(&old_sub, "old-content");
 
-    // Sleep long enough for filesystems with 1-second mtime resolution to register
-    // a distinct timestamp for the second directory.
-    std::thread::sleep(std::time::Duration::from_millis(1100));
-
-    // Create "new" sub-directory after a small delay (lexicographically first: "aaanew1")
-    // Its mtime will be newer even though its name sorts earlier.
+    // Create "new" sub-directory (lexicographically first: "aaanew1")
     let new_sub = checkouts.join("aaanew1");
     let expected_installed_hash = init_git_repo_with_content(&new_sub, "new-content");
+
+    // Explicitly set directory mtimes to deterministic values so the test is
+    // reliable even on filesystems with coarse (1 s) timestamp resolution, and
+    // so the suite does not need to sleep.
+    {
+        let f = std::fs::File::open(&old_sub).unwrap();
+        f.set_times(std::fs::FileTimes::new().set_modified(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000),
+        )).unwrap();
+    }
+    {
+        let f = std::fs::File::open(&new_sub).unwrap();
+        f.set_times(std::fs::FileTimes::new().set_modified(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(2_000_000),
+        )).unwrap();
+    }
 
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
