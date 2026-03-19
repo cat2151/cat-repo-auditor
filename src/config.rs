@@ -59,6 +59,11 @@ impl Config {
         Self::config_path().with_file_name("history.json")
     }
 
+    /// Returns the x-key log file path next to config.toml
+    pub fn log_path() -> PathBuf {
+        Self::config_path().with_file_name("log.txt")
+    }
+
     /// Load config from platform config dir.
     /// If file doesn't exist, create it from template and return an error
     /// instructing the user to edit it.

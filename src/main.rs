@@ -10,13 +10,19 @@ mod ui_detail;
 mod ui_types;
 
 use anyhow::Result;
+use chrono::Local;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{io, sync::mpsc, time::{Duration, Instant}};
+use std::{
+    fs::OpenOptions,
+    io::{self, BufRead, BufReader, Write},
+    sync::mpsc,
+    time::{Duration, Instant},
+};
 
 use crate::{
     app::{App, READY_MSG},
@@ -35,6 +41,37 @@ fn start_fetch(config: Config, history: History) -> mpsc::Receiver<FetchProgress
     std::thread::spawn(move || { fetch_repos_with_progress(config, history, tx); });
     rx
 }
+
+fn read_log_lines() -> Vec<String> {
+    let path = Config::log_path();
+    let f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return vec![],
+    };
+    BufReader::new(f).lines().map_while(Result::ok).collect()
+}
+
+fn append_log_line(line: &str) -> io::Result<()> {
+    let path = Config::log_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(f, "{line}")?;
+    f.flush()
+}
+
+fn make_x_log_line(repo_full_name: &str, msg: &str) -> String {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S");
+    format!("[{now}] x {repo_full_name} {msg}")
+}
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +103,7 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(config.clone());
+    app.log_lines = read_log_lines();
 
     {
         let h = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
@@ -232,6 +270,14 @@ fn main() -> Result<()> {
                         continue;
                     }
                 }
+                if matches!(key.code, KeyCode::Char('L'))
+                    || (matches!(key.code, KeyCode::Char('l'))
+                        && key.modifiers.contains(KeyModifiers::SHIFT))
+                {
+                    app.num_prefix = 0;
+                    app.toggle_log();
+                    continue;
+                }
 
                 match app.focus {
                     Focus::Repos => match key.code {
@@ -333,22 +379,84 @@ fn main() -> Result<()> {
                         }
                         KeyCode::Char('x') => {
                             app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                if repo.cargo_install == Some(true) {
-                                    let owner   = app.config.owner.clone();
-                                    let name    = repo.name.clone();
+                            if let Some((repo_full_name, repo_name, cargo_ok)) = app.selected_repo().map(|repo| {
+                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install == Some(true))
+                            }) {
+                                if cargo_ok {
+                                    let owner = app.config.owner.clone();
                                     let run_dir = app.config.resolved_app_run_dir();
-                                    if let Some(bins) = get_cargo_bins(&owner, &name) {
+                                    if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
                                         if let Some(bin) = bins.first() {
                                             // Keep .exe suffix – avoids Windows explorer folder collision
                                             let bin = bin.clone();
+                                            let cmd_desc = format!("run: `{bin}` cwd=`{run_dir}`");
                                             match launch_app(&bin, &run_dir) {
-                                                Ok(()) => { terminal.clear().ok(); app.transient_msg = Some(format!("launched: {bin}")); }
-                                                Err(e) => { app.transient_msg = Some(format!("run failed: {e}")); }
+                                                Ok(()) => {
+                                                    terminal.clear().ok();
+                                                    app.transient_msg = Some(format!("launched: {bin}"));
+                                                    let line = make_x_log_line(&repo_full_name, &cmd_desc);
+                                                    if let Err(e) = append_log_line(&line) {
+                                                        app.transient_msg = Some(format!("log write failed: {e}"));
+                                                    }
+                                                    app.append_log_line(line);
+                                                }
+                                                Err(e) => {
+                                                    app.transient_msg = Some(format!("run failed: {e}"));
+                                                    let line = make_x_log_line(
+                                                        &repo_full_name,
+                                                        &format!("{cmd_desc} => failed: {e}"),
+                                                    );
+                                                    if let Err(log_err) = append_log_line(&line) {
+                                                        app.transient_msg = Some(format!("log write failed: {log_err}"));
+                                                    }
+                                                    app.append_log_line(line);
+                                                }
                                             }
+                                        } else {
+                                            let line = make_x_log_line(
+                                                &repo_full_name,
+                                                "not run: no installed cargo bin found",
+                                            );
+                                            if let Err(e) = append_log_line(&line) {
+                                                app.transient_msg = Some(format!("log write failed: {e}"));
+                                            } else {
+                                                app.transient_msg = Some(String::from("x: no installed cargo bin found"));
+                                            }
+                                            app.append_log_line(line);
                                         }
+                                    } else {
+                                        let line = make_x_log_line(
+                                            &repo_full_name,
+                                            "not run: .crates2.json has no matching install entry",
+                                        );
+                                        if let Err(e) = append_log_line(&line) {
+                                            app.transient_msg = Some(format!("log write failed: {e}"));
+                                        } else {
+                                            app.transient_msg = Some(String::from("x: no matching cargo install entry"));
+                                        }
+                                        app.append_log_line(line);
                                     }
+                                } else {
+                                    let line = make_x_log_line(
+                                        &repo_full_name,
+                                        "not run: cgo is not ok (repo unsupported for x)",
+                                    );
+                                    if let Err(e) = append_log_line(&line) {
+                                        app.transient_msg = Some(format!("log write failed: {e}"));
+                                    } else {
+                                        app.transient_msg = Some(String::from("x: unsupported repo (cgo!=ok)"));
+                                    }
+                                    app.append_log_line(line);
                                 }
+                            }
+                            else {
+                                let line = make_x_log_line("-", "not run: no repository selected");
+                                if let Err(e) = append_log_line(&line) {
+                                    app.transient_msg = Some(format!("log write failed: {e}"));
+                                } else {
+                                    app.transient_msg = Some(String::from("x: no repository selected"));
+                                }
+                                app.append_log_line(line);
                             }
                         }
                         KeyCode::Char('/') => {

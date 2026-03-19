@@ -277,6 +277,10 @@ pub(crate) fn draw_help_dialog(f: &mut Frame, _app: &App, area: Rect) {
             Span::raw("Run installed app (cgo=ok only)"),
         ]),
         Line::from(vec![
+            Span::styled("  Shift+L  ", Style::default().fg(MK_ORANGE)),
+            Span::raw("Toggle log pane (bottom half)"),
+        ]),
+        Line::from(vec![
             Span::styled("  c        ", Style::default().fg(MK_ORANGE)),
             Span::raw("Copy local repo path to clipboard"),
         ]),
