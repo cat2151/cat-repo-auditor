@@ -17,13 +17,22 @@ use ratatui::{
     Frame,
 };
 
+const SPINNER_FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
+
 fn spinner_frame(unix_seconds: u64) -> &'static str {
-    const FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
-    FRAMES[(unix_seconds as usize) % FRAMES.len()]
+    SPINNER_FRAMES[(unix_seconds as usize) % SPINNER_FRAMES.len()]
 }
 
-fn build_tasks_display(bg_tasks: &[(&'static str, usize, usize)], unix_seconds: u64) -> String {
-    let tasks_str: String = bg_tasks.iter()
+/// Build the text displayed in the top status bar for background tasks.
+///
+/// `bg_tasks` items are `(tag, current, total)`, where `total == 0` means
+/// unknown total progress. `unix_seconds` selects the spinner frame so tests
+/// can assert deterministic output.
+fn build_tasks_display<'a, I>(bg_tasks: I, unix_seconds: u64) -> String
+where
+    I: IntoIterator<Item = &'a (&'static str, usize, usize)>,
+{
+    let tasks_str: String = bg_tasks.into_iter()
         .map(|(tag, cur, total)| {
             if *total == 0 {
                 format!("{}{}  ", tag, cur)  // gh↓ page num (total unknown)
@@ -61,7 +70,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let tasks_display = build_tasks_display(&app.bg_tasks, unix_seconds);
+    let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_seconds);
 
     let rl_text = if let Some(rl) = &app.rate_limit {
         format!(
