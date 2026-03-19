@@ -17,6 +17,30 @@ use ratatui::{
     Frame,
 };
 
+fn spinner_frame(unix_seconds: u64) -> &'static str {
+    const FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
+    FRAMES[(unix_seconds as usize) % FRAMES.len()]
+}
+
+fn build_tasks_display(bg_tasks: &[(&'static str, usize, usize)], unix_seconds: u64) -> String {
+    let tasks_str: String = bg_tasks.iter()
+        .map(|(tag, cur, total)| {
+            if *total == 0 {
+                format!("{}{}  ", tag, cur)  // gh↓ page num (total unknown)
+            } else {
+                format!("{}{}/{}  ", tag, cur, total)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    if tasks_str.is_empty() {
+        String::new()
+    } else {
+        format!("  {} {}", spinner_frame(unix_seconds), tasks_str.trim_end())
+    }
+}
+
 // ── draw_ui ──────────────────────────────────────────────────────────────────
 
 pub fn draw_ui(f: &mut Frame, app: &mut App) {
@@ -32,22 +56,12 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         .split(area);
 
     // ── rate limit bar ───────────────────────────────────────────────────────
-    // Build background task indicator: "gh↓1 scan3/76 chk5/76"
-    let tasks_str: String = app.bg_tasks.iter()
-        .map(|(tag, cur, total)| {
-            if *total == 0 {
-                format!("{}{}  ", tag, cur)  // gh↓ page num (total unknown)
-            } else {
-                format!("{}{}/{}  ", tag, cur, total)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("");
-    let tasks_display = if tasks_str.is_empty() {
-        String::new()
-    } else {
-        format!("  {}", tasks_str.trim_end())
-    };
+    // Build background task indicator: "⠋ gh↓1 scan3/76 chk5/76"
+    let unix_seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let tasks_display = build_tasks_display(&app.bg_tasks, unix_seconds);
 
     let rl_text = if let Some(rl) = &app.rate_limit {
         format!(
