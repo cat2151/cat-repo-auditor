@@ -408,7 +408,8 @@ fn main() -> Result<()> {
     if let Some(ref repo) = app.update_available {
         println!();
         println!("gh-tui update available!");
-        println!("Run: cargo install --force --git https://github.com/{repo}");
+        println!("Run:");
+        println!("cargo install --force --git https://github.com/{repo}");
         println!();
     }
 
