@@ -21,10 +21,12 @@ use ratatui::{
     Frame,
 };
 
-const SPINNER_FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
+const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_FRAME_MS: u64 = 250;
 
-fn spinner_frame(unix_seconds: u64) -> &'static str {
-    SPINNER_FRAMES[(unix_seconds as usize) % SPINNER_FRAMES.len()]
+fn spinner_frame(unix_millis: u64) -> &'static str {
+    let frame_index = (unix_millis / SPINNER_FRAME_MS) as usize;
+    SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()]
 }
 
 fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
@@ -71,9 +73,9 @@ fn bottom_right_box_height(b: BottomRightBox) -> u16 {
 /// Build the text displayed in the top status bar for background tasks.
 ///
 /// `bg_tasks` items are `(tag, current, total)`, where `total == 0` means
-/// unknown total progress. `unix_seconds` selects the spinner frame so tests
+/// unknown total progress. `unix_millis` selects the spinner frame so tests
 /// can assert deterministic output.
-fn build_tasks_display<'a, I>(bg_tasks: I, unix_seconds: u64) -> String
+fn build_tasks_display<'a, I>(bg_tasks: I, unix_millis: u64) -> String
 where
     I: IntoIterator<Item = &'a (&'static str, usize, usize)>,
 {
@@ -91,7 +93,7 @@ where
     if tasks_str.is_empty() {
         String::new()
     } else {
-        format!("  {} {}", spinner_frame(unix_seconds), tasks_str.trim_end())
+        format!("  {} {}", spinner_frame(unix_millis), tasks_str.trim_end())
     }
 }
 
@@ -111,11 +113,11 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
 
     // ── rate limit bar ───────────────────────────────────────────────────────
     // Build background task indicator: "⠋ gh↓1 scan3/76 chk5/76"
-    let unix_seconds = std::time::SystemTime::now()
+    let unix_millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
         .unwrap_or(0);
-    let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_seconds);
+    let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_millis);
 
     let rl_text = if let Some(rl) = &app.rate_limit {
         format!(
