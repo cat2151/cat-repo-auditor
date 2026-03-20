@@ -40,7 +40,7 @@ use crate::{
 #[path = "main_tests.rs"]
 mod tests;
 
-fn x_launch_args(cargo_install: Option<bool>) -> Option<&'static [&'static str]> {
+fn cargo_status_to_launch_args(cargo_install: Option<bool>) -> Option<&'static [&'static str]> {
     match cargo_install {
         Some(true) => Some(&[]),
         Some(false) => Some(&["update"]),
@@ -48,7 +48,7 @@ fn x_launch_args(cargo_install: Option<bool>) -> Option<&'static [&'static str]>
     }
 }
 
-fn x_launch_display(bin: &str, args: &[&str]) -> String {
+fn format_launch_command(bin: &str, args: &[&str]) -> String {
     if args.is_empty() {
         bin.to_string()
     } else {
@@ -289,14 +289,14 @@ fn main() -> Result<()> {
                             if let Some((repo_full_name, repo_name, cargo_install)) = app.selected_repo().map(|repo| {
                                 (repo.full_name.clone(), repo.name.clone(), repo.cargo_install)
                             }) {
-                                if let Some(args) = x_launch_args(cargo_install) {
+                                if let Some(args) = cargo_status_to_launch_args(cargo_install) {
                                     let owner = app.config.owner.clone();
                                     let run_dir = app.config.resolved_app_run_dir();
                                     if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
                                         if let Some(bin) = bins.first() {
                                             // Keep .exe suffix – avoids Windows explorer folder collision
                                             let bin = bin.clone();
-                                            let cmd = x_launch_display(&bin, args);
+                                            let cmd = format_launch_command(&bin, args);
                                             let cmd_desc = format!("run: `{cmd}` cwd=`{run_dir}`");
                                             match launch_app_with_args(&bin, args, &run_dir) {
                                                 Ok(()) => {
