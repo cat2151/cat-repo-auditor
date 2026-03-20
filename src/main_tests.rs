@@ -7,21 +7,21 @@ fn make_x_log_line_contains_repo_and_message() {
 }
 
 #[test]
-fn x_launch_args_runs_bin_directly_for_cargo_ok() {
+fn test_x_launch_args_cargo_ok_returns_empty_slice() {
     assert_eq!(x_launch_args(Some(true)), Some(&[][..]));
 }
 
 #[test]
-fn x_launch_args_runs_update_for_cargo_old() {
+fn test_x_launch_args_cargo_old_returns_update() {
     assert_eq!(x_launch_args(Some(false)), Some(&["update"][..]));
 }
 
 #[test]
-fn x_launch_args_none_for_uninstalled_repo() {
+fn test_x_launch_args_none_returns_none() {
     assert_eq!(x_launch_args(None), None);
 }
 
 #[test]
-fn x_launch_display_formats_command_with_args() {
+fn test_x_launch_display_joins_args() {
     assert_eq!(x_launch_display("foo.exe", &["update"]), "foo.exe update");
 }
