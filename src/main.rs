@@ -56,8 +56,10 @@ fn format_launch_command(bin: &str, args: &[&str]) -> String {
     }
 }
 
+/// Persistent log wording for the x-key path when no cargo-installed app is runnable.
 const X_NOT_RUN_LOG_NO_CARGO_INSTALL: &str =
     "not run: no cargo-installed app found for this repo";
+/// One-shot transient UI message for the same non-runnable x-key path.
 const X_NOT_RUN_MSG_NO_CARGO_INSTALL: &str =
     "x: no runnable cargo-installed app for this repo";
 

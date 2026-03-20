@@ -27,7 +27,7 @@ fn test_x_launch_display_joins_args() {
 }
 
 #[test]
-fn test_x_not_run_message_for_non_cargo_repo_is_clear() {
+fn test_x_not_run_messages_match_expected_wording() {
     assert_eq!(
         X_NOT_RUN_LOG_NO_CARGO_INSTALL,
         "not run: no cargo-installed app found for this repo"
