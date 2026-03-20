@@ -326,3 +326,39 @@ fn bottom_right_box_flags_staging_and_cargo_old() {
     assert!(show_staging);
     assert!(show_cargo_old);
 }
+
+#[test]
+fn bottom_right_stack_offsets_empty() {
+    let offsets = bottom_right_stack_offsets(&[]);
+    assert!(offsets.is_empty());
+}
+
+#[test]
+fn bottom_right_stack_offsets_two_boxes() {
+    let offsets = bottom_right_stack_offsets(&[4, 3]);
+    assert_eq!(offsets, vec![0, 4]);
+}
+
+#[test]
+fn bottom_right_stack_offsets_three_boxes() {
+    let offsets = bottom_right_stack_offsets(&[4, 3, 2]);
+    assert_eq!(offsets, vec![0, 4, 7]);
+}
+
+#[test]
+fn bottom_right_boxes_order_staging_only() {
+    let boxes = bottom_right_boxes(true, false);
+    assert_eq!(boxes, vec![BottomRightBox::LocalChanges]);
+}
+
+#[test]
+fn bottom_right_boxes_order_cargo_old_only() {
+    let boxes = bottom_right_boxes(false, true);
+    assert_eq!(boxes, vec![BottomRightBox::CargoOld]);
+}
+
+#[test]
+fn bottom_right_boxes_order_both() {
+    let boxes = bottom_right_boxes(true, true);
+    assert_eq!(boxes, vec![BottomRightBox::CargoOld, BottomRightBox::LocalChanges]);
+}

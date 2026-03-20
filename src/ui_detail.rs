@@ -12,6 +12,7 @@ use ratatui::{
 };
 
 pub(crate) const CARGO_OLD_BOX_H: u16 = 4;
+pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
 
 // ── right pane ───────────────────────────────────────────────────────────────
 
@@ -215,7 +216,7 @@ pub(crate) fn draw_local_staging_box(f: &mut Frame, app: &App, repo_idx: usize, 
 
     let content_w: u16 = 38;
     let box_w = content_w + 2;
-    let box_h: u16 = 3;
+    let box_h: u16 = LOCAL_CHANGES_BOX_H;
 
     let x = area.x + area.width.saturating_sub(box_w + 1);
     let y = area.y + area.height.saturating_sub(box_h + 1 + bottom_offset);

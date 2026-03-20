@@ -1,7 +1,10 @@
 use crate::{
     app::App,
     github::LocalStatus,
-    ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right, CARGO_OLD_BOX_H},
+    ui_detail::{
+        draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right,
+        CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H,
+    },
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
 pub(crate) use crate::ui_types::{
@@ -30,6 +33,39 @@ fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
         repo.local_status == LocalStatus::Staging,
         repo.cargo_install == Some(false),
     )
+}
+
+fn bottom_right_stack_offsets(box_heights: &[u16]) -> Vec<u16> {
+    let mut running = 0u16;
+    box_heights.iter().map(|h| {
+        let offset = running;
+        running = running.saturating_add(*h);
+        offset
+    }).collect()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BottomRightBox {
+    CargoOld,
+    LocalChanges,
+}
+
+fn bottom_right_boxes(show_staging: bool, show_cargo_old: bool) -> Vec<BottomRightBox> {
+    let mut boxes = Vec::new();
+    if show_cargo_old {
+        boxes.push(BottomRightBox::CargoOld);
+    }
+    if show_staging {
+        boxes.push(BottomRightBox::LocalChanges);
+    }
+    boxes
+}
+
+fn bottom_right_box_height(b: BottomRightBox) -> u16 {
+    match b {
+        BottomRightBox::CargoOld => CARGO_OLD_BOX_H,
+        BottomRightBox::LocalChanges => LOCAL_CHANGES_BOX_H,
+    }
 }
 
 /// Build the text displayed in the top status bar for background tasks.
@@ -148,12 +184,15 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     // ── bottom-right status boxes ────────────────────────────────────────────
     if let Some(idx) = app.selected_repo_idx() {
         let (show_staging, show_cargo_old) = bottom_right_box_flags(app, idx);
-        if show_cargo_old {
-            draw_cargo_old_box(f, app, idx, area);
-        }
-        if show_staging {
-            let bottom_offset = if show_cargo_old { CARGO_OLD_BOX_H } else { 0 };
-            draw_local_staging_box(f, app, idx, area, bottom_offset);
+        let boxes = bottom_right_boxes(show_staging, show_cargo_old);
+        let heights: Vec<u16> = boxes.iter().map(|b| bottom_right_box_height(*b)).collect();
+        let offsets = bottom_right_stack_offsets(&heights);
+
+        for (b, offset) in boxes.into_iter().zip(offsets.into_iter()) {
+            match b {
+                BottomRightBox::CargoOld => draw_cargo_old_box(f, app, idx, area),
+                BottomRightBox::LocalChanges => draw_local_staging_box(f, app, idx, area, offset),
+            }
         }
     }
 
