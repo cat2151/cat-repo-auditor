@@ -25,3 +25,15 @@ fn test_x_launch_args_none_returns_none() {
 fn test_x_launch_display_joins_args() {
     assert_eq!(format_launch_command("foo.exe", &["update"]), "foo.exe update");
 }
+
+#[test]
+fn test_x_not_run_message_for_non_cargo_repo_is_clear() {
+    assert_eq!(
+        X_NOT_RUN_LOG_NO_CARGO_INSTALL,
+        "not run: no cargo-installed app found for this repo"
+    );
+    assert_eq!(
+        X_NOT_RUN_MSG_NO_CARGO_INSTALL,
+        "x: no runnable cargo-installed app for this repo"
+    );
+}

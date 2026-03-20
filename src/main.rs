@@ -56,6 +56,11 @@ fn format_launch_command(bin: &str, args: &[&str]) -> String {
     }
 }
 
+const X_NOT_RUN_LOG_NO_CARGO_INSTALL: &str =
+    "not run: no cargo-installed app found for this repo";
+const X_NOT_RUN_MSG_NO_CARGO_INSTALL: &str =
+    "x: no runnable cargo-installed app for this repo";
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
@@ -333,9 +338,10 @@ fn main() -> Result<()> {
                                 } else {
                                     let line = make_x_log_line(
                                         &repo_full_name,
-                                        "not run: cgo is not ok (repo unsupported for x)",
+                                        X_NOT_RUN_LOG_NO_CARGO_INSTALL,
                                     );
-                                    app.transient_msg = Some(String::from("x: unsupported repo (cgo!=ok)"));
+                                    app.transient_msg =
+                                        Some(String::from(X_NOT_RUN_MSG_NO_CARGO_INSTALL));
                                     persist_log_line(&mut app, line);
                                 }
                             }
