@@ -274,16 +274,15 @@ fn build_tasks_display_includes_spinner_and_progress() {
 fn build_tasks_display_spinner_changes_by_250ms() {
     let tasks = vec![("scan", 1, 2)];
     let a = build_tasks_display(&tasks, 0);
-    let b = build_tasks_display(&tasks, 250);
+    let b = build_tasks_display(&tasks, SPINNER_FRAME_MS);
     assert_ne!(a, b);
 }
 
 #[test]
 fn build_tasks_display_spinner_cycles_through_requested_frames() {
     let tasks = vec![("scan", 1, 2)];
-    let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    for (idx, expected) in frames.iter().enumerate() {
-        let s = build_tasks_display(&tasks, (idx as u64) * 250);
+    for (idx, expected) in SPINNER_FRAMES.iter().enumerate() {
+        let s = build_tasks_display(&tasks, (idx as u64) * SPINNER_FRAME_MS);
         assert!(s.starts_with(&format!("  {} ", expected)));
     }
 }
@@ -292,7 +291,7 @@ fn build_tasks_display_spinner_cycles_through_requested_frames() {
 fn build_tasks_display_spinner_wraps_after_full_cycle() {
     let tasks = vec![("scan", 1, 2)];
     let a = build_tasks_display(&tasks, 0);
-    let b = build_tasks_display(&tasks, 2500);
+    let b = build_tasks_display(&tasks, (SPINNER_FRAMES.len() as u64) * SPINNER_FRAME_MS);
     assert_eq!(a, b);
 }
 

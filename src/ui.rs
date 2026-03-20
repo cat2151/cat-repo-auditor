@@ -22,9 +22,10 @@ use ratatui::{
 };
 
 const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_FRAME_MS: u64 = 250;
 
 fn spinner_frame(unix_millis: u64) -> &'static str {
-    let frame_index = (unix_millis / 250) as usize;
+    let frame_index = (unix_millis / SPINNER_FRAME_MS) as usize;
     SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()]
 }
 
@@ -114,7 +115,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     // Build background task indicator: "⠋ gh↓1 scan3/76 chk5/76"
     let unix_millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
         .unwrap_or(0);
     let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_millis);
 
