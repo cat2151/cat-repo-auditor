@@ -63,6 +63,13 @@ const X_NOT_RUN_LOG_NO_CARGO_INSTALL: &str =
 const X_NOT_RUN_MSG_NO_CARGO_INSTALL: &str =
     "x: no runnable cargo-installed app for this repo";
 
+fn x_not_run_feedback_no_cargo_install(repo_full_name: &str) -> (String, String) {
+    (
+        make_x_log_line(repo_full_name, X_NOT_RUN_LOG_NO_CARGO_INSTALL),
+        String::from(X_NOT_RUN_MSG_NO_CARGO_INSTALL),
+    )
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
@@ -338,12 +345,9 @@ fn main() -> Result<()> {
                                         persist_log_line(&mut app, line);
                                     }
                                 } else {
-                                    let line = make_x_log_line(
-                                        &repo_full_name,
-                                        X_NOT_RUN_LOG_NO_CARGO_INSTALL,
-                                    );
-                                    app.transient_msg =
-                                        Some(String::from(X_NOT_RUN_MSG_NO_CARGO_INSTALL));
+                                    let (line, transient_msg) =
+                                        x_not_run_feedback_no_cargo_install(&repo_full_name);
+                                    app.transient_msg = Some(transient_msg);
                                     persist_log_line(&mut app, line);
                                 }
                             }
