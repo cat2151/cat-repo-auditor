@@ -28,7 +28,7 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::FetchProgress,
-    github_local::{get_cargo_bins, launch_app, launch_lazygit, open_url},
+    github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
     main_fetch::drain_fetch_channel,
     main_helpers::{make_x_log_line, persist_log_line, read_log_lines, start_fetch},
     self_update::{check_self_update, run_self_update},
@@ -39,6 +39,38 @@ use crate::{
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+fn cargo_status_to_launch_args(cargo_install: Option<bool>) -> Option<&'static [&'static str]> {
+    match cargo_install {
+        Some(true) => Some(&[]),
+        Some(false) => Some(&["update"]),
+        None => None,
+    }
+}
+
+fn format_launch_command(bin: &str, args: &[&str]) -> String {
+    if args.is_empty() {
+        bin.to_string()
+    } else {
+        format!("{bin} {}", args.join(" "))
+    }
+}
+
+/// Persistent log message for the x-key path when no cargo-installed app is runnable.
+const X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP: &str =
+    "not run: no cargo-installed app found for this repo";
+/// One-shot transient UI message for the same non-runnable x-key path.
+const X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP: &str =
+    "x: no runnable cargo-installed app for this repo";
+
+/// Returns `(persistent_log_line, transient_ui_message)` for the x-key path
+/// when the selected repo has no runnable cargo-installed app.
+fn x_not_run_feedback_no_cargo_install(repo_full_name: &str) -> (String, String) {
+    (
+        make_x_log_line(repo_full_name, X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP),
+        String::from(X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP),
+    )
+}
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
@@ -270,21 +302,22 @@ fn main() -> Result<()> {
                         }
                         KeyCode::Char('x') => {
                             app.num_prefix = 0;
-                            if let Some((repo_full_name, repo_name, cargo_ok)) = app.selected_repo().map(|repo| {
-                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install == Some(true))
+                            if let Some((repo_full_name, repo_name, cargo_install)) = app.selected_repo().map(|repo| {
+                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install)
                             }) {
-                                if cargo_ok {
+                                if let Some(args) = cargo_status_to_launch_args(cargo_install) {
                                     let owner = app.config.owner.clone();
                                     let run_dir = app.config.resolved_app_run_dir();
                                     if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
                                         if let Some(bin) = bins.first() {
                                             // Keep .exe suffix – avoids Windows explorer folder collision
                                             let bin = bin.clone();
-                                            let cmd_desc = format!("run: `{bin}` cwd=`{run_dir}`");
-                                            match launch_app(&bin, &run_dir) {
+                                            let cmd = format_launch_command(&bin, args);
+                                            let cmd_desc = format!("run: `{cmd}` cwd=`{run_dir}`");
+                                            match launch_app_with_args(&bin, args, &run_dir) {
                                                 Ok(()) => {
                                                     terminal.clear().ok();
-                                                    app.transient_msg = Some(format!("launched: {bin}"));
+                                                    app.transient_msg = Some(format!("launched: {cmd}"));
                                                     let line = make_x_log_line(&repo_full_name, &cmd_desc);
                                                     persist_log_line(&mut app, line);
                                                 }
@@ -314,12 +347,10 @@ fn main() -> Result<()> {
                                         persist_log_line(&mut app, line);
                                     }
                                 } else {
-                                    let line = make_x_log_line(
-                                        &repo_full_name,
-                                        "not run: cgo is not ok (repo unsupported for x)",
-                                    );
-                                    app.transient_msg = Some(String::from("x: unsupported repo (cgo!=ok)"));
-                                    persist_log_line(&mut app, line);
+                                    let (log_line, transient_msg) =
+                                        x_not_run_feedback_no_cargo_install(&repo_full_name);
+                                    app.transient_msg = Some(transient_msg);
+                                    persist_log_line(&mut app, log_line);
                                 }
                             }
                             else {
