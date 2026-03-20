@@ -11,6 +11,8 @@ use ratatui::{
     Frame,
 };
 
+pub(crate) const CARGO_OLD_BOX_H: u16 = 4;
+
 // ── right pane ───────────────────────────────────────────────────────────────
 
 pub(crate) fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
@@ -176,7 +178,7 @@ pub(crate) fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area
     // Box width (including borders): 53 + 2 = 55
     let content_w: u16 = 53;
     let box_w = content_w + 2; // +2 for left/right borders
-    let box_h: u16 = 4; // top border + 2 lines + bottom border
+    let box_h: u16 = CARGO_OLD_BOX_H; // top border + 2 lines + bottom border
 
     // Place in bottom-right, above the bottom status bar (outer[2] is 1 line tall)
     let x = area.x + area.width.saturating_sub(box_w + 1);
@@ -209,7 +211,7 @@ pub(crate) fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area
 
 pub(crate) fn draw_local_staging_box(f: &mut Frame, app: &App, repo_idx: usize, area: Rect, bottom_offset: u16) {
     let repo = &app.repos[repo_idx];
-    let staged_count = repo.staging_files.len();
+    let local_changes_count = repo.staging_files.len();
 
     let content_w: u16 = 38;
     let box_w = content_w + 2;
@@ -221,14 +223,14 @@ pub(crate) fn draw_local_staging_box(f: &mut Frame, app: &App, repo_idx: usize, 
 
     f.render_widget(Clear, rect);
     let block = Block::default()
-        .title(" local staging ")
+        .title(" local changes ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(MK_BLUE))
         .style(Style::default().bg(MK_BG));
     let inner = block.inner(rect);
     f.render_widget(block, rect);
 
-    let msg = format!(" {} staged file(s)", staged_count);
+    let msg = format!(" {} file(s) with local changes", local_changes_count);
     f.render_widget(
         Paragraph::new(msg).style(Style::default().fg(MK_BLUE).bg(MK_BG)),
         inner,

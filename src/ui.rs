@@ -1,7 +1,7 @@
 use crate::{
     app::App,
     github::LocalStatus,
-    ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right},
+    ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right, CARGO_OLD_BOX_H},
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
 pub(crate) use crate::ui_types::{
@@ -152,7 +152,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
             draw_cargo_old_box(f, app, idx, area);
         }
         if show_staging {
-            let bottom_offset = if show_cargo_old { 4 } else { 0 };
+            let bottom_offset = if show_cargo_old { CARGO_OLD_BOX_H } else { 0 };
             draw_local_staging_box(f, app, idx, area, bottom_offset);
         }
     }
