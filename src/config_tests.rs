@@ -7,6 +7,12 @@ fn history_path_ends_with_history_json() {
 }
 
 #[test]
+fn log_path_ends_with_log_txt() {
+    let path = Config::log_path();
+    assert_eq!(path.file_name().unwrap(), "log.txt");
+}
+
+#[test]
 fn config_path_ends_with_config_toml() {
     let path = Config::config_path();
     assert_eq!(path.file_name().unwrap(), "config.toml");

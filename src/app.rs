@@ -2,8 +2,10 @@ use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
 
+const MAX_LOG_LINES: usize = 2_000;
+
 pub const READY_MSG: &str =
-    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  g:lazygit  /:search";
+    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  g:lazygit  Shift+L:log  /:search";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,8 @@ pub struct App {
     pub bg_tasks: Vec<(&'static str, usize, usize)>,
     pub show_help: bool,
     pub show_columns: bool,
+    pub show_log: bool,
+    pub log_lines: Vec<String>,
     /// Some("owner/repo") when update is available
     pub update_available: Option<String>,
     pub term_height: usize,
@@ -64,6 +68,8 @@ impl App {
             bg_tasks: vec![],
             show_help: false,
             show_columns: true,
+            show_log: false,
+            log_lines: vec![],
             update_available: None,
             term_height: 40,
             left_visible: 30,
@@ -249,6 +255,18 @@ impl App {
         n
     }
 
+    pub fn toggle_log(&mut self) {
+        self.show_log = !self.show_log;
+    }
+
+    pub fn append_log_line(&mut self, line: String) {
+        self.log_lines.push(line);
+        if self.log_lines.len() > MAX_LOG_LINES {
+            let excess = self.log_lines.len() - MAX_LOG_LINES;
+            self.log_lines.drain(0..excess);
+        }
+    }
+
     // ── search ───────────────────────────────────────────────────────────────
 
     pub fn search_enter(&mut self) {
@@ -336,7 +354,7 @@ impl App {
         );
         self.row_scroll = self.row_cursor.saturating_sub(self.left_visible / 2);
         self.status_msg = String::from(
-            "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  g:lazygit  /:search",
+            READY_MSG,
         );
     }
 }

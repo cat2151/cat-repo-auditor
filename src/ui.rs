@@ -13,7 +13,8 @@ pub(crate) use crate::ui_types::{
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    text::Line,
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
     Frame,
 };
 
@@ -112,14 +113,29 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         );
     }
 
+    let main_chunks = if app.show_log {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(outer[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0)])
+            .split(outer[1])
+    };
+
     // ── panes ────────────────────────────────────────────────────────────────
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(outer[1]);
+        .split(main_chunks[0]);
 
     draw_left(f, app, panes[0]);
     draw_right(f, app, panes[1]);
+    if app.show_log {
+        draw_log(f, app, main_chunks[1]);
+    }
 
     // ── cargo old comparison box ──────────────────────────────────────────────
     if let Some(idx) = app.selected_repo_idx() {
@@ -131,6 +147,28 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     if app.show_help {
         draw_help_dialog(f, app, area);
     }
+}
+
+fn draw_log(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .title(" log.txt ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(MK_COMMENT))
+        .style(Style::default().bg(MK_BG));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let visible = inner.height as usize;
+    let start = app.log_lines.len().saturating_sub(visible);
+    let lines: Vec<Line> = app.log_lines[start..]
+        .iter()
+        .map(|s| Line::from(s.as_str()))
+        .collect();
+    f.render_widget(
+        Paragraph::new(lines)
+            .style(Style::default().fg(MK_FG).bg(MK_BG))
+            .wrap(Wrap { trim: false }),
+        inner,
+    );
 }
 
 // ── left pane ────────────────────────────────────────────────────────────────

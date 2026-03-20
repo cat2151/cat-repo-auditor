@@ -404,3 +404,32 @@ fn focus_detail_first_pr_or_issue_jumps_to_first_pr() {
     let url = app.selected_detail_url().unwrap();
     assert!(url.contains("/pull/"), "should point to PR, got: {url}");
 }
+
+#[test]
+fn toggle_log_switches_visibility() {
+    let mut app = App::new(make_config());
+    assert!(!app.show_log);
+    app.toggle_log();
+    assert!(app.show_log);
+    app.toggle_log();
+    assert!(!app.show_log);
+}
+
+#[test]
+fn append_log_line_adds_line() {
+    let mut app = App::new(make_config());
+    app.append_log_line(String::from("line1"));
+    app.append_log_line(String::from("line2"));
+    assert_eq!(app.log_lines, vec!["line1", "line2"]);
+}
+
+#[test]
+fn append_log_line_caps_history() {
+    let mut app = App::new(make_config());
+    for i in 0..2_100 {
+        app.append_log_line(format!("line{i}"));
+    }
+    assert_eq!(app.log_lines.len(), 2_000);
+    assert_eq!(app.log_lines.first().unwrap(), "line100");
+    assert_eq!(app.log_lines.last().unwrap(), "line2099");
+}
