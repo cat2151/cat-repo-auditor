@@ -1,7 +1,7 @@
 use crate::{
     app::App,
     github::LocalStatus,
-    ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_right},
+    ui_detail::{draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right},
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
 pub(crate) use crate::ui_types::{
@@ -22,6 +22,14 @@ const SPINNER_FRAMES: [&str; 4] = ["⠋", "⠙", "⠹", "⠸"];
 
 fn spinner_frame(unix_seconds: u64) -> &'static str {
     SPINNER_FRAMES[(unix_seconds as usize) % SPINNER_FRAMES.len()]
+}
+
+fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
+    let repo = &app.repos[repo_idx];
+    (
+        repo.local_status == LocalStatus::Staging,
+        repo.cargo_install == Some(false),
+    )
 }
 
 /// Build the text displayed in the top status bar for background tasks.
@@ -137,10 +145,15 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         draw_log(f, app, main_chunks[1]);
     }
 
-    // ── cargo old comparison box ──────────────────────────────────────────────
+    // ── bottom-right status boxes ────────────────────────────────────────────
     if let Some(idx) = app.selected_repo_idx() {
-        if app.repos[idx].cargo_install == Some(false) {
+        let (show_staging, show_cargo_old) = bottom_right_box_flags(app, idx);
+        if show_cargo_old {
             draw_cargo_old_box(f, app, idx, area);
+        }
+        if show_staging {
+            let bottom_offset = if show_cargo_old { 4 } else { 0 };
+            draw_local_staging_box(f, app, idx, area, bottom_offset);
         }
     }
 

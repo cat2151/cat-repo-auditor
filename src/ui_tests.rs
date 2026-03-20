@@ -277,3 +277,52 @@ fn build_tasks_display_spinner_changes_by_second() {
     let b = build_tasks_display(&tasks, 1);
     assert_ne!(a, b);
 }
+
+#[test]
+fn bottom_right_box_flags_staging_only() {
+    let mut app = crate::app::App::new(crate::config::Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    });
+    let mut repo = make_repo("staging-only");
+    repo.local_status = LocalStatus::Staging;
+    app.repos = vec![repo];
+    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    assert!(show_staging);
+    assert!(!show_cargo_old);
+}
+
+#[test]
+fn bottom_right_box_flags_cargo_old_only() {
+    let mut app = crate::app::App::new(crate::config::Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    });
+    let mut repo = make_repo("cargo-old-only");
+    repo.cargo_install = Some(false);
+    app.repos = vec![repo];
+    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    assert!(!show_staging);
+    assert!(show_cargo_old);
+}
+
+#[test]
+fn bottom_right_box_flags_staging_and_cargo_old() {
+    let mut app = crate::app::App::new(crate::config::Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    });
+    let mut repo = make_repo("both");
+    repo.local_status = LocalStatus::Staging;
+    repo.cargo_install = Some(false);
+    app.repos = vec![repo];
+    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    assert!(show_staging);
+    assert!(show_cargo_old);
+}

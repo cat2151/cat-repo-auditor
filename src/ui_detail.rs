@@ -207,6 +207,34 @@ pub(crate) fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area
     f.render_widget(Paragraph::new(lines).style(Style::default().bg(MK_BG)), inner);
 }
 
+pub(crate) fn draw_local_staging_box(f: &mut Frame, app: &App, repo_idx: usize, area: Rect, bottom_offset: u16) {
+    let repo = &app.repos[repo_idx];
+    let staged_count = repo.staging_files.len();
+
+    let content_w: u16 = 38;
+    let box_w = content_w + 2;
+    let box_h: u16 = 3;
+
+    let x = area.x + area.width.saturating_sub(box_w + 1);
+    let y = area.y + area.height.saturating_sub(box_h + 1 + bottom_offset);
+    let rect = Rect { x, y, width: box_w.min(area.width), height: box_h.min(area.height) };
+
+    f.render_widget(Clear, rect);
+    let block = Block::default()
+        .title(" local staging ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(MK_BLUE))
+        .style(Style::default().bg(MK_BG));
+    let inner = block.inner(rect);
+    f.render_widget(block, rect);
+
+    let msg = format!(" {} staged file(s)", staged_count);
+    f.render_widget(
+        Paragraph::new(msg).style(Style::default().fg(MK_BLUE).bg(MK_BG)),
+        inner,
+    );
+}
+
 // ── help dialog ──────────────────────────────────────────────────────────────
 
 pub(crate) fn draw_help_dialog(f: &mut Frame, _app: &App, area: Rect) {
