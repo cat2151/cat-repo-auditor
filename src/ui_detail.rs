@@ -169,7 +169,9 @@ pub(crate) fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
 
 // ── cargo old comparison box ──────────────────────────────────────────────────
 
-pub(crate) fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area: Rect) {
+pub(crate) fn draw_cargo_old_box(
+    f: &mut Frame, app: &App, repo_idx: usize, area: Rect, bottom_offset: u16,
+) {
     let repo = &app.repos[repo_idx];
     let inst  = if repo.cargo_installed_hash.is_empty() { "?" } else { &repo.cargo_installed_hash };
     // cargo_checked_at stores the local HEAD hash used in the last comparison
@@ -183,7 +185,7 @@ pub(crate) fn draw_cargo_old_box(f: &mut Frame, app: &App, repo_idx: usize, area
 
     // Place in bottom-right, above the bottom status bar (outer[2] is 1 line tall)
     let x = area.x + area.width.saturating_sub(box_w + 1);
-    let y = area.y + area.height.saturating_sub(box_h + 1);
+    let y = area.y + area.height.saturating_sub(box_h + 1 + bottom_offset);
     let rect = Rect { x, y, width: box_w.min(area.width), height: box_h.min(area.height) };
 
     f.render_widget(Clear, rect);

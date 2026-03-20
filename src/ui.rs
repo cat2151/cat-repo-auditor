@@ -190,7 +190,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
 
         for (b, offset) in boxes.into_iter().zip(offsets.into_iter()) {
             match b {
-                BottomRightBox::CargoOld => draw_cargo_old_box(f, app, idx, area),
+                BottomRightBox::CargoOld => draw_cargo_old_box(f, app, idx, area, offset),
                 BottomRightBox::LocalChanges => draw_local_staging_box(f, app, idx, area, offset),
             }
         }
