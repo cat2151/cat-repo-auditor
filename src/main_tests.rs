@@ -29,6 +29,9 @@ fn test_x_launch_display_joins_args() {
 #[test]
 fn test_x_not_run_messages_match_expected_wording() {
     let (line, transient_msg) = x_not_run_feedback_no_cargo_install("owner/repo");
-    assert!(line.contains("x owner/repo not run: no cargo-installed app found for this repo"));
-    assert_eq!(transient_msg, "x: no runnable cargo-installed app for this repo");
+    assert_eq!(
+        line,
+        make_x_log_line("owner/repo", X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP)
+    );
+    assert_eq!(transient_msg, X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP);
 }
