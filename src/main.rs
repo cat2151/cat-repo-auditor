@@ -28,7 +28,7 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::FetchProgress,
-    github_local::{get_cargo_bins, launch_app, launch_lazygit, open_url},
+    github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
     main_fetch::drain_fetch_channel,
     main_helpers::{make_x_log_line, persist_log_line, read_log_lines, start_fetch},
     self_update::{check_self_update, run_self_update},
@@ -39,6 +39,22 @@ use crate::{
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+fn x_launch_args(cargo_install: Option<bool>) -> Option<&'static [&'static str]> {
+    match cargo_install {
+        Some(true) => Some(&[]),
+        Some(false) => Some(&["update"]),
+        None => None,
+    }
+}
+
+fn x_launch_display(bin: &str, args: &[&str]) -> String {
+    if args.is_empty() {
+        bin.to_string()
+    } else {
+        format!("{bin} {}", args.join(" "))
+    }
+}
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
@@ -270,21 +286,22 @@ fn main() -> Result<()> {
                         }
                         KeyCode::Char('x') => {
                             app.num_prefix = 0;
-                            if let Some((repo_full_name, repo_name, cargo_ok)) = app.selected_repo().map(|repo| {
-                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install == Some(true))
+                            if let Some((repo_full_name, repo_name, cargo_install)) = app.selected_repo().map(|repo| {
+                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install)
                             }) {
-                                if cargo_ok {
+                                if let Some(args) = x_launch_args(cargo_install) {
                                     let owner = app.config.owner.clone();
                                     let run_dir = app.config.resolved_app_run_dir();
                                     if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
                                         if let Some(bin) = bins.first() {
                                             // Keep .exe suffix – avoids Windows explorer folder collision
                                             let bin = bin.clone();
-                                            let cmd_desc = format!("run: `{bin}` cwd=`{run_dir}`");
-                                            match launch_app(&bin, &run_dir) {
+                                            let cmd = x_launch_display(&bin, args);
+                                            let cmd_desc = format!("run: `{cmd}` cwd=`{run_dir}`");
+                                            match launch_app_with_args(&bin, args, &run_dir) {
                                                 Ok(()) => {
                                                     terminal.clear().ok();
-                                                    app.transient_msg = Some(format!("launched: {bin}"));
+                                                    app.transient_msg = Some(format!("launched: {cmd}"));
                                                     let line = make_x_log_line(&repo_full_name, &cmd_desc);
                                                     persist_log_line(&mut app, line);
                                                 }

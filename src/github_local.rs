@@ -178,14 +178,14 @@ pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
 
 /// Launch an application with LeaveAlternateScreen/EnterAlternateScreen
 /// to avoid terminal corruption (same pattern as lazygit).
-pub fn launch_app(bin: &str, run_dir: &str) -> Result<()> {
+pub fn launch_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> Result<()> {
     crossterm::terminal::disable_raw_mode()?;
     crossterm::execute!(
         std::io::stdout(),
         crossterm::terminal::LeaveAlternateScreen,
         crossterm::event::DisableMouseCapture,
     )?;
-    let status = Command::new(bin).current_dir(run_dir).status();
+    let status = Command::new(bin).args(args).current_dir(run_dir).status();
     let _ = crossterm::terminal::enable_raw_mode();
     let _ = crossterm::execute!(
         std::io::stdout(),
