@@ -13,7 +13,7 @@ mod ui_types;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -97,7 +97,7 @@ fn main() -> Result<()> {
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, EnableFocusChange)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -139,7 +139,16 @@ fn main() -> Result<()> {
 
         // ── input ─────────────────────────────────────────────────────────
         if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
+            let ev = event::read()?;
+            if matches!(ev, Event::FocusLost) {
+                app.window_focused = false;
+                continue;
+            }
+            if matches!(ev, Event::FocusGained) {
+                app.window_focused = true;
+                continue;
+            }
+            if let Event::Key(key) = ev {
                 if key.kind != KeyEventKind::Press { continue; }
 
                 // debounce 50ms
@@ -419,7 +428,7 @@ fn main() -> Result<()> {
     }
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture, DisableFocusChange)?;
     terminal.show_cursor()?;
 
     // Print update notice after terminal restore (visible in shell)

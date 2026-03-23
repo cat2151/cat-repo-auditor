@@ -23,6 +23,7 @@ pub struct App {
     /// One-shot message shown until next key press; overrides status_msg display
     pub transient_msg: Option<String>,
     pub loading: bool,
+    pub window_focused: bool,
     pub config: Config,
     pub num_prefix: u32,
     /// repo currently being checked in phase 3 (empty = none)
@@ -62,6 +63,7 @@ impl App {
             status_msg: String::from(READY_MSG),
             transient_msg: None,
             loading: true,
+            window_focused: true,
             config,
             num_prefix: 0,
             checking_repo: String::new(),

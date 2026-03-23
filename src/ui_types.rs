@@ -15,6 +15,51 @@ pub(crate) const MK_PURPLE:  Color = Color::Rgb(174, 129, 255);
 pub(crate) const MK_CYAN:    Color = Color::Rgb(102, 217, 239);
 pub(crate) const MK_BLUE:    Color = Color::Rgb(102, 153, 204);
 
+const UNFOCUSED_DIM_NUM: u16 = 3;
+const UNFOCUSED_DIM_DEN: u16 = 5;
+
+fn dim_channel(gray: u8) -> u8 {
+    ((u16::from(gray) * UNFOCUSED_DIM_NUM) / UNFOCUSED_DIM_DEN) as u8
+}
+
+fn grayscale_dim_rgb(r: u8, g: u8, b: u8) -> Color {
+    let gray = ((u32::from(r) * 299) + (u32::from(g) * 587) + (u32::from(b) * 114)) / 1000;
+    let gray = dim_channel(gray as u8);
+    Color::Rgb(gray, gray, gray)
+}
+
+pub(crate) fn window_color(window_focused: bool, color: Color) -> Color {
+    if window_focused { return color; }
+
+    match color {
+        Color::Reset => Color::Reset,
+        Color::Black => grayscale_dim_rgb(0, 0, 0),
+        Color::Red => grayscale_dim_rgb(205, 49, 49),
+        Color::Green => grayscale_dim_rgb(13, 188, 121),
+        Color::Yellow => grayscale_dim_rgb(229, 229, 16),
+        Color::Blue => grayscale_dim_rgb(36, 114, 200),
+        Color::Magenta => grayscale_dim_rgb(188, 63, 188),
+        Color::Cyan => grayscale_dim_rgb(17, 168, 205),
+        Color::Gray => grayscale_dim_rgb(229, 229, 229),
+        Color::DarkGray => grayscale_dim_rgb(102, 102, 102),
+        Color::LightRed => grayscale_dim_rgb(241, 76, 76),
+        Color::LightGreen => grayscale_dim_rgb(35, 209, 139),
+        Color::LightYellow => grayscale_dim_rgb(245, 245, 67),
+        Color::LightBlue => grayscale_dim_rgb(59, 142, 234),
+        Color::LightMagenta => grayscale_dim_rgb(214, 112, 214),
+        Color::LightCyan => grayscale_dim_rgb(41, 184, 219),
+        Color::White => grayscale_dim_rgb(255, 255, 255),
+        Color::Rgb(r, g, b) => grayscale_dim_rgb(r, g, b),
+        Color::Indexed(index) => match index {
+            232..=255 => {
+                let gray = dim_channel(8 + (index - 232) * 10);
+                Color::Rgb(gray, gray, gray)
+            }
+            _ => grayscale_dim_rgb(128, 128, 128),
+        },
+    }
+}
+
 // ── RepoRow ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
