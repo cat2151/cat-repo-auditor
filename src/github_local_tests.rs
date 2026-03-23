@@ -414,10 +414,12 @@ fn cargo_install_logs_hash_source_details() {
     );
     std::fs::remove_dir_all(&tmp).ok();
 
+    let crates2_path_display = crates2_path.display().to_string();
+    let installed_checkout_display = installed_checkout_path.display().to_string();
     assert!(result.is_some(), "should return Some");
-    assert!(logs.iter().any(|msg| msg.contains(crates2_path.to_str().unwrap())),
+    assert!(logs.iter().any(|msg| msg.contains(&crates2_path_display)),
         "log should contain crates2.json path: {logs:?}");
-    assert!(logs.iter().any(|msg| msg.contains(installed_checkout_path.to_str().unwrap())),
+    assert!(logs.iter().any(|msg| msg.contains(&installed_checkout_display)),
         "log should contain installed checkout dir: {logs:?}");
     assert!(logs.iter().any(|msg| msg.contains("git -C") && msg.contains("rev-parse HEAD")),
         "log should contain installed hash source command: {logs:?}");
