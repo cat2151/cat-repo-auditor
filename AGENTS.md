@@ -1,3 +1,4 @@
 - Rustとpython を見つけて迷ったときは、
   - Rustに集中すること。
   - python/ のソースは参照しないこと（deplicated code。そのうち削除の想定なので、context windowのムダになる）
+- issue-notes/ は参照はするが更新はしないこと。更新するのは人間だけ。更新するかわりにプルリクエストのコメントに書くこと。
