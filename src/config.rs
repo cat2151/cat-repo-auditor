@@ -64,7 +64,7 @@ impl Config {
         Self::config_path()
             .parent()
             .map(|p| p.join("logs").join("log.txt"))
-            .unwrap_or_else(|| PathBuf::from("logs").join("log.txt"))
+            .unwrap_or_else(|| PathBuf::from("logs/log.txt"))
     }
 
     /// Load config from platform config dir.
