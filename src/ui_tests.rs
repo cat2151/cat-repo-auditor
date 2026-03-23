@@ -68,7 +68,7 @@ fn make_config() -> Config {
     }
 }
 
-fn make_render_app(window_focused: bool) -> App {
+fn make_test_app_with_focus(window_focused: bool) -> App {
     let mut app = App::new(make_config());
     let mut repo = make_repo("focus-test");
     repo.open_prs = 1;
@@ -292,7 +292,7 @@ fn window_color_converts_rgb_to_dim_grayscale_when_window_is_unfocused() {
 fn draw_ui_dims_active_border_when_window_is_unfocused() {
     let backend = TestBackend::new(80, 20);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut app = make_render_app(false);
+    let mut app = make_test_app_with_focus(false);
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
@@ -305,7 +305,7 @@ fn draw_ui_dims_active_border_when_window_is_unfocused() {
 fn draw_ui_keeps_active_border_color_when_window_is_focused() {
     let backend = TestBackend::new(80, 20);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut app = make_render_app(true);
+    let mut app = make_test_app_with_focus(true);
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
