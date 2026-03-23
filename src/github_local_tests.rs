@@ -387,6 +387,45 @@ fn cargo_install_returns_some_true_when_hashes_match() {
 }
 
 #[test]
+fn cargo_install_logs_hash_source_details() {
+    let tmp = unique_temp_dir("cargo_test_hash_log");
+
+    let local_repo_path = tmp.join("repos").join("myrepo");
+    init_git_repo(&local_repo_path);
+
+    let cargo_home = tmp.join("cargo_home");
+    let installed_checkout_path = cargo_home.join("git").join("checkouts")
+        .join("myrepo-xyz99999").join("head1234");
+    let out = Cmd::new("git")
+        .args(["clone", "--local", local_repo_path.to_str().unwrap(), installed_checkout_path.to_str().unwrap()])
+        .output().unwrap();
+    assert!(out.status.success(), "git clone failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    let crates2_path = cargo_home.join(".crates2.json");
+    let json = make_crates2_json("owner", "myrepo", "myrepo");
+    std::fs::write(&crates2_path, &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_inner(
+        "owner", "myrepo",
+        tmp.join("repos").to_str().unwrap(),
+        cargo_home.to_str().unwrap(),
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    let crates2_path_display = crates2_path.display().to_string();
+    let installed_checkout_display = installed_checkout_path.display().to_string();
+    assert!(result.is_some(), "should return Some");
+    assert!(logs.iter().any(|msg| msg.contains(&crates2_path_display)),
+        "log should contain crates2.json path: {logs:?}");
+    assert!(logs.iter().any(|msg| msg.contains(&installed_checkout_display)),
+        "log should contain installed checkout dir: {logs:?}");
+    assert!(logs.iter().any(|msg| msg.contains("git -C") && msg.contains("rev-parse HEAD")),
+        "log should contain installed hash source command: {logs:?}");
+}
+
+#[test]
 fn cargo_install_returns_some_false_when_hashes_differ() {
     let tmp = std::env::temp_dir()
         .join(format!("cargo_test_stale_{}", std::process::id()));
