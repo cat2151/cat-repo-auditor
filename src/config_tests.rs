@@ -10,6 +10,7 @@ fn history_path_ends_with_history_json() {
 fn log_path_ends_with_log_txt() {
     let path = Config::log_path();
     assert_eq!(path.file_name().unwrap(), "log.txt");
+    assert_eq!(path.parent().and_then(|p| p.file_name()).unwrap(), "logs");
 }
 
 #[test]

@@ -59,9 +59,12 @@ impl Config {
         Self::config_path().with_file_name("history.json")
     }
 
-    /// Returns the x-key log file path next to config.toml
+    /// Returns the unified log file path under logs/log.txt.
     pub fn log_path() -> PathBuf {
-        Self::config_path().with_file_name("log.txt")
+        Self::config_path()
+            .parent()
+            .map(|p| p.join("logs").join("log.txt"))
+            .unwrap_or_else(|| PathBuf::from("logs/log.txt"))
     }
 
     /// Load config from platform config dir.
