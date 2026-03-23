@@ -419,6 +419,7 @@ pub(crate) fn check_cargo_git_install_inner(
     mut log_fn: impl FnMut(&str),
 ) -> Option<(bool, String, String)> {
     let crates2_path = format!("{cargo_home}/.crates2.json");
+    log_fn(&format!("cargo check: cargo install metadata file: {crates2_path}"));
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
@@ -482,10 +483,13 @@ pub(crate) fn check_cargo_git_install_inner(
         })
         .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
         .1;
+    let sub_dir_str = sub_dir.to_str()?;
+    log_fn(&format!("cargo check: installed hash checkout dir: {}", sub_dir.display()));
 
     // Obtain the installed commit hash from the cargo checkout.
+    log_fn(&format!("cargo check: installed hash source command: git -C {sub_dir_str} rev-parse HEAD"));
     let out = Command::new("git")
-        .args(["-C", sub_dir.to_str()?, "rev-parse", "HEAD"])
+        .args(["-C", sub_dir_str, "rev-parse", "HEAD"])
         .output()
         .ok()?;
     if !out.status.success() { return None; }
