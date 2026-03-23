@@ -312,6 +312,40 @@ fn bottom_right_box_flags_staging_only() {
 }
 
 #[test]
+fn bottom_right_box_flags_modified_only() {
+    let mut app = crate::app::App::new(crate::config::Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    });
+    let mut repo = make_repo("modified-only");
+    repo.local_status = LocalStatus::Modified;
+    repo.staging_files = vec![" M file.txt".to_string()];
+    app.repos = vec![repo];
+    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    assert!(show_staging);
+    assert!(!show_cargo_old);
+}
+
+#[test]
+fn bottom_right_box_flags_conflict_only() {
+    let mut app = crate::app::App::new(crate::config::Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    });
+    let mut repo = make_repo("conflict-only");
+    repo.local_status = LocalStatus::Conflict;
+    repo.staging_files = vec!["UU file.txt".to_string()];
+    app.repos = vec![repo];
+    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    assert!(show_staging);
+    assert!(!show_cargo_old);
+}
+
+#[test]
 fn bottom_right_box_flags_cargo_old_only() {
     let mut app = crate::app::App::new(crate::config::Config {
         owner: "owner".to_string(),

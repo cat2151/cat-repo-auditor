@@ -30,6 +30,8 @@ fn pr_url_format() {
 
 #[test]
 fn local_status_display() {
+    assert_eq!(LocalStatus::Conflict.to_string(), "conflict");
+    assert_eq!(LocalStatus::Modified.to_string(), "modified");
     assert_eq!(LocalStatus::Pullable.to_string(), "pullable");
     assert_eq!(LocalStatus::Clean.to_string(), "clean");
     assert_eq!(LocalStatus::Staging.to_string(), "staging");

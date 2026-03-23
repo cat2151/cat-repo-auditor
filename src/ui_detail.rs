@@ -132,11 +132,11 @@ pub(crate) fn draw_right(f: &mut Frame, app: &mut App, area: Rect) {
         }
     }
 
-    // ── staging section ───────────────────────────────────────────────────────
+    // ── local changes section ────────────────────────────────────────────────
     if has_staging && staging_height > 0 {
         let staging_area = vert[3];
         let stag_block = Block::default()
-            .title(" Staging ")
+            .title(" Local Changes ")
             .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
             .border_style(Style::default().fg(MK_BLUE))
             .style(Style::default().bg(MK_BG));

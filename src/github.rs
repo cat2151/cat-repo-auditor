@@ -90,6 +90,8 @@ pub struct RepoInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LocalStatus {
+    Conflict,
+    Modified,
     Pullable,
     Clean,
     Staging,
@@ -101,6 +103,8 @@ pub enum LocalStatus {
 impl std::fmt::Display for LocalStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            LocalStatus::Conflict => write!(f, "conflict"),
+            LocalStatus::Modified => write!(f, "modified"),
             LocalStatus::Pullable => write!(f, "pullable"),
             LocalStatus::Clean    => write!(f, "clean"),
             LocalStatus::Staging  => write!(f, "staging"),
@@ -163,10 +167,14 @@ pub fn fetch_repos_with_progress(
     match result {
         Err(e) => { let _ = tx.send(FetchProgress::Done(Err(e))); }
         Ok((mut repos, rl)) => {
-            // Phase 2: auto-pull pullable repos (only when config.auto_pull = true)
+            // Phase 2: auto-pull repos that can be safely fast-forwarded.
+            // Dirty repos are handled by stashing before pull and restoring after.
             let pullable: Vec<String> = if config.auto_pull {
                 repos.iter()
-                    .filter(|r| r.local_status == LocalStatus::Pullable)
+                    .filter(|r| matches!(
+                        r.local_status,
+                        LocalStatus::Pullable | LocalStatus::Modified | LocalStatus::Staging
+                    ))
                     .map(|r| r.name.clone())
                     .collect()
             } else { vec![] };

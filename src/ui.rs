@@ -32,7 +32,10 @@ fn spinner_frame(unix_millis: u64) -> &'static str {
 fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
     let repo = &app.repos[repo_idx];
     (
-        repo.local_status == LocalStatus::Staging,
+        matches!(
+            repo.local_status,
+            LocalStatus::Conflict | LocalStatus::Modified | LocalStatus::Staging
+        ) || !repo.staging_files.is_empty(),
         repo.cargo_install == Some(false),
     )
 }
@@ -316,6 +319,8 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                 };
 
                 let local_col = match repo.local_status {
+                    LocalStatus::Conflict => MK_RED,
+                    LocalStatus::Modified => MK_ORANGE,
                     LocalStatus::Clean    => MK_GREEN,
                     LocalStatus::Pullable => MK_ORANGE,
                     LocalStatus::Staging  => MK_BLUE,
