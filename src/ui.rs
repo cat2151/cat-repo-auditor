@@ -212,7 +212,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
 
 fn draw_log(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
-        .title(" log.txt ")
+        .title(" logs/log.txt ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(c(app, MK_COMMENT)))
         .style(Style::default().bg(c(app, MK_BG)));

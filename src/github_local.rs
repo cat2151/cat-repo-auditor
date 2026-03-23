@@ -345,12 +345,9 @@ fn get_cargo_home() -> String {
     })
 }
 
-/// Append a timestamped error message to the local config logs/log.txt.
+/// Append a timestamped error message to the unified local log file.
 fn append_error_log(msg: &str) {
-    let log_path = crate::config::Config::config_path()
-        .parent()
-        .map(|p| p.join("logs").join("log.txt"))
-        .unwrap_or_else(|| std::path::PathBuf::from("logs/log.txt"));
+    let log_path = crate::config::Config::log_path();
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
