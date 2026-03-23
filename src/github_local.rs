@@ -260,7 +260,9 @@ pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
     let pull_result = run_git(&repo_path, &["pull", "--ff-only"], "git pull failed");
     if let Err(err) = pull_result {
         return match run_git(&repo_path, &["stash", "pop"], "git stash pop failed") {
-            Ok(_) => Err(err),
+            Ok(_) => Err(anyhow::anyhow!(
+                "{err:#}; stashed local changes were restored"
+            )),
             Err(pop_err) => Err(anyhow::anyhow!(
                 "{err:#}; additionally failed to restore stashed changes: {pop_err:#}"
             )),
