@@ -390,14 +390,14 @@ fn cargo_install_returns_some_true_when_hashes_match() {
 fn cargo_install_logs_hash_source_details() {
     let tmp = unique_temp_dir("cargo_test_hash_log");
 
-    let local_repo = tmp.join("repos").join("myrepo");
-    init_git_repo(&local_repo);
+    let local_repo_path = tmp.join("repos").join("myrepo");
+    init_git_repo(&local_repo_path);
 
     let cargo_home = tmp.join("cargo_home");
-    let installed_sub = cargo_home.join("git").join("checkouts")
+    let installed_checkout_path = cargo_home.join("git").join("checkouts")
         .join("myrepo-xyz99999").join("head1234");
     let out = Cmd::new("git")
-        .args(["clone", "--local", local_repo.to_str().unwrap(), installed_sub.to_str().unwrap()])
+        .args(["clone", "--local", local_repo_path.to_str().unwrap(), installed_checkout_path.to_str().unwrap()])
         .output().unwrap();
     assert!(out.status.success(), "git clone failed: {}", String::from_utf8_lossy(&out.stderr));
 
@@ -417,7 +417,7 @@ fn cargo_install_logs_hash_source_details() {
     assert!(result.is_some(), "should return Some");
     assert!(logs.iter().any(|msg| msg.contains(crates2_path.to_str().unwrap())),
         "log should contain crates2.json path: {logs:?}");
-    assert!(logs.iter().any(|msg| msg.contains(installed_sub.to_str().unwrap())),
+    assert!(logs.iter().any(|msg| msg.contains(installed_checkout_path.to_str().unwrap())),
         "log should contain installed checkout dir: {logs:?}");
     assert!(logs.iter().any(|msg| msg.contains("git -C") && msg.contains("rev-parse HEAD")),
         "log should contain installed hash source command: {logs:?}");
