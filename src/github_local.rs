@@ -84,20 +84,30 @@ pub(crate) fn check_local_status_no_fetch(
     base_dir: &str,
     repo_name: &str,
 ) -> (LocalStatus, bool, Vec<String>) {
-    let repo_path = format!("{}/{}", base_dir.trim_end_matches(['/', '\\']), repo_name);
+    let path = build_repo_path(base_dir, repo_name);
 
-    if !std::path::Path::new(&repo_path).exists() {
+    if !std::path::Path::new(&path).exists() {
         return (LocalStatus::NotFound, false, vec![]);
     }
-    let git_dir = format!("{}/.git", repo_path);
+    let git_dir = format!("{}/.git", path);
     if !std::path::Path::new(&git_dir).exists() {
         return (LocalStatus::NoGit, false, vec![]);
     }
 
-    let local  = Command::new("git").args(["-C", &repo_path, "rev-parse", "HEAD"]).output();
-    let remote = Command::new("git").args(["-C", &repo_path, "rev-parse", "@{u}"]).output();
+    let local_changes = get_local_changes(&path);
+    if local_changes.has_conflict {
+        return (LocalStatus::Conflict, true, local_changes.files);
+    }
+    if local_changes.has_staged {
+        return (LocalStatus::Staging, true, local_changes.files);
+    }
+    if local_changes.has_modified {
+        return (LocalStatus::Modified, true, local_changes.files);
+    }
+
+    let local  = Command::new("git").args(["-C", &path, "rev-parse", "HEAD"]).output();
+    let remote = Command::new("git").args(["-C", &path, "rev-parse", "@{u}"]).output();
     let remote_ok = remote.as_ref().map(|r| r.status.success()).unwrap_or(false);
-    let staging_files = get_staging_files(&repo_path);
 
     match (local, remote) {
         (Ok(l), Ok(r)) if l.status.success() && remote_ok => {
@@ -105,54 +115,123 @@ pub(crate) fn check_local_status_no_fetch(
             let remote_sha = String::from_utf8_lossy(&r.stdout).trim().to_string();
 
             if local_sha == remote_sha {
-                if !staging_files.is_empty() {
-                    return (LocalStatus::Staging, true, staging_files);
-                }
                 return (LocalStatus::Clean, true, vec![]);
             }
 
             let merge_base = Command::new("git")
-                .args(["-C", &repo_path, "merge-base", "HEAD", "@{u}"])
+                .args(["-C", &path, "merge-base", "HEAD", "@{u}"])
                 .output();
 
             if let Ok(mb) = merge_base {
                 if mb.status.success() {
                     let base_sha = String::from_utf8_lossy(&mb.stdout).trim().to_string();
                     if base_sha == local_sha {
-                        return (LocalStatus::Pullable, true, staging_files);
+                        return (LocalStatus::Pullable, true, vec![]);
                     }
                 }
             }
-            if !staging_files.is_empty() {
-                (LocalStatus::Staging, true, staging_files)
-            } else {
-                (LocalStatus::Other, true, vec![])
-            }
+            (LocalStatus::Other, true, vec![])
         }
-        (Ok(l), _) if l.status.success() => {
-            if !staging_files.is_empty() {
-                (LocalStatus::Staging, true, staging_files)
-            } else {
-                (LocalStatus::Other, true, vec![])
-            }
-        }
+        (Ok(l), _) if l.status.success() => (LocalStatus::Other, true, vec![]),
         _ => (LocalStatus::Other, true, vec![]),
     }
 }
 
-fn get_staging_files(repo_path: &str) -> Vec<String> {
+struct LocalChanges {
+    files: Vec<String>,
+    has_conflict: bool,
+    has_staged: bool,
+    has_modified: bool,
+}
+
+fn get_local_changes(repo_path: &str) -> LocalChanges {
     let out = Command::new("git")
         .args(["-C", repo_path, "status", "--porcelain"])
         .output();
     match out {
         Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(|l| l.to_string())
-                .collect()
+            let mut files = Vec::new();
+            let mut has_conflict = false;
+            let mut has_staged = false;
+            let mut has_modified = false;
+
+            for line in String::from_utf8_lossy(&o.stdout).lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                files.push(line.to_string());
+
+                let status = line.as_bytes();
+                if status.len() < 2 {
+                    has_modified = true;
+                    continue;
+                }
+
+                let x = status[0] as char;
+                let y = status[1] as char;
+
+                if is_unmerged_status(x, y) {
+                    has_conflict = true;
+                    continue;
+                }
+
+                if x == '?' && y == '?' {
+                    has_modified = true;
+                    continue;
+                }
+                if x != ' ' {
+                    has_staged = true;
+                }
+                if y != ' ' {
+                    has_modified = true;
+                }
+            }
+
+            LocalChanges {
+                files,
+                has_conflict,
+                has_staged,
+                has_modified,
+            }
         }
-        _ => vec![],
+        _ => LocalChanges {
+            files: vec![],
+            has_conflict: false,
+            has_staged: false,
+            has_modified: false,
+        },
+    }
+}
+
+fn is_unmerged_status(x: char, y: char) -> bool {
+    matches!((x, y),
+        ('A', 'A')
+        | ('D', 'D')
+        | ('U', 'D')
+        | ('D', 'U')
+        | ('A', 'U')
+        | ('U', 'A')
+        | ('U', 'U')
+    )
+}
+
+fn build_repo_path(base_dir: &str, repo_name: &str) -> String {
+    format!("{}/{}", base_dir.trim_end_matches(['/', '\\']), repo_name)
+}
+
+fn run_git(repo_path: &str, args: &[&str], context_msg: &str) -> Result<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .with_context(|| context_msg.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        bail!("{}", if stderr.is_empty() { stdout } else { stderr })
     }
 }
 
@@ -161,15 +240,36 @@ fn get_staging_files(repo_path: &str) -> Vec<String> {
 // ──────────────────────────────────────────────
 
 pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
-    let repo_path = format!("{}/{}", base_dir.trim_end_matches(['/', '\\']), repo_name);
-    let output = Command::new("git")
-        .args(["-C", &repo_path, "pull", "--ff-only"])
-        .output()
-        .context("git pull failed")?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    if output.status.success() { Ok(stdout.trim().to_string()) }
-    else { bail!("{}", stderr.trim()) }
+    let path = build_repo_path(base_dir, repo_name);
+    let local_changes = get_local_changes(&path);
+    if local_changes.has_conflict {
+        bail!("repository has unresolved conflicts");
+    }
+
+    let needs_stash = local_changes.has_staged || local_changes.has_modified;
+    if !needs_stash {
+        return run_git(&path, &["pull", "--ff-only"], "git pull failed");
+    }
+
+    run_git(
+        &path,
+        &["stash", "push", "--include-untracked", "-m", "catrepo auto-pull"],
+        "git stash push failed",
+    )?;
+
+    let pull_result = run_git(&path, &["pull", "--ff-only"], "git pull failed");
+    if let Err(err) = pull_result {
+        return match run_git(&path, &["stash", "pop"], "git stash pop failed") {
+            Ok(_) => Err(anyhow::anyhow!(
+                "{err:#}; stashed local changes were restored"
+            )),
+            Err(pop_err) => Err(anyhow::anyhow!(
+                "{err:#}; additionally failed to restore stashed changes: {pop_err:#}"
+            )),
+        };
+    }
+
+    run_git(&path, &["stash", "pop"], "git stash pop failed")
 }
 
 // ──────────────────────────────────────────────
