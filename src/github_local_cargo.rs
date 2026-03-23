@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 
 /// Returns the effective CARGO_HOME path.
@@ -30,8 +31,16 @@ fn append_error_log(msg: &str) {
 /// Get the installed binary names for a git-installed crate from .crates2.json.
 /// Returns None if not found.
 pub(crate) fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
-    let cargo_home = get_cargo_home();
-    let crates2_path = format!("{cargo_home}/.crates2.json");
+    get_cargo_bins_inner(get_cargo_home(), owner, repo_name)
+}
+
+/// Internal function exposed for testing.
+pub(crate) fn get_cargo_bins_inner(
+    cargo_home: impl AsRef<Path>,
+    owner: &str,
+    repo_name: &str,
+) -> Option<Vec<String>> {
+    let crates2_path = cargo_home.as_ref().join(".crates2.json");
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;

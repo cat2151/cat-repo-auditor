@@ -1,7 +1,13 @@
-use super::*;
+use super::{
+    c, local_check_cell, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE,
+    MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
+};
+use crate::{app::App, github::LocalStatus};
 use ratatui::{
-    style::Modifier,
-    widgets::{Cell, Row, Table, TableState},
+    layout::{Constraint, Rect},
+    style::{Modifier, Style},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    Frame,
 };
 
 pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {

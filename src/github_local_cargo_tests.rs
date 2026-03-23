@@ -1,5 +1,6 @@
-use super::*;
+use super::{check_cargo_git_install_inner, get_cargo_bins_inner};
 use std::process::Command as Cmd;
+use std::time::Duration;
 
 fn make_crates2_json(owner: &str, repo: &str, crate_name: &str) -> String {
     let key = format!(
@@ -330,25 +331,10 @@ fn cargo_install_picks_latest_mtime_subdir() {
     let old_sub = checkouts.join("zzzzold1");
     init_git_repo_with_content(&old_sub, "old-content");
 
+    std::thread::sleep(Duration::from_millis(1_100));
+
     let new_sub = checkouts.join("aaanew1");
     let expected_installed_hash = init_git_repo_with_content(&new_sub, "new-content");
-
-    {
-        let f = std::fs::File::open(&old_sub).unwrap();
-        f.set_times(
-            std::fs::FileTimes::new()
-                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000)),
-        )
-        .unwrap();
-    }
-    {
-        let f = std::fs::File::open(&new_sub).unwrap();
-        f.set_times(
-            std::fs::FileTimes::new()
-                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(2_000_000)),
-        )
-        .unwrap();
-    }
 
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
@@ -372,15 +358,9 @@ fn get_cargo_bins_returns_installed_bins_for_matching_repo() {
     let tmp = unique_temp_dir("cargo_test_bins");
     let json = make_crates2_json("owner", "myrepo", "catrepo");
     std::fs::write(tmp.join(".crates2.json"), json).unwrap();
-    let old_cargo_home = std::env::var_os("CARGO_HOME");
-    std::env::set_var("CARGO_HOME", tmp.to_str().unwrap());
 
-    let bins = get_cargo_bins("owner", "myrepo");
+    let bins = get_cargo_bins_inner(&tmp, "owner", "myrepo");
 
-    match old_cargo_home {
-        Some(value) => std::env::set_var("CARGO_HOME", value),
-        None => std::env::remove_var("CARGO_HOME"),
-    }
     std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(bins, Some(vec![String::from("catrepo")]));
 }
@@ -390,15 +370,9 @@ fn get_cargo_bins_returns_none_when_repo_is_not_installed() {
     let tmp = unique_temp_dir("cargo_test_bins_missing");
     let json = make_crates2_json("owner", "other-repo", "catrepo");
     std::fs::write(tmp.join(".crates2.json"), json).unwrap();
-    let old_cargo_home = std::env::var_os("CARGO_HOME");
-    std::env::set_var("CARGO_HOME", tmp.to_str().unwrap());
 
-    let bins = get_cargo_bins("owner", "myrepo");
+    let bins = get_cargo_bins_inner(&tmp, "owner", "myrepo");
 
-    match old_cargo_home {
-        Some(value) => std::env::set_var("CARGO_HOME", value),
-        None => std::env::remove_var("CARGO_HOME"),
-    }
     std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(bins, None);
 }
