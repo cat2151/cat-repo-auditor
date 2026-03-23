@@ -8,7 +8,7 @@ use crate::{
 };
 // Re-export ui_types items so existing imports from `crate::ui` continue to work
 pub(crate) use crate::ui_types::{
-    build_detail_items, build_rows, local_check_cell, Focus,
+    build_detail_items, build_rows, local_check_cell, window_color, Focus,
     MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN,
     MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
     RepoRow, SearchState,
@@ -23,6 +23,10 @@ use ratatui::{
 
 const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME_MS: u64 = 250;
+
+fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Color {
+    window_color(app.window_focused, color)
+}
 
 fn spinner_frame(unix_millis: u64) -> &'static str {
     let frame_index = (unix_millis / SPINNER_FRAME_MS) as usize;
@@ -133,7 +137,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         format!(" API: --{}", tasks_display)
     };
     f.render_widget(
-        Paragraph::new(rl_text).style(Style::default().fg(MK_COMMENT).bg(MK_BG)),
+        Paragraph::new(rl_text).style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))),
         outer[0],
     );
 
@@ -145,16 +149,16 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         let hint = format!("{:<40} [{} matches]", query_display, match_count);
         f.render_widget(
             Paragraph::new(hint)
-                .style(Style::default().fg(MK_YELLOW).bg(MK_BG_DIM)),
+                .style(Style::default().fg(c(app, MK_YELLOW)).bg(c(app, MK_BG_DIM))),
             outer[2],
         );
     } else {
         let prefix_str = if app.num_prefix > 0 { format!("[{}]  ", app.num_prefix) } else { String::new() };
         let (display_msg, msg_style) = if let Some(ref t) = app.transient_msg {
             // Transient: highlighted differently so user notices it
-            (format!(" {}", t), Style::default().fg(MK_YELLOW).bg(MK_BG_SEL))
+            (format!(" {}", t), Style::default().fg(c(app, MK_YELLOW)).bg(c(app, MK_BG_SEL)))
         } else {
-            (format!(" {}{}", prefix_str, app.status_msg), Style::default().fg(MK_FG).bg(MK_BG_SEL))
+            (format!(" {}{}", prefix_str, app.status_msg), Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG_SEL)))
         };
         f.render_widget(
             Paragraph::new(display_msg).style(msg_style),
@@ -210,8 +214,8 @@ fn draw_log(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(" log.txt ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(MK_COMMENT))
-        .style(Style::default().bg(MK_BG));
+        .border_style(Style::default().fg(c(app, MK_COMMENT)))
+        .style(Style::default().bg(c(app, MK_BG)));
     let inner = block.inner(area);
     f.render_widget(block, area);
     let visible = inner.height as usize;
@@ -222,7 +226,7 @@ fn draw_log(f: &mut Frame, app: &App, area: Rect) {
         .collect();
     f.render_widget(
         Paragraph::new(lines)
-            .style(Style::default().fg(MK_FG).bg(MK_BG))
+            .style(Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG)))
             .wrap(Wrap { trim: false }),
         inner,
     );
@@ -231,7 +235,7 @@ fn draw_log(f: &mut Frame, app: &App, area: Rect) {
 // ── left pane ────────────────────────────────────────────────────────────────
 
 fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
-    let active = app.focus == Focus::Repos;
+    let active = app.window_focused && app.focus == Focus::Repos;
     let searching = app.search_state == SearchState::Active;
     let border_col = if active { MK_CYAN } else { MK_COMMENT };
 
@@ -244,8 +248,8 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_col))
-        .style(Style::default().bg(MK_BG));
+        .border_style(Style::default().fg(c(app, border_col)))
+        .style(Style::default().bg(c(app, MK_BG)));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -255,7 +259,7 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                   else if !app.search_query.is_empty() { "  (no match)" }
                   else { "  No repositories." };
         f.render_widget(
-            Paragraph::new(msg).style(Style::default().fg(MK_COMMENT).bg(MK_BG)),
+            Paragraph::new(msg).style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))),
             inner,
         );
         return;
@@ -263,25 +267,25 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
 
     let header = if app.show_columns {
         Row::new(vec![
-            Cell::from("Repository").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("Updated"   ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("PR" ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("ISS").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("doc").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("pg" ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("ja" ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("wki").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("wf" ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("Local").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("cgo").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-        ]).style(Style::default().bg(MK_BG))
+            Cell::from("Repository").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("Updated"   ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("PR" ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("ISS").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("doc").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("pg" ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("ja" ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("wki").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("wf" ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("Local").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("cgo").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+        ]).style(Style::default().bg(c(app, MK_BG)))
     } else {
         Row::new(vec![
-            Cell::from("Repository").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("Updated"   ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("PR" ).style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-            Cell::from("ISS").style(Style::default().add_modifier(Modifier::BOLD).fg(MK_YELLOW)),
-        ]).style(Style::default().bg(MK_BG))
+            Cell::from("Repository").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("Updated"   ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("PR" ).style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+            Cell::from("ISS").style(Style::default().add_modifier(Modifier::BOLD).fg(c(app, MK_YELLOW))),
+        ]).style(Style::default().bg(c(app, MK_BG)))
     };
 
     let visible = inner.height.saturating_sub(1) as usize;
@@ -297,12 +301,12 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|(row_i, row)| match row {
             RepoRow::Separator(label) => Row::new(vec![
                 Cell::from(label.as_str())
-                    .style(Style::default().fg(MK_COMMENT).bg(MK_BG).add_modifier(Modifier::DIM)),
+                    .style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG)).add_modifier(Modifier::DIM)),
                 Cell::from(""), Cell::from(""), Cell::from(""),
                 Cell::from(""), Cell::from(""), Cell::from(""),
                 Cell::from(""), Cell::from(""), Cell::from(""),
                 Cell::from(""),
-            ]).style(Style::default().bg(MK_BG)),
+            ]).style(Style::default().bg(c(app, MK_BG))),
 
             RepoRow::Repo(repo_idx) => {
                 let repo = &app.repos[*repo_idx];
@@ -311,11 +315,11 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                 let dim = is_cursor && !active;
 
                 let base_style = if sel {
-                    Style::default().bg(MK_BG_SEL).fg(MK_FG).add_modifier(Modifier::BOLD)
+                    Style::default().bg(c(app, MK_BG_SEL)).fg(c(app, MK_FG)).add_modifier(Modifier::BOLD)
                 } else if dim {
-                    Style::default().bg(MK_BG_DIM).fg(MK_FG)
+                    Style::default().bg(c(app, MK_BG_DIM)).fg(c(app, MK_FG))
                 } else {
-                    Style::default().fg(MK_FG).bg(MK_BG)
+                    Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG))
                 };
 
                 let local_col = match repo.local_status {
@@ -385,52 +389,52 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                     Row::new(vec![
                         Cell::from(name_str).style(base_style),
                         Cell::from(repo.updated_at.clone()).style(
-                            if sel || dim { base_style } else { Style::default().fg(MK_COMMENT).bg(MK_BG) }
+                            if sel || dim { base_style } else { Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG)) }
                         ),
                         Cell::from(format!("{:>3}", repo.open_prs)).style(
-                            if sel || dim { base_style } else { Style::default().fg(pr_col).bg(MK_BG) }
+                            if sel || dim { base_style } else { Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG)) }
                         ),
                         Cell::from(format!("{:>3}", repo.open_issues)).style(
-                            if sel || dim { base_style } else { Style::default().fg(iss_col).bg(MK_BG) }
+                            if sel || dim { base_style } else { Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG)) }
                         ),
                     ]).style(Style::default().bg(
-                        if sel { MK_BG_SEL } else if dim { MK_BG_DIM } else { MK_BG }
+                        c(app, if sel { MK_BG_SEL } else if dim { MK_BG_DIM } else { MK_BG })
                     ))
                 } else {
                 Row::new(vec![
                     Cell::from(name_str).style(base_style),
                     Cell::from(repo.updated_at.clone()).style(
-                        if sel || dim { base_style } else { Style::default().fg(MK_COMMENT).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(format!("{:>3}", repo.open_prs)).style(
-                        if sel || dim { base_style } else { Style::default().fg(pr_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(format!("{:>3}", repo.open_issues)).style(
-                        if sel || dim { base_style } else { Style::default().fg(iss_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(doc_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(doc_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, doc_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(pg_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(pg_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, pg_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(ja_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(ja_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, ja_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(wki_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(wki_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, wki_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(wf_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(wf_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, wf_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(repo.local_status.to_string()).style(
-                        if sel || dim { base_style } else { Style::default().fg(local_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, local_col)).bg(c(app, MK_BG)) }
                     ),
                     Cell::from(cgo_str).style(
-                        if sel || dim { base_style } else { Style::default().fg(cgo_col).bg(MK_BG) }
+                        if sel || dim { base_style } else { Style::default().fg(c(app, cgo_col)).bg(c(app, MK_BG)) }
                     ),
                 ]).style(Style::default().bg(
-                    if sel { MK_BG_SEL } else if dim { MK_BG_DIM } else { MK_BG }
+                    c(app, if sel { MK_BG_SEL } else if dim { MK_BG_DIM } else { MK_BG })
                 ))
                 }
             }
@@ -462,7 +466,7 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
     let table = Table::new(rows, widths.to_vec())
         .header(header)
         .row_highlight_style(Style::default())
-        .style(Style::default().bg(MK_BG));
+        .style(Style::default().bg(c(app, MK_BG)));
     f.render_stateful_widget(table, inner, &mut ts);
 
     // position indicator
@@ -474,7 +478,7 @@ fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
         let txt = format!(" {repo_pos}/{repo_total} ");
         let w = (txt.len() as u16).min(inner.width);
         f.render_widget(
-            Paragraph::new(txt).style(Style::default().fg(MK_COMMENT).bg(MK_BG)),
+            Paragraph::new(txt).style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))),
             Rect { x: inner.x + inner.width.saturating_sub(w), y: inner.y + inner.height.saturating_sub(1), width: w, height: 1 },
         );
     }

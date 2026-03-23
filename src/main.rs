@@ -139,7 +139,16 @@ fn main() -> Result<()> {
 
         // ── input ─────────────────────────────────────────────────────────
         if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
+            let ev = event::read()?;
+            if matches!(ev, Event::FocusLost) {
+                app.window_focused = false;
+                continue;
+            }
+            if matches!(ev, Event::FocusGained) {
+                app.window_focused = true;
+                continue;
+            }
+            if let Event::Key(key) = ev {
                 if key.kind != KeyEventKind::Press { continue; }
 
                 // debounce 50ms

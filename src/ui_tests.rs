@@ -1,5 +1,7 @@
 use super::*;
+use crate::{app::App, config::Config};
 use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
+use ratatui::{backend::TestBackend, Terminal};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,26 @@ fn make_pr(number: u64, title: &str, repo_full: &str, closes: Option<u64>) -> Is
         is_pr: true,
         closes_issue: closes,
     }
+}
+
+fn make_config() -> Config {
+    Config {
+        owner: "owner".to_string(),
+        local_base_dir: ".".to_string(),
+        app_run_dir: None,
+        auto_pull: false,
+    }
+}
+
+fn make_render_app(window_focused: bool) -> App {
+    let mut app = App::new(make_config());
+    let mut repo = make_repo("focus-test");
+    repo.open_prs = 1;
+    repo.open_issues = 2;
+    app.repos = vec![repo];
+    app.window_focused = window_focused;
+    app.rebuild_rows();
+    app
 }
 
 // ── build_rows ────────────────────────────────────────────────────────────────
@@ -253,6 +275,43 @@ fn local_check_cell_some_false_no_git_shows_cross_gray() {
     let (s, c) = local_check_cell(true, Some(false), MK_YELLOW);
     assert_eq!(s, "✘");
     assert_eq!(c, MK_COMMENT);
+}
+
+#[test]
+fn window_color_keeps_color_when_window_is_focused() {
+    assert_eq!(window_color(true, MK_RED), MK_RED);
+}
+
+#[test]
+fn window_color_converts_rgb_to_dim_grayscale_when_window_is_unfocused() {
+    assert_eq!(window_color(false, MK_RED), ratatui::style::Color::Rgb(65, 65, 65));
+    assert_eq!(window_color(false, MK_BG_SEL), ratatui::style::Color::Rgb(42, 42, 42));
+}
+
+#[test]
+fn draw_ui_dims_active_border_when_window_is_unfocused() {
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_render_app(false);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let cell = &terminal.backend().buffer()[(0, 1)];
+    assert_eq!(cell.symbol(), "┌");
+    assert_eq!(cell.fg, window_color(false, MK_COMMENT));
+}
+
+#[test]
+fn draw_ui_keeps_active_border_color_when_window_is_focused() {
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_render_app(true);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let cell = &terminal.backend().buffer()[(0, 1)];
+    assert_eq!(cell.symbol(), "┌");
+    assert_eq!(cell.fg, MK_CYAN);
 }
 
 // ── background task spinner ───────────────────────────────────────────────────
