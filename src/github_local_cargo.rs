@@ -80,6 +80,7 @@ pub(crate) fn check_cargo_git_install(
     })
 }
 
+/// Internal function exposed for testing.
 pub(crate) fn check_cargo_git_install_inner(
     owner: &str,
     repo_name: &str,

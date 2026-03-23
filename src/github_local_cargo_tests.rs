@@ -384,3 +384,21 @@ fn get_cargo_bins_returns_installed_bins_for_matching_repo() {
     std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(bins, Some(vec![String::from("catrepo")]));
 }
+
+#[test]
+fn get_cargo_bins_returns_none_when_repo_is_not_installed() {
+    let tmp = unique_temp_dir("cargo_test_bins_missing");
+    let json = make_crates2_json("owner", "other-repo", "catrepo");
+    std::fs::write(tmp.join(".crates2.json"), json).unwrap();
+    let old_cargo_home = std::env::var_os("CARGO_HOME");
+    std::env::set_var("CARGO_HOME", tmp.to_str().unwrap());
+
+    let bins = get_cargo_bins("owner", "myrepo");
+
+    match old_cargo_home {
+        Some(value) => std::env::set_var("CARGO_HOME", value),
+        None => std::env::remove_var("CARGO_HOME"),
+    }
+    std::fs::remove_dir_all(&tmp).ok();
+    assert_eq!(bins, None);
+}
