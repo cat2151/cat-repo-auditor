@@ -1,0 +1,414 @@
+use super::*;
+use ratatui::{
+    style::Modifier,
+    widgets::{Cell, Row, Table, TableState},
+};
+
+pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
+    let active = app.window_focused && app.focus == Focus::Repos;
+    let searching = app.search_state == SearchState::Active;
+    let border_col = if active { MK_CYAN } else { MK_COMMENT };
+
+    let title = if searching {
+        format!(
+            " {} ({}) – filter: \"{}\" ",
+            app.config.owner,
+            app.repos.len(),
+            app.search_query
+        )
+    } else {
+        format!(" {} ({}) ", app.config.owner, app.repos.len())
+    };
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(c(app, border_col)))
+        .style(Style::default().bg(c(app, MK_BG)));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if app.filtered_rows.is_empty() {
+        let msg = if app.loading {
+            "  Loading…"
+        } else if !app.search_query.is_empty() {
+            "  (no match)"
+        } else {
+            "  No repositories."
+        };
+        f.render_widget(
+            Paragraph::new(msg).style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))),
+            inner,
+        );
+        return;
+    }
+
+    let header = if app.show_columns {
+        Row::new(vec![
+            Cell::from("Repository").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("Updated").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("PR").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("ISS").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("doc").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("pg").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("ja").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("wki").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("wf").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("Local").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("cgo").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+        ])
+        .style(Style::default().bg(c(app, MK_BG)))
+    } else {
+        Row::new(vec![
+            Cell::from("Repository").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("Updated").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("PR").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+            Cell::from("ISS").style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(c(app, MK_YELLOW)),
+            ),
+        ])
+        .style(Style::default().bg(c(app, MK_BG)))
+    };
+
+    let visible = inner.height.saturating_sub(1) as usize;
+    app.left_visible = visible;
+    app.adjust_row_scroll(visible);
+    let scroll = app.row_scroll;
+    let cursor = app.row_cursor;
+
+    let rows: Vec<Row> = app
+        .filtered_rows
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible)
+        .map(|(row_i, row)| match row {
+            RepoRow::Separator(label) => Row::new(vec![
+                Cell::from(label.as_str()).style(
+                    Style::default()
+                        .fg(c(app, MK_COMMENT))
+                        .bg(c(app, MK_BG))
+                        .add_modifier(Modifier::DIM),
+                ),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+            ])
+            .style(Style::default().bg(c(app, MK_BG))),
+            RepoRow::Repo(repo_idx) => {
+                let repo = &app.repos[*repo_idx];
+                let is_cursor = row_i == cursor;
+                let sel = is_cursor && active;
+                let dim = is_cursor && !active;
+
+                let base_style = if sel {
+                    Style::default()
+                        .bg(c(app, MK_BG_SEL))
+                        .fg(c(app, MK_FG))
+                        .add_modifier(Modifier::BOLD)
+                } else if dim {
+                    Style::default().bg(c(app, MK_BG_DIM)).fg(c(app, MK_FG))
+                } else {
+                    Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG))
+                };
+
+                let local_col = match repo.local_status {
+                    LocalStatus::Conflict => MK_RED,
+                    LocalStatus::Modified => MK_ORANGE,
+                    LocalStatus::Clean => MK_GREEN,
+                    LocalStatus::Pullable => MK_ORANGE,
+                    LocalStatus::Staging => MK_BLUE,
+                    LocalStatus::Other => MK_RED,
+                    LocalStatus::NotFound => MK_COMMENT,
+                    LocalStatus::NoGit => MK_COMMENT,
+                };
+                let pr_col = if repo.open_prs > 0 {
+                    MK_PURPLE
+                } else {
+                    MK_COMMENT
+                };
+                let iss_col = if repo.open_issues > 0 {
+                    MK_RED
+                } else {
+                    MK_COMMENT
+                };
+
+                let cursor_char = if is_cursor { "▶ " } else { "  " };
+                let lock_char = if repo.is_private { "🔒" } else { "" };
+                let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
+
+                let is_checking = app.checking_repo == repo.name;
+                let pending = ("…", MK_ORANGE);
+
+                let (doc_str, doc_col) = if is_checking && repo.readme_ja_checked_at.is_empty() {
+                    pending
+                } else {
+                    match repo.readme_ja {
+                        Some(true) => ("✔", MK_GREEN),
+                        Some(false) => ("✘", MK_COMMENT),
+                        None => ("?", MK_ORANGE),
+                    }
+                };
+                let (pg_str, pg_col) = if is_checking && repo.pages_checked_at.is_empty() {
+                    pending
+                } else {
+                    match repo.pages {
+                        Some(true) => ("✔", MK_CYAN),
+                        Some(false) => ("✘", MK_COMMENT),
+                        None => ("?", MK_ORANGE),
+                    }
+                };
+                let local_no_git = matches!(
+                    repo.local_status,
+                    LocalStatus::NotFound | LocalStatus::NoGit
+                );
+
+                let (ja_str, ja_col) =
+                    if is_checking && !local_no_git && repo.readme_ja_badge_checked_at.is_empty() {
+                        pending
+                    } else {
+                        local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
+                    };
+
+                let (wki_str, wki_col) =
+                    if is_checking && !local_no_git && repo.deepwiki_checked_at.is_empty() {
+                        pending
+                    } else {
+                        local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
+                    };
+                let (wf_str, wf_col) =
+                    if is_checking && !local_no_git && repo.wf_checked_at.is_empty() {
+                        pending
+                    } else {
+                        local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
+                    };
+
+                let (cgo_str, cgo_col) = if is_checking && repo.cargo_checked_at.is_empty() {
+                    pending
+                } else {
+                    match repo.cargo_install {
+                        Some(true) => ("ok", MK_GREEN),
+                        Some(false) => ("old", MK_ORANGE),
+                        None => ("", MK_COMMENT),
+                    }
+                };
+
+                if !app.show_columns {
+                    Row::new(vec![
+                        Cell::from(name_str).style(base_style),
+                        Cell::from(repo.updated_at.clone()).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(format!("{:>3}", repo.open_prs)).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(format!("{:>3}", repo.open_issues)).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG))
+                        }),
+                    ])
+                    .style(Style::default().bg(c(
+                        app,
+                        if sel {
+                            MK_BG_SEL
+                        } else if dim {
+                            MK_BG_DIM
+                        } else {
+                            MK_BG
+                        },
+                    )))
+                } else {
+                    Row::new(vec![
+                        Cell::from(name_str).style(base_style),
+                        Cell::from(repo.updated_at.clone()).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(format!("{:>3}", repo.open_prs)).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(format!("{:>3}", repo.open_issues)).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(doc_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, doc_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(pg_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, pg_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(ja_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, ja_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(wki_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, wki_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(wf_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, wf_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(repo.local_status.to_string()).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, local_col)).bg(c(app, MK_BG))
+                        }),
+                        Cell::from(cgo_str).style(if sel || dim {
+                            base_style
+                        } else {
+                            Style::default().fg(c(app, cgo_col)).bg(c(app, MK_BG))
+                        }),
+                    ])
+                    .style(Style::default().bg(c(
+                        app,
+                        if sel {
+                            MK_BG_SEL
+                        } else if dim {
+                            MK_BG_DIM
+                        } else {
+                            MK_BG
+                        },
+                    )))
+                }
+            }
+        })
+        .collect();
+
+    let widths_full: &[Constraint] = &[
+        Constraint::Min(18),
+        Constraint::Length(7),
+        Constraint::Length(4),
+        Constraint::Length(4),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(8),
+        Constraint::Length(4),
+    ];
+    let widths_slim: &[Constraint] = &[
+        Constraint::Min(0),
+        Constraint::Length(7),
+        Constraint::Length(4),
+        Constraint::Length(4),
+    ];
+    let widths = if app.show_columns {
+        widths_full
+    } else {
+        widths_slim
+    };
+
+    let mut ts = TableState::default();
+    let table = Table::new(rows, widths.to_vec())
+        .header(header)
+        .row_highlight_style(Style::default())
+        .style(Style::default().bg(c(app, MK_BG)));
+    f.render_stateful_widget(table, inner, &mut ts);
+
+    if app.filtered_rows.len() > visible && visible > 0 {
+        let repo_pos = app.filtered_rows[..=cursor]
+            .iter()
+            .filter(|r| matches!(r, RepoRow::Repo(_)))
+            .count();
+        let repo_total = app
+            .filtered_rows
+            .iter()
+            .filter(|r| matches!(r, RepoRow::Repo(_)))
+            .count();
+        let txt = format!(" {repo_pos}/{repo_total} ");
+        let w = (txt.len() as u16).min(inner.width);
+        f.render_widget(
+            Paragraph::new(txt).style(Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))),
+            Rect {
+                x: inner.x + inner.width.saturating_sub(w),
+                y: inner.y + inner.height.saturating_sub(1),
+                width: w,
+                height: 1,
+            },
+        );
+    }
+}
