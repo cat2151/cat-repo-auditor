@@ -147,7 +147,7 @@ fn check_local_status_reports_conflict() {
     let tmp = unique_temp_dir("status_conflict");
     let repo = tmp.join("myrepo");
     std::fs::create_dir_all(&repo).unwrap();
-    run_git_ok(&repo, &["init"]);
+    run_git_ok(&repo, &["init", "-b", "master"]);
     run_git_ok(&repo, &["config", "user.email", "t@t.com"]);
     run_git_ok(&repo, &["config", "user.name", "T"]);
     std::fs::write(repo.join("f"), "base\n").unwrap();

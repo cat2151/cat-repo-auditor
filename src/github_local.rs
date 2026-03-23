@@ -84,17 +84,17 @@ pub(crate) fn check_local_status_no_fetch(
     base_dir: &str,
     repo_name: &str,
 ) -> (LocalStatus, bool, Vec<String>) {
-    let repo_path = repo_path(base_dir, repo_name);
+    let path = build_repo_path(base_dir, repo_name);
 
-    if !std::path::Path::new(&repo_path).exists() {
+    if !std::path::Path::new(&path).exists() {
         return (LocalStatus::NotFound, false, vec![]);
     }
-    let git_dir = format!("{}/.git", repo_path);
+    let git_dir = format!("{}/.git", path);
     if !std::path::Path::new(&git_dir).exists() {
         return (LocalStatus::NoGit, false, vec![]);
     }
 
-    let local_changes = get_local_changes(&repo_path);
+    let local_changes = get_local_changes(&path);
     if local_changes.has_conflict {
         return (LocalStatus::Conflict, true, local_changes.files);
     }
@@ -105,8 +105,8 @@ pub(crate) fn check_local_status_no_fetch(
         return (LocalStatus::Modified, true, local_changes.files);
     }
 
-    let local  = Command::new("git").args(["-C", &repo_path, "rev-parse", "HEAD"]).output();
-    let remote = Command::new("git").args(["-C", &repo_path, "rev-parse", "@{u}"]).output();
+    let local  = Command::new("git").args(["-C", &path, "rev-parse", "HEAD"]).output();
+    let remote = Command::new("git").args(["-C", &path, "rev-parse", "@{u}"]).output();
     let remote_ok = remote.as_ref().map(|r| r.status.success()).unwrap_or(false);
 
     match (local, remote) {
@@ -119,7 +119,7 @@ pub(crate) fn check_local_status_no_fetch(
             }
 
             let merge_base = Command::new("git")
-                .args(["-C", &repo_path, "merge-base", "HEAD", "@{u}"])
+                .args(["-C", &path, "merge-base", "HEAD", "@{u}"])
                 .output();
 
             if let Ok(mb) = merge_base {
@@ -215,7 +215,7 @@ fn is_unmerged_status(x: char, y: char) -> bool {
     )
 }
 
-fn repo_path(base_dir: &str, repo_name: &str) -> String {
+fn build_repo_path(base_dir: &str, repo_name: &str) -> String {
     format!("{}/{}", base_dir.trim_end_matches(['/', '\\']), repo_name)
 }
 
@@ -240,26 +240,26 @@ fn run_git(repo_path: &str, args: &[&str], context_msg: &str) -> Result<String> 
 // ──────────────────────────────────────────────
 
 pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
-    let repo_path = repo_path(base_dir, repo_name);
-    let local_changes = get_local_changes(&repo_path);
+    let path = build_repo_path(base_dir, repo_name);
+    let local_changes = get_local_changes(&path);
     if local_changes.has_conflict {
         bail!("repository has unresolved conflicts");
     }
 
     let needs_stash = local_changes.has_staged || local_changes.has_modified;
     if !needs_stash {
-        return run_git(&repo_path, &["pull", "--ff-only"], "git pull failed");
+        return run_git(&path, &["pull", "--ff-only"], "git pull failed");
     }
 
     run_git(
-        &repo_path,
+        &path,
         &["stash", "push", "--include-untracked", "-m", "catrepo auto-pull"],
         "git stash push failed",
     )?;
 
-    let pull_result = run_git(&repo_path, &["pull", "--ff-only"], "git pull failed");
+    let pull_result = run_git(&path, &["pull", "--ff-only"], "git pull failed");
     if let Err(err) = pull_result {
-        return match run_git(&repo_path, &["stash", "pop"], "git stash pop failed") {
+        return match run_git(&path, &["stash", "pop"], "git stash pop failed") {
             Ok(_) => Err(anyhow::anyhow!(
                 "{err:#}; stashed local changes were restored"
             )),
@@ -269,7 +269,7 @@ pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
         };
     }
 
-    run_git(&repo_path, &["stash", "pop"], "git stash pop failed")
+    run_git(&path, &["stash", "pop"], "git stash pop failed")
 }
 
 // ──────────────────────────────────────────────
