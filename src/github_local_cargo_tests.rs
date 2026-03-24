@@ -105,7 +105,8 @@ fn cargo_install_logs_reason_when_repo_not_in_crates2() {
 
     assert!(result.is_none());
     assert!(logs.iter().any(|msg| {
-        msg.contains("repo=owner/myrepo") && msg.contains("no cargo install entry matched repository")
+        msg.contains("repo=owner/myrepo")
+            && msg.contains("no cargo install entry matched repository")
     }));
 }
 
@@ -304,13 +305,11 @@ fn cargo_install_logs_hash_source_details() {
     assert!(logs
         .iter()
         .any(|msg| msg.contains(&installed_checkout_display)));
-    assert!(logs
-        .iter()
-        .any(|msg| {
-            msg.contains("command=git -C")
-                && msg.contains(&installed_checkout_display)
-                && msg.contains("stdout=")
-                && msg.contains(&local_hash)
+    assert!(logs.iter().any(|msg| {
+        msg.contains("command=git -C")
+            && msg.contains(&installed_checkout_display)
+            && msg.contains("stdout=")
+            && msg.contains(&local_hash)
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains(&expected_local_command)

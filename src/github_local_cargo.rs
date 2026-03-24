@@ -47,7 +47,9 @@ fn log_cargo_check_result(
     repo_name: &str,
     result: &str,
 ) {
-    log_fn(&format!("cargo check: repo={owner}/{repo_name} result={result}"));
+    log_fn(&format!(
+        "cargo check: repo={owner}/{repo_name} result={result}"
+    ));
 }
 
 fn format_git_rev_parse_head_command(path: &Path) -> String {
@@ -173,7 +175,10 @@ pub(crate) fn check_cargo_git_install_inner(
             return None;
         }
     };
-    let installs = match json.get("installs").and_then(|installs| installs.as_object()) {
+    let installs = match json
+        .get("installs")
+        .and_then(|installs| installs.as_object())
+    {
         Some(installs) => installs,
         None => {
             log_cargo_check_path_result(
@@ -227,9 +232,7 @@ pub(crate) fn check_cargo_git_install_inner(
         owner,
         repo_name,
         &crates2_path,
-        &format!(
-            "matched install entry={matched_entry:?}, matched crate name={app_name:?}"
-        ),
+        &format!("matched install entry={matched_entry:?}, matched crate name={app_name:?}"),
     );
 
     let checkouts_dir = std::path::Path::new(cargo_home)
