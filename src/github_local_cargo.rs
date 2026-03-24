@@ -41,8 +41,52 @@ fn log_cargo_check_path_result(
     ));
 }
 
+fn log_cargo_check_result(
+    log_fn: &mut impl FnMut(&str),
+    owner: &str,
+    repo_name: &str,
+    result: &str,
+) {
+    log_fn(&format!(
+        "cargo check: repo={owner}/{repo_name} result={result}"
+    ));
+}
+
 fn format_git_rev_parse_head_command(path: &Path) -> String {
     format!("git -C {} rev-parse HEAD", path.display())
+}
+
+/// Extract the git source hash from a `.crates2.json` install entry key such as
+/// `myrepo 0.1.0 (git+https://github.com/owner/myrepo#<hash>)`.
+///
+/// Returns `Some(<hash>)` when the trailing `#<hash>` portion is present and non-empty.
+/// Returns `None` when the entry does not contain a usable git hash.
+fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
+    matched_entry
+        .rsplit_once('#')
+        .map(|(_, hash)| hash.trim_end_matches(')'))
+        .filter(|hash| !hash.is_empty())
+}
+
+/// Format a one-line comparison summary for cargo hash investigation logs.
+///
+/// - `metadata_hash`: hash embedded in the matching `.crates2.json` install entry
+/// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
+/// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
+///
+/// Logging all three values together makes it easier to see which source diverges when
+/// an unexpected hash is being observed in the field.
+fn format_cargo_hash_summary(
+    metadata_hash: &str,
+    installed_hash: &str,
+    local_hash: &str,
+) -> String {
+    format!(
+        "hash summary: metadata={metadata_hash} installed={installed_hash} local={local_hash} metadata_eq_installed={} installed_eq_local={} metadata_eq_local={}",
+        metadata_hash == installed_hash,
+        installed_hash == local_hash,
+        metadata_hash == local_hash,
+    )
 }
 
 fn log_cargo_check_command_result(
@@ -138,27 +182,90 @@ pub(crate) fn check_cargo_git_install_inner(
         "cargo install metadata file",
     );
 
-    let content = std::fs::read_to_string(&crates2_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let installs = json.get("installs")?.as_object()?;
+    let content = match std::fs::read_to_string(&crates2_path) {
+        Ok(content) => content,
+        Err(err) => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &crates2_path,
+                &format!("failed to read cargo install metadata file: {err}"),
+            );
+            return None;
+        }
+    };
+    let json: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(json) => json,
+        Err(err) => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &crates2_path,
+                &format!("failed to parse cargo install metadata file: {err}"),
+            );
+            return None;
+        }
+    };
+    let installs = match json
+        .get("installs")
+        .and_then(|installs| installs.as_object())
+    {
+        Some(installs) => installs,
+        None => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &crates2_path,
+                "cargo install metadata file does not contain installs object",
+            );
+            return None;
+        }
+    };
 
     let needle = format!("git+https://github.com/{owner}/{repo_name}#");
 
-    let matched_entry = installs
+    let matched_entry = match installs
         .keys()
-        .find(|key| key.trim_end_matches(')').contains(needle.as_str()))?
-        .to_string();
-    let app_name = matched_entry
+        .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
+    {
+        Some(entry) => entry.to_string(),
+        None => {
+            log_cargo_check_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                "no cargo install entry matched repository",
+            );
+            return None;
+        }
+    };
+    let app_name = match matched_entry
         .split_whitespace()
         .next()
-        .map(|s| s.to_string())?;
+        .map(|s| s.to_string())
+    {
+        Some(app_name) => app_name,
+        None => {
+            log_cargo_check_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                "matched cargo install entry did not contain crate name",
+            );
+            return None;
+        }
+    };
+    let metadata_hash = cargo_install_source_hash(&matched_entry).unwrap_or("<missing>");
     log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
         &crates2_path,
         &format!(
-            "matched install entry={matched_entry:?}, matched crate name={app_name:?}"
+            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, metadata hash={metadata_hash}"
         ),
     );
 
@@ -177,8 +284,28 @@ pub(crate) fn check_cargo_git_install_inner(
             })
             .map(|e| e.path())
             .collect(),
-        Err(_) => return None,
+        Err(err) => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &checkouts_dir,
+                &format!("failed to read cargo checkouts dir: {err}"),
+            );
+            return None;
+        }
     };
+
+    if matches.is_empty() {
+        log_cargo_check_path_result(
+            &mut log_fn,
+            owner,
+            repo_name,
+            &checkouts_dir,
+            &format!("no checkout dir found for {app_name:?}"),
+        );
+        return None;
+    }
 
     if matches.len() > 1 {
         log_cargo_check_path_result(
@@ -197,10 +324,36 @@ pub(crate) fn check_cargo_git_install_inner(
         return None;
     }
 
-    let checkout_base = matches.into_iter().next()?;
+    let checkout_base = match matches.into_iter().next() {
+        Some(path) => path,
+        None => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &checkouts_dir,
+                &format!(
+                    "no checkout dir found for {app_name:?} after filtering (internal inconsistency)"
+                ),
+            );
+            return None;
+        }
+    };
 
-    let sub_dir = std::fs::read_dir(&checkout_base)
-        .ok()?
+    let checkout_entries = match std::fs::read_dir(&checkout_base) {
+        Ok(entries) => entries,
+        Err(err) => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &checkout_base,
+                &format!("failed to read checkout directory: {err}"),
+            );
+            return None;
+        }
+    };
+    let sub_dir = match checkout_entries
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
         .map(|e| {
@@ -211,8 +364,21 @@ pub(crate) fn check_cargo_git_install_inner(
                 .unwrap_or(std::time::UNIX_EPOCH);
             (mtime, e.path())
         })
-        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
-        .1;
+        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))
+        .map(|(_, path)| path)
+    {
+        Some(sub_dir) => sub_dir,
+        None => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &checkout_base,
+                "checkout directory did not contain any candidate subdirectories",
+            );
+            return None;
+        }
+    };
     log_cargo_check_path_result(
         &mut log_fn,
         owner,
@@ -226,14 +392,31 @@ pub(crate) fn check_cargo_git_install_inner(
         .arg("-C")
         .arg(&sub_dir)
         .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
+        .output();
+    let out = match out {
+        Ok(out) => out,
+        Err(err) => {
+            log_cargo_check_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &format!("failed to spawn command={installed_command}: {err}"),
+            );
+            return None;
+        }
+    };
     log_cargo_check_command_result(&mut log_fn, owner, repo_name, &installed_command, &out);
     if !out.status.success() {
         return None;
     }
     let installed_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if installed_hash.is_empty() {
+        log_cargo_check_result(
+            &mut log_fn,
+            owner,
+            repo_name,
+            "installed checkout HEAD hash was empty",
+        );
         return None;
     }
 
@@ -243,13 +426,40 @@ pub(crate) fn check_cargo_git_install_inner(
         .arg("-C")
         .arg(&repo_path)
         .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
+        .output();
+    let out = match out {
+        Ok(out) => out,
+        Err(err) => {
+            log_cargo_check_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &format!("failed to spawn command={local_command}: {err}"),
+            );
+            return None;
+        }
+    };
     log_cargo_check_command_result(&mut log_fn, owner, repo_name, &local_command, &out);
     if !out.status.success() {
         return None;
     }
     let local_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if local_hash.is_empty() {
+        log_cargo_check_result(
+            &mut log_fn,
+            owner,
+            repo_name,
+            "local repository HEAD hash was empty",
+        );
+        return None;
+    }
+
+    log_cargo_check_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        &format_cargo_hash_summary(metadata_hash, &installed_hash, &local_hash),
+    );
 
     Some((installed_hash == local_hash, installed_hash, local_hash))
 }

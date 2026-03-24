@@ -1,4 +1,4 @@
-use super::{check_cargo_git_install_inner, get_cargo_bins_inner};
+use super::{cargo_install_source_hash, check_cargo_git_install_inner, get_cargo_bins_inner};
 use std::process::Command as Cmd;
 use std::time::Duration;
 
@@ -55,6 +55,24 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
 }
 
 #[test]
+fn cargo_install_source_hash_extracts_hash_and_trims_closing_paren() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#0123456789abcdef)";
+    assert_eq!(cargo_install_source_hash(entry), Some("0123456789abcdef"));
+}
+
+#[test]
+fn cargo_install_source_hash_returns_none_without_hash_separator() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo)";
+    assert_eq!(cargo_install_source_hash(entry), None);
+}
+
+#[test]
+fn cargo_install_source_hash_returns_none_when_hash_is_empty() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#)";
+    assert_eq!(cargo_install_source_hash(entry), None);
+}
+
+#[test]
 fn cargo_install_none_when_crates2_missing() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_missing_{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
@@ -85,6 +103,29 @@ fn cargo_install_none_when_repo_not_in_crates2() {
     );
     std::fs::remove_dir_all(&tmp).ok();
     assert!(result.is_none());
+}
+
+#[test]
+fn cargo_install_logs_reason_when_repo_not_in_crates2() {
+    let tmp = unique_temp_dir("cargo_test_notfound_log");
+    let json = make_crates2_json("other", "other-repo", "other-repo");
+    std::fs::write(tmp.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_inner(
+        "owner",
+        "myrepo",
+        "/nonexistent",
+        tmp.to_str().unwrap(),
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert!(result.is_none());
+    assert!(logs.iter().any(|msg| {
+        msg.contains("repo=owner/myrepo")
+            && msg.contains("no cargo install entry matched repository")
+    }));
 }
 
 #[test]
@@ -273,27 +314,36 @@ fn cargo_install_logs_hash_source_details() {
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
     let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
+    let metadata_hash = "0123456789abcdef0123456789abcdef01234567";
     assert!(result.is_some());
     assert!(logs.iter().any(|msg| {
         msg.contains("repo=owner/myrepo")
             && msg.contains(&crates2_path_display)
             && msg.contains("matched install entry=")
+            && msg.contains(&format!("metadata hash={metadata_hash}"))
     }));
     assert!(logs
         .iter()
         .any(|msg| msg.contains(&installed_checkout_display)));
-    assert!(logs
-        .iter()
-        .any(|msg| {
-            msg.contains("command=git -C")
-                && msg.contains(&installed_checkout_display)
-                && msg.contains("stdout=")
-                && msg.contains(&local_hash)
+    assert!(logs.iter().any(|msg| {
+        msg.contains("command=git -C")
+            && msg.contains(&installed_checkout_display)
+            && msg.contains("stdout=")
+            && msg.contains(&local_hash)
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains(&expected_local_command)
             && msg.contains("stdout=")
             && msg.contains(&local_hash)
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("hash summary:")
+            && msg.contains(&format!("metadata={metadata_hash}"))
+            && msg.contains(&format!("installed={local_hash}"))
+            && msg.contains(&format!("local={local_hash}"))
+            && msg.contains("metadata_eq_installed=false")
+            && msg.contains("installed_eq_local=true")
+            && msg.contains("metadata_eq_local=false")
     }));
 }
 
