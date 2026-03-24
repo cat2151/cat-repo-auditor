@@ -28,7 +28,7 @@ fn append_error_log(msg: &str) {
     }
 }
 
-fn log_cargo_check_file_result(
+fn log_cargo_check_path_result(
     log_fn: &mut impl FnMut(&str),
     owner: &str,
     repo_name: &str,
@@ -36,9 +36,13 @@ fn log_cargo_check_file_result(
     result: &str,
 ) {
     log_fn(&format!(
-        "cargo check: repo={owner}/{repo_name} filename={} result={result}",
+        "cargo check: repo={owner}/{repo_name} path={} result={result}",
         path.display()
     ));
+}
+
+fn format_git_rev_parse_head_command(path: &Path) -> String {
+    format!("git -C {} rev-parse HEAD", path.display())
 }
 
 fn log_cargo_check_command_result(
@@ -126,7 +130,7 @@ pub(crate) fn check_cargo_git_install_inner(
     mut log_fn: impl FnMut(&str),
 ) -> Option<(bool, String, String)> {
     let crates2_path = std::path::Path::new(cargo_home).join(".crates2.json");
-    log_cargo_check_file_result(
+    log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
@@ -148,7 +152,7 @@ pub(crate) fn check_cargo_git_install_inner(
         .split_whitespace()
         .next()
         .map(|s| s.to_string())?;
-    log_cargo_check_file_result(
+    log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
@@ -177,7 +181,7 @@ pub(crate) fn check_cargo_git_install_inner(
     };
 
     if matches.len() > 1 {
-        log_cargo_check_file_result(
+        log_cargo_check_path_result(
             &mut log_fn,
             owner,
             repo_name,
@@ -209,7 +213,7 @@ pub(crate) fn check_cargo_git_install_inner(
         })
         .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
         .1;
-    log_cargo_check_file_result(
+    log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
@@ -217,7 +221,7 @@ pub(crate) fn check_cargo_git_install_inner(
         &format!("selected checkout dir={}", sub_dir.display()),
     );
 
-    let installed_command = format!("git -C {} rev-parse HEAD", sub_dir.display());
+    let installed_command = format_git_rev_parse_head_command(&sub_dir);
     let out = Command::new("git")
         .arg("-C")
         .arg(&sub_dir)
@@ -233,14 +237,12 @@ pub(crate) fn check_cargo_git_install_inner(
         return None;
     }
 
-    let repo_path = format!(
-        "{}/{}",
-        base_dir.trim_end_matches(['/', '\\']),
-        repo_name
-    );
-    let local_command = format!("git -C {} rev-parse HEAD", repo_path);
+    let repo_path = Path::new(base_dir).join(repo_name);
+    let local_command = format_git_rev_parse_head_command(&repo_path);
     let out = Command::new("git")
-        .args(["-C", &repo_path, "rev-parse", "HEAD"])
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["rev-parse", "HEAD"])
         .output()
         .ok()?;
     log_cargo_check_command_result(&mut log_fn, owner, repo_name, &local_command, &out);

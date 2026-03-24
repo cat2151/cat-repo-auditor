@@ -272,7 +272,7 @@ fn cargo_install_logs_hash_source_details() {
 
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
-    let local_repo_display = local_repo_path.display().to_string();
+    let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
     assert!(result.is_some());
     assert!(logs.iter().any(|msg| {
         msg.contains("repo=owner/myrepo")
@@ -289,10 +289,9 @@ fn cargo_install_logs_hash_source_details() {
                 && msg.contains(&installed_checkout_display)
                 && msg.contains("stdout=")
                 && msg.contains(&local_hash)
-        }));
+    }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("command=git -C")
-            && msg.contains(&local_repo_display)
+        msg.contains(&expected_local_command)
             && msg.contains("stdout=")
             && msg.contains(&local_hash)
     }));
