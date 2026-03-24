@@ -1,7 +1,11 @@
 use crate::github::LocalStatus;
 use anyhow::{bail, Context, Result};
-use std::io::Write;
 use std::process::Command;
+
+#[path = "github_local_cargo.rs"]
+mod cargo;
+
+pub(crate) use cargo::{check_cargo_git_install, get_cargo_bins};
 
 // ──────────────────────────────────────────────
 // Existence checks via gh REST API
@@ -37,8 +41,12 @@ pub(crate) fn check_pages_exists(owner: &str, repo: &str) -> bool {
 pub(crate) fn check_deepwiki_exists(base_dir: &str, repo_name: &str) -> bool {
     // Try README.ja.md first, then README.md as fallback
     for filename in &["README.ja.md", "README.md"] {
-        let path = format!("{}/{}/{}",
-            base_dir.trim_end_matches(|c| c == '/' || c == '\\'), repo_name, filename);
+        let path = format!(
+            "{}/{}/{}",
+            base_dir.trim_end_matches(|c| c == '/' || c == '\\'),
+            repo_name,
+            filename
+        );
         if let Ok(content) = std::fs::read_to_string(&path) {
             if content.contains("deepwiki.com") {
                 return true;
@@ -57,16 +65,20 @@ pub(crate) fn check_workflows(base_dir: &str, repo_name: &str) -> bool {
         "call-issue-note.yml",
         "call-check-large-files.yml",
     ];
-    required.iter().all(|f| {
-        std::path::Path::new(&format!("{}/{}", wf_dir, f)).exists()
-    })
+    required
+        .iter()
+        .all(|f| std::path::Path::new(&format!("{}/{}", wf_dir, f)).exists())
 }
 
 /// Scan local README.ja.md for a self-referencing badge/link ("README.ja.md" text).
 pub(crate) fn check_readme_ja_badge(base_dir: &str, repo_name: &str) -> bool {
     for filename in &["README.ja.md", "README.md"] {
-        let path = format!("{}/{}/{}",
-            base_dir.trim_end_matches(|c| c == '/' || c == '\\'), repo_name, filename);
+        let path = format!(
+            "{}/{}/{}",
+            base_dir.trim_end_matches(|c| c == '/' || c == '\\'),
+            repo_name,
+            filename
+        );
         if let Ok(content) = std::fs::read_to_string(&path) {
             if content.contains("README.ja.md") {
                 return true;
@@ -105,13 +117,17 @@ pub(crate) fn check_local_status_no_fetch(
         return (LocalStatus::Modified, true, local_changes.files);
     }
 
-    let local  = Command::new("git").args(["-C", &path, "rev-parse", "HEAD"]).output();
-    let remote = Command::new("git").args(["-C", &path, "rev-parse", "@{u}"]).output();
+    let local = Command::new("git")
+        .args(["-C", &path, "rev-parse", "HEAD"])
+        .output();
+    let remote = Command::new("git")
+        .args(["-C", &path, "rev-parse", "@{u}"])
+        .output();
     let remote_ok = remote.as_ref().map(|r| r.status.success()).unwrap_or(false);
 
     match (local, remote) {
         (Ok(l), Ok(r)) if l.status.success() && remote_ok => {
-            let local_sha  = String::from_utf8_lossy(&l.stdout).trim().to_string();
+            let local_sha = String::from_utf8_lossy(&l.stdout).trim().to_string();
             let remote_sha = String::from_utf8_lossy(&r.stdout).trim().to_string();
 
             if local_sha == remote_sha {
@@ -204,14 +220,9 @@ fn get_local_changes(repo_path: &str) -> LocalChanges {
 }
 
 fn is_unmerged_status(x: char, y: char) -> bool {
-    matches!((x, y),
-        ('A', 'A')
-        | ('D', 'D')
-        | ('U', 'D')
-        | ('D', 'U')
-        | ('A', 'U')
-        | ('U', 'A')
-        | ('U', 'U')
+    matches!(
+        (x, y),
+        ('A', 'A') | ('D', 'D') | ('U', 'D') | ('D', 'U') | ('A', 'U') | ('U', 'A') | ('U', 'U')
     )
 }
 
@@ -253,7 +264,13 @@ pub fn git_pull(base_dir: &str, repo_name: &str) -> Result<String> {
 
     run_git(
         &path,
-        &["stash", "push", "--include-untracked", "-m", "catrepo auto-pull"],
+        &[
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "catrepo auto-pull",
+        ],
         "git stash push failed",
     )?;
 
@@ -325,193 +342,21 @@ pub fn launch_lazygit(base_dir: &str, repo_name: &str) -> Result<()> {
 
 pub fn open_url(url: &str) -> Result<()> {
     #[cfg(target_os = "windows")]
-    { Command::new("cmd").args(["/C", "start", "", url]).spawn().context("Failed to open browser")?; }
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn()
+            .context("Failed to open browser")?;
+    }
     #[cfg(not(target_os = "windows"))]
-    { Command::new("xdg-open").arg(url).spawn().context("Failed to open browser")?; }
+    {
+        Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .context("Failed to open browser")?;
+    }
     Ok(())
 }
-
-// ──────────────────────────────────────────────
-// Cargo install checks
-// ──────────────────────────────────────────────
-
-/// Returns the effective CARGO_HOME path.
-fn get_cargo_home() -> String {
-    std::env::var("CARGO_HOME").unwrap_or_else(|_| {
-        let home = std::env::var("USERPROFILE")
-            .or_else(|_| std::env::var("HOME"))
-            .unwrap_or_default();
-        format!("{home}/.cargo")
-    })
-}
-
-/// Append a timestamped error message to the unified local log file.
-fn append_error_log(msg: &str) {
-    let log_path = crate::config::Config::log_path();
-    if let Some(parent) = log_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-    {
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-        let _ = writeln!(f, "[{now}] {msg}");
-    }
-}
-
-/// Get the installed binary names for a git-installed crate from .crates2.json.
-/// Returns None if not found.
-pub fn get_cargo_bins(owner: &str, repo_name: &str) -> Option<Vec<String>> {
-    let cargo_home = get_cargo_home();
-    let crates2_path = format!("{cargo_home}/.crates2.json");
-
-    let content = std::fs::read_to_string(&crates2_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let installs = json.get("installs")?.as_object()?;
-
-    let needle = format!("git+https://github.com/{owner}/{repo_name}#");
-
-    for (key, val) in installs {
-        let src = key.trim_end_matches(')');
-        if src.contains(needle.as_str()) {
-            let bins = val.get("bins")?.as_array()?;
-            return Some(
-                bins.iter()
-                    .filter_map(|b| b.as_str().map(|s| s.to_string()))
-                    .collect()
-            );
-        }
-    }
-    None
-}
-
-/// Compare the commit hash of a `cargo install --git` entry against local HEAD.
-///
-/// Method:
-///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name.
-///   2. Find `$CARGO_HOME/git/checkouts/<app_name>-*` (prefix match with "-" delimiter).
-///      Multiple matches → call `log_fn` and return None.
-///   3. Sort sub-directories of the checkout by modification timestamp; run `git rev-parse HEAD`
-///      in the most recently modified one to obtain the installed commit hash.
-///   4. Run `git rev-parse HEAD` in the local clone and compare.
-///
-/// Returns:
-///   None                         – repo not installed via `cargo install --git`, OR
-///                                  .crates2.json is missing/unreadable/unparseable, OR
-///                                  checkout directory not found, OR
-///                                  `git rev-parse HEAD` failed
-///   Some((true,  inst, local))   – installed hash == local HEAD
-///   Some((false, inst, local))   – installed hash != local HEAD (stale install)
-pub(crate) fn check_cargo_git_install(owner: &str, repo_name: &str, base_dir: &str) -> Option<(bool, String, String)> {
-    check_cargo_git_install_inner(owner, repo_name, base_dir, &get_cargo_home(), |msg| append_error_log(msg))
-}
-
-pub(crate) fn check_cargo_git_install_inner(
-    owner: &str,
-    repo_name: &str,
-    base_dir: &str,
-    cargo_home: &str,
-    mut log_fn: impl FnMut(&str),
-) -> Option<(bool, String, String)> {
-    let crates2_path = std::path::Path::new(cargo_home).join(".crates2.json");
-    log_fn(&format!(
-        "cargo check: cargo install metadata file: {}",
-        crates2_path.display()
-    ));
-
-    let content = std::fs::read_to_string(&crates2_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let installs = json.get("installs")?.as_object()?;
-
-    let needle = format!("git+https://github.com/{owner}/{repo_name}#");
-
-    // Get crate (app) name – first whitespace-separated token of the matching key.
-    // Key format: "crate_name version (git+https://github.com/owner/repo#HASH)"
-    let app_name = installs.keys().find_map(|key| {
-        let src = key.trim_end_matches(')');
-        if !src.contains(needle.as_str()) { return None; }
-        key.split_whitespace().next().map(|s| s.to_string())
-    })?;
-
-    // Find matching checkout directory: $CARGO_HOME/git/checkouts/<app_name>-*
-    // Cargo names checkout dirs as "{crate_name}-{hash}", so match with trailing "-"
-    // to avoid false-positives from crates sharing a name prefix (e.g. "foo" vs "foo-bar").
-    // The exact-name fallback handles any hypothetical future Cargo version that omits the suffix.
-    let checkouts_dir = std::path::Path::new(cargo_home).join("git").join("checkouts");
-    let prefix_with_dash = format!("{app_name}-");
-    let matches: Vec<std::path::PathBuf> = match std::fs::read_dir(&checkouts_dir) {
-        Ok(entries) => entries
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_dir())
-            .filter(|e| {
-                let name = e.file_name();
-                let s = name.to_string_lossy();
-                s.as_ref() == app_name.as_str() || s.starts_with(prefix_with_dash.as_str())
-            })
-            .map(|e| e.path())
-            .collect(),
-        Err(_) => return None,
-    };
-
-    if matches.len() > 1 {
-        log_fn(&format!(
-            "cargo check: multiple checkouts found for '{}': {:?}",
-            app_name,
-            matches.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
-        ));
-        return None;
-    }
-
-    let checkout_base = matches.into_iter().next()?;
-
-    // Pick the checkout sub-directory with the most recent modification time.
-    // When mtime is unavailable (e.g. unsupported filesystem), fall back to UNIX_EPOCH so
-    // the entry is still considered rather than silently dropped.
-    // Tie-break on path for determinism when timestamps coincide.
-    let sub_dir = std::fs::read_dir(&checkout_base)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .map(|e| {
-            let mtime = e.metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .unwrap_or(std::time::UNIX_EPOCH);
-            (mtime, e.path())
-        })
-        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
-        .1;
-    log_fn(&format!("cargo check: installed hash checkout dir: {}", sub_dir.display()));
-
-    // Obtain the installed commit hash from the cargo checkout.
-    log_fn(&format!(
-        "cargo check: installed hash source command: git -C {} rev-parse HEAD",
-        sub_dir.display()
-    ));
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(&sub_dir)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() { return None; }
-    let installed_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if installed_hash.is_empty() { return None; }
-
-    // Obtain local HEAD hash.
-    let repo_path = format!("{}/{}", base_dir.trim_end_matches(|c| c == '/' || c == '\\'), repo_name);
-    let out = Command::new("git")
-        .args(["-C", &repo_path, "rev-parse", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() { return None; }
-    let local_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
-
-    Some((installed_hash == local_hash, installed_hash, local_hash))
-}
-
 
 #[cfg(test)]
 #[path = "github_local_tests.rs"]
