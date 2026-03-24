@@ -13,7 +13,7 @@ pub(crate) use hash::check_cargo_git_install;
 #[cfg(test)]
 use bins::get_cargo_bins_inner;
 #[cfg(test)]
-use hash::{cargo_install_source_hash, check_cargo_git_install_inner};
+use hash::{check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash};
 
 /// Returns the effective CARGO_HOME path.
 fn get_cargo_home() -> String {
@@ -69,9 +69,13 @@ fn format_git_rev_parse_head_command(path: &Path) -> String {
     format!("git -C {} rev-parse HEAD", path.display())
 }
 
+fn format_git_ls_remote_main_command(owner: &str, repo_name: &str) -> String {
+    format!("git ls-remote https://github.com/{owner}/{repo_name}.git refs/heads/main")
+}
+
 /// Format a one-line comparison summary for cargo hash investigation logs.
 ///
-/// - `remote_hash`: remote hash embedded in the matching `.crates2.json` install entry
+/// - `remote_hash`: latest hash resolved from the GitHub remote repository's `main` branch
 /// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
 /// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
 ///
