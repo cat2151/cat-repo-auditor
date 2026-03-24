@@ -17,7 +17,8 @@ pub(super) fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
 ///
 /// Method:
 ///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name.
-///   2. Find `$CARGO_HOME/git/checkouts/<app_name>-*` (prefix match with "-" delimiter).
+///   2. Find `$CARGO_HOME/git/checkouts/<app_name>` or
+///      `$CARGO_HOME/git/checkouts/<app_name>-*` (exact or prefix match with "-" delimiter).
 ///      Multiple matches → call `log_fn` and return None.
 ///   3. Sort sub-directories of the checkout by modification timestamp; run `git rev-parse HEAD`
 ///      in the most recently modified one to obtain the installed commit hash.
