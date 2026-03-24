@@ -88,6 +88,28 @@ fn cargo_install_none_when_repo_not_in_crates2() {
 }
 
 #[test]
+fn cargo_install_logs_reason_when_repo_not_in_crates2() {
+    let tmp = unique_temp_dir("cargo_test_notfound_log");
+    let json = make_crates2_json("other", "other-repo", "other-repo");
+    std::fs::write(tmp.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_inner(
+        "owner",
+        "myrepo",
+        "/nonexistent",
+        tmp.to_str().unwrap(),
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert!(result.is_none());
+    assert!(logs.iter().any(|msg| {
+        msg.contains("repo=owner/myrepo") && msg.contains("no cargo install entry matched repository")
+    }));
+}
+
+#[test]
 fn cargo_install_none_when_checkouts_dir_missing() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_nocheckouts_{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
