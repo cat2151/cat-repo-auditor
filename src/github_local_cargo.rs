@@ -63,6 +63,19 @@ fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
         .filter(|hash| !hash.is_empty())
 }
 
+fn format_cargo_hash_summary(
+    metadata_hash: &str,
+    installed_hash: &str,
+    local_hash: &str,
+) -> String {
+    format!(
+        "hash summary: metadata={metadata_hash} installed={installed_hash} local={local_hash} metadata_eq_installed={} installed_eq_local={} metadata_eq_local={}",
+        metadata_hash == installed_hash,
+        installed_hash == local_hash,
+        metadata_hash == local_hash,
+    )
+}
+
 fn log_cargo_check_command_result(
     log_fn: &mut impl FnMut(&str),
     owner: &str,
@@ -432,12 +445,7 @@ pub(crate) fn check_cargo_git_install_inner(
         &mut log_fn,
         owner,
         repo_name,
-        &format!(
-            "hash summary: metadata={metadata_hash} installed={installed_hash} local={local_hash} metadata_eq_installed={} installed_eq_local={} metadata_eq_local={}",
-            metadata_hash == installed_hash,
-            installed_hash == local_hash,
-            metadata_hash == local_hash,
-        ),
+        &format_cargo_hash_summary(metadata_hash, &installed_hash, &local_hash),
     );
 
     Some((installed_hash == local_hash, installed_hash, local_hash))

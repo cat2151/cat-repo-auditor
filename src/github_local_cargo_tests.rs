@@ -1,4 +1,4 @@
-use super::{check_cargo_git_install_inner, get_cargo_bins_inner};
+use super::{cargo_install_source_hash, check_cargo_git_install_inner, get_cargo_bins_inner};
 use std::process::Command as Cmd;
 use std::time::Duration;
 
@@ -52,6 +52,24 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos));
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+#[test]
+fn cargo_install_source_hash_extracts_hash_and_trims_closing_paren() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#0123456789abcdef)";
+    assert_eq!(cargo_install_source_hash(entry), Some("0123456789abcdef"));
+}
+
+#[test]
+fn cargo_install_source_hash_returns_none_without_hash_separator() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo)";
+    assert_eq!(cargo_install_source_hash(entry), None);
+}
+
+#[test]
+fn cargo_install_source_hash_returns_none_when_hash_is_empty() {
+    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#)";
+    assert_eq!(cargo_install_source_hash(entry), None);
 }
 
 #[test]
