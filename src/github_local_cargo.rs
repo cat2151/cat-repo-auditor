@@ -90,17 +90,18 @@ fn format_cargo_hash_summary(
         }
     }
 
+    fn format_match_status(label: &str, matches: bool) -> String {
+        format!("{label}={matches} ({})", match_status(matches))
+    }
+
     let remote_eq_installed = metadata_hash == installed_hash;
     let installed_eq_local = installed_hash == local_hash;
     let remote_eq_local = metadata_hash == local_hash;
+    let remote_vs_installed = format_match_status("remote_eq_installed", remote_eq_installed);
+    let installed_vs_local = format_match_status("installed_eq_local", installed_eq_local);
+    let remote_vs_local = format_match_status("remote_eq_local", remote_eq_local);
     format!(
-        "hash summary: remote hash={metadata_hash} installed hash={installed_hash} local hash={local_hash} remote_eq_installed={} ({}) installed_eq_local={} ({}) remote_eq_local={} ({})",
-        remote_eq_installed,
-        match_status(remote_eq_installed),
-        installed_eq_local,
-        match_status(installed_eq_local),
-        remote_eq_local,
-        match_status(remote_eq_local),
+        "hash summary: remote hash={metadata_hash} installed hash={installed_hash} local hash={local_hash} {remote_vs_installed} {installed_vs_local} {remote_vs_local}",
     )
 }
 
