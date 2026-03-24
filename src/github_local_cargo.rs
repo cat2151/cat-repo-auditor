@@ -56,6 +56,13 @@ fn format_git_rev_parse_head_command(path: &Path) -> String {
     format!("git -C {} rev-parse HEAD", path.display())
 }
 
+fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
+    matched_entry
+        .rsplit_once('#')
+        .map(|(_, hash)| hash.trim_end_matches(')'))
+        .filter(|hash| !hash.is_empty())
+}
+
 fn log_cargo_check_command_result(
     log_fn: &mut impl FnMut(&str),
     owner: &str,
@@ -225,12 +232,15 @@ pub(crate) fn check_cargo_git_install_inner(
             return None;
         }
     };
+    let metadata_hash = cargo_install_source_hash(&matched_entry).unwrap_or("<missing>");
     log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
         &crates2_path,
-        &format!("matched install entry={matched_entry:?}, matched crate name={app_name:?}"),
+        &format!(
+            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, metadata hash={metadata_hash}"
+        ),
     );
 
     let checkouts_dir = std::path::Path::new(cargo_home)
@@ -417,6 +427,18 @@ pub(crate) fn check_cargo_git_install_inner(
         );
         return None;
     }
+
+    log_cargo_check_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        &format!(
+            "hash summary: metadata={metadata_hash} installed={installed_hash} local={local_hash} metadata_eq_installed={} installed_eq_local={} metadata_eq_local={}",
+            metadata_hash == installed_hash,
+            installed_hash == local_hash,
+            metadata_hash == local_hash,
+        ),
+    );
 
     Some((installed_hash == local_hash, installed_hash, local_hash))
 }

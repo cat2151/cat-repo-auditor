@@ -296,11 +296,13 @@ fn cargo_install_logs_hash_source_details() {
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
     let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
+    let metadata_hash = "0123456789abcdef0123456789abcdef01234567";
     assert!(result.is_some());
     assert!(logs.iter().any(|msg| {
         msg.contains("repo=owner/myrepo")
             && msg.contains(&crates2_path_display)
             && msg.contains("matched install entry=")
+            && msg.contains(&format!("metadata hash={metadata_hash}"))
     }));
     assert!(logs
         .iter()
@@ -315,6 +317,15 @@ fn cargo_install_logs_hash_source_details() {
         msg.contains(&expected_local_command)
             && msg.contains("stdout=")
             && msg.contains(&local_hash)
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("hash summary:")
+            && msg.contains(&format!("metadata={metadata_hash}"))
+            && msg.contains(&format!("installed={local_hash}"))
+            && msg.contains(&format!("local={local_hash}"))
+            && msg.contains("metadata_eq_installed=false")
+            && msg.contains("installed_eq_local=true")
+            && msg.contains("metadata_eq_local=false")
     }));
 }
 
