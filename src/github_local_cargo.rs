@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// Returns the effective CARGO_HOME path.
 fn get_cargo_home() -> String {
@@ -26,6 +26,38 @@ fn append_error_log(msg: &str) {
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
         let _ = writeln!(f, "[{now}] {msg}");
     }
+}
+
+fn log_cargo_check_path_result(
+    log_fn: &mut impl FnMut(&str),
+    owner: &str,
+    repo_name: &str,
+    path: &Path,
+    result: &str,
+) {
+    log_fn(&format!(
+        "cargo check: repo={owner}/{repo_name} path={} result={result}",
+        path.display()
+    ));
+}
+
+fn format_git_rev_parse_head_command(path: &Path) -> String {
+    format!("git -C {} rev-parse HEAD", path.display())
+}
+
+fn log_cargo_check_command_result(
+    log_fn: &mut impl FnMut(&str),
+    owner: &str,
+    repo_name: &str,
+    command: &str,
+    output: &Output,
+) {
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    log_fn(&format!(
+        "cargo check: repo={owner}/{repo_name} command={command} result=status={} stdout={stdout:?} stderr={stderr:?}",
+        output.status
+    ));
 }
 
 /// Get the installed binary names for a git-installed crate from .crates2.json.
@@ -98,10 +130,13 @@ pub(crate) fn check_cargo_git_install_inner(
     mut log_fn: impl FnMut(&str),
 ) -> Option<(bool, String, String)> {
     let crates2_path = std::path::Path::new(cargo_home).join(".crates2.json");
-    log_fn(&format!(
-        "cargo check: cargo install metadata file: {}",
-        crates2_path.display()
-    ));
+    log_cargo_check_path_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        &crates2_path,
+        "cargo install metadata file",
+    );
 
     let content = std::fs::read_to_string(&crates2_path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
@@ -109,13 +144,23 @@ pub(crate) fn check_cargo_git_install_inner(
 
     let needle = format!("git+https://github.com/{owner}/{repo_name}#");
 
-    let app_name = installs.keys().find_map(|key| {
-        let src = key.trim_end_matches(')');
-        if !src.contains(needle.as_str()) {
-            return None;
-        }
-        key.split_whitespace().next().map(|s| s.to_string())
-    })?;
+    let matched_entry = installs
+        .keys()
+        .find(|key| key.trim_end_matches(')').contains(needle.as_str()))?
+        .to_string();
+    let app_name = matched_entry
+        .split_whitespace()
+        .next()
+        .map(|s| s.to_string())?;
+    log_cargo_check_path_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        &crates2_path,
+        &format!(
+            "matched install entry={matched_entry:?}, matched crate name={app_name:?}"
+        ),
+    );
 
     let checkouts_dir = std::path::Path::new(cargo_home)
         .join("git")
@@ -136,14 +181,19 @@ pub(crate) fn check_cargo_git_install_inner(
     };
 
     if matches.len() > 1 {
-        log_fn(&format!(
-            "cargo check: multiple checkouts found for '{}': {:?}",
-            app_name,
-            matches
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-        ));
+        log_cargo_check_path_result(
+            &mut log_fn,
+            owner,
+            repo_name,
+            &checkouts_dir,
+            &format!(
+                "multiple checkouts found for {app_name:?}: {:?}",
+                matches
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+            ),
+        );
         return None;
     }
 
@@ -163,21 +213,22 @@ pub(crate) fn check_cargo_git_install_inner(
         })
         .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))?
         .1;
-    log_fn(&format!(
-        "cargo check: installed hash checkout dir: {}",
-        sub_dir.display()
-    ));
+    log_cargo_check_path_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        &checkouts_dir,
+        &format!("selected checkout dir={}", sub_dir.display()),
+    );
 
-    log_fn(&format!(
-        "cargo check: installed hash source command: git -C {} rev-parse HEAD",
-        sub_dir.display()
-    ));
+    let installed_command = format_git_rev_parse_head_command(&sub_dir);
     let out = Command::new("git")
         .arg("-C")
         .arg(&sub_dir)
         .args(["rev-parse", "HEAD"])
         .output()
         .ok()?;
+    log_cargo_check_command_result(&mut log_fn, owner, repo_name, &installed_command, &out);
     if !out.status.success() {
         return None;
     }
@@ -186,15 +237,15 @@ pub(crate) fn check_cargo_git_install_inner(
         return None;
     }
 
-    let repo_path = format!(
-        "{}/{}",
-        base_dir.trim_end_matches(|c| c == '/' || c == '\\'),
-        repo_name
-    );
+    let repo_path = Path::new(base_dir).join(repo_name);
+    let local_command = format_git_rev_parse_head_command(&repo_path);
     let out = Command::new("git")
-        .args(["-C", &repo_path, "rev-parse", "HEAD"])
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["rev-parse", "HEAD"])
         .output()
         .ok()?;
+    log_cargo_check_command_result(&mut log_fn, owner, repo_name, &local_command, &out);
     if !out.status.success() {
         return None;
     }

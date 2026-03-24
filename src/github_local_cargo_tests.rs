@@ -233,7 +233,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
 fn cargo_install_logs_hash_source_details() {
     let tmp = unique_temp_dir("cargo_test_hash_log");
     let local_repo_path = tmp.join("repos").join("myrepo");
-    init_git_repo(&local_repo_path);
+    let local_hash = init_git_repo(&local_repo_path);
 
     let cargo_home = tmp.join("cargo_home");
     let installed_checkout_path = cargo_home
@@ -272,14 +272,29 @@ fn cargo_install_logs_hash_source_details() {
 
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
+    let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
     assert!(result.is_some());
-    assert!(logs.iter().any(|msg| msg.contains(&crates2_path_display)));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("repo=owner/myrepo")
+            && msg.contains(&crates2_path_display)
+            && msg.contains("matched install entry=")
+    }));
     assert!(logs
         .iter()
         .any(|msg| msg.contains(&installed_checkout_display)));
     assert!(logs
         .iter()
-        .any(|msg| msg.contains("git -C") && msg.contains("rev-parse HEAD")));
+        .any(|msg| {
+            msg.contains("command=git -C")
+                && msg.contains(&installed_checkout_display)
+                && msg.contains("stdout=")
+                && msg.contains(&local_hash)
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains(&expected_local_command)
+            && msg.contains("stdout=")
+            && msg.contains(&local_hash)
+    }));
 }
 
 #[test]
