@@ -194,23 +194,21 @@ pub(crate) fn check_cargo_git_install_inner(
 
     let needle = format!("git+https://github.com/{owner}/{repo_name}#");
 
-    if !installs
-        .keys()
-        .any(|key| key.trim_end_matches(')').contains(needle.as_str()))
-    {
-        log_cargo_check_result(
-            &mut log_fn,
-            owner,
-            repo_name,
-            "no cargo install entry matched repository",
-        );
-        return None;
-    }
-    let matched_entry = installs
+    let matched_entry = match installs
         .keys()
         .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
-        .expect("matched entry existence checked above")
-        .to_string();
+    {
+        Some(entry) => entry.to_string(),
+        None => {
+            log_cargo_check_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                "no cargo install entry matched repository",
+            );
+            return None;
+        }
+    };
     let app_name = match matched_entry
         .split_whitespace()
         .next()
@@ -290,7 +288,21 @@ pub(crate) fn check_cargo_git_install_inner(
         return None;
     }
 
-    let checkout_base = matches.into_iter().next().expect("matches is not empty");
+    let checkout_base = match matches.into_iter().next() {
+        Some(path) => path,
+        None => {
+            log_cargo_check_path_result(
+                &mut log_fn,
+                owner,
+                repo_name,
+                &checkouts_dir,
+                &format!(
+                    "no checkout dir found for {app_name:?} after filtering (internal inconsistency)"
+                ),
+            );
+            return None;
+        }
+    };
 
     let checkout_entries = match std::fs::read_dir(&checkout_base) {
         Ok(entries) => entries,
