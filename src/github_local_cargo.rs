@@ -71,18 +71,36 @@ fn format_git_rev_parse_head_command(path: &Path) -> String {
 
 /// Format a one-line comparison summary for cargo hash investigation logs.
 ///
-/// - `metadata_hash`: hash embedded in the matching `.crates2.json` install entry
+/// - `metadata_hash`: remote hash embedded in the matching `.crates2.json` install entry
 /// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
 /// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
 ///
 /// Logging all three values together makes it easier to see which source diverges when
 /// an unexpected hash is being observed in the field.
-fn format_cargo_hash_summary(metadata_hash: &str, installed_hash: &str, local_hash: &str) -> String {
+fn format_cargo_hash_summary(
+    metadata_hash: &str,
+    installed_hash: &str,
+    local_hash: &str,
+) -> String {
+    fn match_status(matches: bool) -> &'static str {
+        if matches {
+            "match"
+        } else {
+            "mismatch"
+        }
+    }
+
+    let remote_eq_installed = metadata_hash == installed_hash;
+    let installed_eq_local = installed_hash == local_hash;
+    let remote_eq_local = metadata_hash == local_hash;
     format!(
-        "hash summary: metadata={metadata_hash} installed={installed_hash} local={local_hash} metadata_eq_installed={} installed_eq_local={} metadata_eq_local={}",
-        metadata_hash == installed_hash,
-        installed_hash == local_hash,
-        metadata_hash == local_hash,
+        "hash summary: remote hash={metadata_hash} installed hash={installed_hash} local hash={local_hash} remote_eq_installed={} ({}) installed_eq_local={} ({}) remote_eq_local={} ({})",
+        remote_eq_installed,
+        match_status(remote_eq_installed),
+        installed_eq_local,
+        match_status(installed_eq_local),
+        remote_eq_local,
+        match_status(remote_eq_local),
     )
 }
 

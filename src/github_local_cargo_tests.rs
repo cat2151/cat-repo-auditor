@@ -320,7 +320,7 @@ fn cargo_install_logs_hash_source_details() {
         msg.contains("repo=owner/myrepo")
             && msg.contains(&crates2_path_display)
             && msg.contains("matched install entry=")
-            && msg.contains(&format!("metadata hash={metadata_hash}"))
+            && msg.contains(&format!("remote hash={metadata_hash}"))
     }));
     assert!(logs
         .iter()
@@ -338,12 +338,12 @@ fn cargo_install_logs_hash_source_details() {
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains("hash summary:")
-            && msg.contains(&format!("metadata={metadata_hash}"))
-            && msg.contains(&format!("installed={local_hash}"))
-            && msg.contains(&format!("local={local_hash}"))
-            && msg.contains("metadata_eq_installed=false")
-            && msg.contains("installed_eq_local=true")
-            && msg.contains("metadata_eq_local=false")
+            && msg.contains(&format!("remote hash={metadata_hash}"))
+            && msg.contains(&format!("installed hash={local_hash}"))
+            && msg.contains(&format!("local hash={local_hash}"))
+            && msg.contains("remote_eq_installed=false (mismatch)")
+            && msg.contains("installed_eq_local=true (match)")
+            && msg.contains("remote_eq_local=false (mismatch)")
     }));
 }
 

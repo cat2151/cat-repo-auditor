@@ -36,9 +36,13 @@ pub(crate) fn check_cargo_git_install(
     repo_name: &str,
     base_dir: &str,
 ) -> Option<(bool, String, String)> {
-    check_cargo_git_install_inner(owner, repo_name, base_dir, &super::get_cargo_home(), |msg| {
-        super::append_error_log(msg)
-    })
+    check_cargo_git_install_inner(
+        owner,
+        repo_name,
+        base_dir,
+        &super::get_cargo_home(),
+        |msg| super::append_error_log(msg),
+    )
 }
 
 /// Internal function exposed for testing.
@@ -141,7 +145,7 @@ pub(super) fn check_cargo_git_install_inner(
         repo_name,
         &crates2_path,
         &format!(
-            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, metadata hash={metadata_hash}"
+            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, remote hash={metadata_hash}"
         ),
     );
 
