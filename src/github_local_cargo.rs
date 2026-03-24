@@ -56,6 +56,11 @@ fn format_git_rev_parse_head_command(path: &Path) -> String {
     format!("git -C {} rev-parse HEAD", path.display())
 }
 
+/// Extract the git source hash from a `.crates2.json` install entry key such as
+/// `myrepo 0.1.0 (git+https://github.com/owner/myrepo#<hash>)`.
+///
+/// Returns `Some(<hash>)` when the trailing `#<hash>` portion is present and non-empty.
+/// Returns `None` when the entry does not contain a usable git hash.
 fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
     matched_entry
         .rsplit_once('#')
@@ -63,6 +68,14 @@ fn cargo_install_source_hash(matched_entry: &str) -> Option<&str> {
         .filter(|hash| !hash.is_empty())
 }
 
+/// Format a one-line comparison summary for cargo hash investigation logs.
+///
+/// - `metadata_hash`: hash embedded in the matching `.crates2.json` install entry
+/// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
+/// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
+///
+/// Logging all three values together makes it easier to see which source diverges when
+/// an unexpected hash is being observed in the field.
 fn format_cargo_hash_summary(
     metadata_hash: &str,
     installed_hash: &str,
