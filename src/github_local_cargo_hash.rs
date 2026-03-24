@@ -138,14 +138,14 @@ pub(super) fn check_cargo_git_install_inner(
             return None;
         }
     };
-    let metadata_hash = cargo_install_source_hash(&matched_entry).unwrap_or("<missing>");
+    let remote_hash = cargo_install_source_hash(&matched_entry).unwrap_or("<missing>");
     super::log_cargo_check_path_result(
         &mut log_fn,
         owner,
         repo_name,
         &crates2_path,
         &format!(
-            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, remote hash={metadata_hash}"
+            "matched install entry={matched_entry:?}, matched crate name={app_name:?}, remote hash={remote_hash}"
         ),
     );
 
@@ -336,7 +336,7 @@ pub(super) fn check_cargo_git_install_inner(
         &mut log_fn,
         owner,
         repo_name,
-        &super::format_cargo_hash_summary(metadata_hash, &installed_hash, &local_hash),
+        &super::format_cargo_hash_summary(remote_hash, &installed_hash, &local_hash),
     );
 
     Some((installed_hash == local_hash, installed_hash, local_hash))

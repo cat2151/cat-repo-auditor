@@ -71,17 +71,13 @@ fn format_git_rev_parse_head_command(path: &Path) -> String {
 
 /// Format a one-line comparison summary for cargo hash investigation logs.
 ///
-/// - `metadata_hash`: remote hash embedded in the matching `.crates2.json` install entry
+/// - `remote_hash`: remote hash embedded in the matching `.crates2.json` install entry
 /// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
 /// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
 ///
 /// Logging all three values together makes it easier to see which source diverges when
 /// an unexpected hash is being observed in the field.
-fn format_cargo_hash_summary(
-    metadata_hash: &str,
-    installed_hash: &str,
-    local_hash: &str,
-) -> String {
+fn format_cargo_hash_summary(remote_hash: &str, installed_hash: &str, local_hash: &str) -> String {
     fn match_status(matches: bool) -> &'static str {
         if matches {
             "match"
@@ -94,14 +90,14 @@ fn format_cargo_hash_summary(
         format!("{label}={matches} ({})", match_status(matches))
     }
 
-    let remote_eq_installed = metadata_hash == installed_hash;
+    let remote_eq_installed = remote_hash == installed_hash;
     let installed_eq_local = installed_hash == local_hash;
-    let remote_eq_local = metadata_hash == local_hash;
+    let remote_eq_local = remote_hash == local_hash;
     let remote_vs_installed = format_match_status("remote_eq_installed", remote_eq_installed);
     let installed_vs_local = format_match_status("installed_eq_local", installed_eq_local);
     let remote_vs_local = format_match_status("remote_eq_local", remote_eq_local);
     format!(
-        "hash summary: remote hash={metadata_hash} installed hash={installed_hash} local hash={local_hash} {remote_vs_installed} {installed_vs_local} {remote_vs_local}",
+        "hash summary: remote hash={remote_hash} installed hash={installed_hash} local hash={local_hash} {remote_vs_installed} {installed_vs_local} {remote_vs_local}",
     )
 }
 
