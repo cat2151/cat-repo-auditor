@@ -83,12 +83,12 @@ fn make_test_app_with_focus(window_focused: bool) -> App {
 fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("system clock should be after unix epoch")
         .as_nanos();
     let pid = std::process::id();
     let dir_name = format!("{prefix}_{pid}_{nanos}");
     let dir = std::env::temp_dir().join(dir_name);
-    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(&dir).expect("failed to create temporary UI test directory");
     dir
 }
 
@@ -110,7 +110,7 @@ impl TempDirGuard {
 
 impl Drop for TempDirGuard {
     fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.path).unwrap();
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 
