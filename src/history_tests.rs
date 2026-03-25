@@ -2,16 +2,12 @@ use super::*;
 
 #[test]
 fn save_and_load_roundtrip() {
-    let tmp = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_history_test_{}.json",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir()
+        .join(format!("cat_repo_auditor_history_test_{}.json", std::process::id()));
     let path_str = tmp.to_str().unwrap();
 
     let mut history = History::default();
-    history
-        .etags
-        .insert(String::from("owner"), String::from("etag123"));
+    history.etags.insert(String::from("owner"), String::from("etag123"));
 
     history.save(path_str).unwrap();
     let loaded = History::load(path_str).unwrap();
@@ -24,10 +20,8 @@ fn save_and_load_roundtrip() {
 
 #[test]
 fn load_nonexistent_file_returns_error() {
-    let path = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_no_such_file_{}.json",
-        std::process::id()
-    ));
+    let path = std::env::temp_dir()
+        .join(format!("cat_repo_auditor_no_such_file_{}.json", std::process::id()));
     // Ensure the file does not exist before testing
     std::fs::remove_file(&path).ok();
     let result = History::load(path.to_str().unwrap());
@@ -38,10 +32,8 @@ fn load_nonexistent_file_returns_error() {
 fn save_and_load_with_rate_limit() {
     use crate::github::RateLimit;
 
-    let tmp = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_rl_test_{}.json",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir()
+        .join(format!("cat_repo_auditor_rl_test_{}.json", std::process::id()));
     let path_str = tmp.to_str().unwrap();
 
     let mut history = History::default();
