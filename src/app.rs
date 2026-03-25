@@ -264,12 +264,21 @@ impl App {
         self.show_log = !self.show_log;
     }
 
+    fn trim_log_lines(lines: &mut Vec<String>) {
+        if lines.len() > MAX_LOG_LINES {
+            let excess = lines.len() - MAX_LOG_LINES;
+            lines.drain(0..excess);
+        }
+    }
+
+    pub fn set_log_lines(&mut self, mut lines: Vec<String>) {
+        Self::trim_log_lines(&mut lines);
+        self.log_lines = lines;
+    }
+
     pub fn append_log_line(&mut self, line: String) {
         self.log_lines.push(line);
-        if self.log_lines.len() > MAX_LOG_LINES {
-            let excess = self.log_lines.len() - MAX_LOG_LINES;
-            self.log_lines.drain(0..excess);
-        }
+        Self::trim_log_lines(&mut self.log_lines);
     }
 
     // ── search ───────────────────────────────────────────────────────────────

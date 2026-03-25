@@ -1,7 +1,8 @@
 use crate::{
     app::App,
+    config::Config,
     github::LocalStatus,
-    main_helpers::refresh_log_lines_if_changed,
+    main_helpers::refresh_log_lines_if_changed_for_path,
     ui_detail::{
         draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right, CARGO_OLD_BOX_H,
         LOCAL_CHANGES_BOX_H,
@@ -22,6 +23,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
+use std::path::Path;
 
 use draw_left::draw_left;
 
@@ -114,12 +116,15 @@ where
 
 // ── draw_ui ──────────────────────────────────────────────────────────────────
 
+fn refresh_visible_log_panel(app: &mut App, log_path: &Path) {
+    if app.show_log {
+        refresh_log_lines_if_changed_for_path(app, log_path);
+    }
+}
+
 pub fn draw_ui(f: &mut Frame, app: &mut App) {
     let area = f.area();
-
-    if app.show_log {
-        refresh_log_lines_if_changed(app);
-    }
+    refresh_visible_log_panel(app, &Config::log_path());
 
     let outer = Layout::default()
         .direction(Direction::Vertical)

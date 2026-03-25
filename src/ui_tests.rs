@@ -2,7 +2,6 @@ use super::*;
 use crate::{app::App, config::Config};
 use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
 use ratatui::{backend::TestBackend, Terminal};
-use std::sync::{Mutex, OnceLock};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -111,36 +110,6 @@ impl TempDirGuard {
 impl Drop for TempDirGuard {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.path);
-    }
-}
-
-fn env_lock() -> &'static Mutex<()> {
-    // Tests mutate process-wide environment variables to redirect Config::log_path(),
-    // so serialize them to avoid cross-test interference.
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-struct ScopedEnvVar {
-    key: &'static str,
-    value: Option<std::ffi::OsString>,
-}
-
-impl ScopedEnvVar {
-    fn set(key: &'static str, value: &std::path::Path) -> Self {
-        let old = std::env::var_os(key);
-        std::env::set_var(key, value);
-        Self { key, value: old }
-    }
-}
-
-impl Drop for ScopedEnvVar {
-    fn drop(&mut self) {
-        if let Some(value) = &self.value {
-            std::env::set_var(self.key, value);
-        } else {
-            std::env::remove_var(self.key);
-        }
     }
 }
 
@@ -381,23 +350,35 @@ fn draw_ui_keeps_active_border_color_when_window_is_focused() {
 
 #[test]
 fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
-    let _lock_guard = env_lock().lock().unwrap();
     let tmp = TempDirGuard::new("ui_log_refresh");
-    let _xdg = ScopedEnvVar::set("XDG_CONFIG_HOME", tmp.path());
-
-    let log_path = Config::log_path();
-    std::fs::create_dir_all(log_path.parent().unwrap()).unwrap();
+    let log_path = tmp.path().join("log.txt");
     std::fs::write(&log_path, "disk line 1\ndisk line 2\n").unwrap();
 
-    let backend = TestBackend::new(80, 20);
-    let mut terminal = Terminal::new(backend).unwrap();
     let mut app = make_test_app_with_focus(true);
     app.show_log = true;
     app.log_lines = vec![String::from("stale line")];
-
-    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+    refresh_visible_log_panel(&mut app, &log_path);
 
     assert_eq!(app.log_lines, vec!["disk line 1", "disk line 2"]);
+}
+
+#[test]
+fn refresh_visible_log_panel_caps_reloaded_log_history() {
+    let tmp = TempDirGuard::new("ui_log_refresh_cap");
+    let log_path = tmp.path().join("log.txt");
+    let content = (0..2_100)
+        .map(|i| format!("line{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&log_path, format!("{content}\n")).unwrap();
+
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = true;
+    refresh_visible_log_panel(&mut app, &log_path);
+
+    assert_eq!(app.log_lines.len(), 2_000);
+    assert_eq!(app.log_lines.first().unwrap(), "line100");
+    assert_eq!(app.log_lines.last().unwrap(), "line2099");
 }
 
 // ── background task spinner ───────────────────────────────────────────────────

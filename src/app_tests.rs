@@ -433,3 +433,13 @@ fn append_log_line_caps_history() {
     assert_eq!(app.log_lines.first().unwrap(), "line100");
     assert_eq!(app.log_lines.last().unwrap(), "line2099");
 }
+
+#[test]
+fn set_log_lines_caps_history() {
+    let mut app = App::new(make_config());
+    let lines: Vec<String> = (0..2_100).map(|i| format!("line{i}")).collect();
+    app.set_log_lines(lines);
+    assert_eq!(app.log_lines.len(), 2_000);
+    assert_eq!(app.log_lines.first().unwrap(), "line100");
+    assert_eq!(app.log_lines.last().unwrap(), "line2099");
+}

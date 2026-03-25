@@ -2,6 +2,7 @@ use chrono::Local;
 use std::{
     fs::OpenOptions,
     io::{self, BufRead, BufReader, Write},
+    path::Path,
     sync::mpsc,
     time::SystemTime,
 };
@@ -19,8 +20,7 @@ pub(crate) fn start_fetch(config: Config, history: History) -> mpsc::Receiver<Fe
     rx
 }
 
-pub(crate) fn read_log_lines() -> Vec<String> {
-    let path = Config::log_path();
+pub(crate) fn read_log_lines_from_path(path: &Path) -> Vec<String> {
     let f = match std::fs::File::open(path) {
         Ok(f) => f,
         Err(_) => return vec![],
@@ -31,18 +31,26 @@ pub(crate) fn read_log_lines() -> Vec<String> {
         .collect()
 }
 
-pub(crate) fn log_last_modified() -> Option<SystemTime> {
-    std::fs::metadata(Config::log_path())
+pub(crate) fn log_last_modified_for_path(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path)
         .ok()
         .and_then(|meta| meta.modified().ok())
 }
 
-pub(crate) fn refresh_log_lines_if_changed(app: &mut App) {
-    let last_modified = log_last_modified();
+pub(crate) fn log_last_modified() -> Option<SystemTime> {
+    log_last_modified_for_path(&Config::log_path())
+}
+
+pub(crate) fn refresh_log_lines_if_changed_for_path(app: &mut App, path: &Path) {
+    let last_modified = log_last_modified_for_path(path);
     if app.log_last_modified != last_modified {
-        app.log_lines = read_log_lines();
+        app.set_log_lines(read_log_lines_from_path(path));
         app.log_last_modified = last_modified;
     }
+}
+
+pub(crate) fn refresh_log_lines_if_changed(app: &mut App) {
+    refresh_log_lines_if_changed_for_path(app, &Config::log_path());
 }
 
 fn append_log_line(line: &str) -> io::Result<()> {
