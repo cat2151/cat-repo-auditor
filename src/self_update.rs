@@ -48,8 +48,7 @@ pub fn run_self_update() -> anyhow::Result<bool> {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
-        let bat_path = std::env::temp_dir()
-            .join(format!("catrepo_update_{pid}_{ts}.bat"));
+        let bat_path = std::env::temp_dir().join(format!("catrepo_update_{pid}_{ts}.bat"));
         {
             let mut f = std::fs::OpenOptions::new()
                 .write(true)
@@ -59,7 +58,8 @@ pub fn run_self_update() -> anyhow::Result<bool> {
         }
 
         // Launch the bat file detached so it outlives this process.
-        let bat_str = bat_path.to_str()
+        let bat_str = bat_path
+            .to_str()
             .ok_or_else(|| anyhow::anyhow!("temp bat path is not valid UTF-8"))?;
         Command::new("cmd")
             .args(["/C", "start", "", bat_str])
@@ -96,8 +96,11 @@ pub fn check_self_update() -> Option<String> {
     let endpoint = format!("/repos/{OWNER_REPO}/commits/main");
     let out = Command::new("gh")
         .args(["api", &endpoint, "--jq", ".sha"])
-        .output().ok()?;
-    if !out.status.success() { return None; }
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
     let remote_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
 
     if is_update_available(build_hash, &remote_hash) {

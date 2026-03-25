@@ -97,19 +97,25 @@ impl App {
         if self.search_query.is_empty() {
             self.filtered_rows = self.rows.clone();
         } else {
-            let terms: Vec<String> = self.search_query
+            let terms: Vec<String> = self
+                .search_query
                 .split_whitespace()
                 .map(|t| t.to_lowercase())
                 .collect();
-            self.filtered_rows = self.rows.iter().filter(|row| {
-                match row {
-                    RepoRow::Separator(_) => false, // hide separators in search results
-                    RepoRow::Repo(idx) => {
-                        let name = self.repos[*idx].name.to_lowercase();
-                        terms.iter().all(|t| name.contains(t.as_str()))
+            self.filtered_rows = self
+                .rows
+                .iter()
+                .filter(|row| {
+                    match row {
+                        RepoRow::Separator(_) => false, // hide separators in search results
+                        RepoRow::Repo(idx) => {
+                            let name = self.repos[*idx].name.to_lowercase();
+                            terms.iter().all(|t| name.contains(t.as_str()))
+                        }
                     }
-                }
-            }).cloned().collect();
+                })
+                .cloned()
+                .collect();
         }
         // clamp cursor
         if self.filtered_rows.is_empty() {
@@ -122,7 +128,9 @@ impl App {
 
     fn snap_cursor_to_repo(&mut self, forward: bool) {
         let len = self.filtered_rows.len();
-        if len == 0 { return; }
+        if len == 0 {
+            return;
+        }
         let start = self.row_cursor;
         let mut i = start;
         loop {
@@ -130,18 +138,28 @@ impl App {
                 self.row_cursor = i;
                 return;
             }
-            if forward { i = (i + 1) % len; }
-            else {
-                if i == 0 { self.snap_cursor_to_repo(true); return; }
+            if forward {
+                i = (i + 1) % len;
+            } else {
+                if i == 0 {
+                    self.snap_cursor_to_repo(true);
+                    return;
+                }
                 i -= 1;
             }
-            if i == start { break; }
+            if i == start {
+                break;
+            }
         }
     }
 
     pub fn selected_repo_idx(&self) -> Option<usize> {
         self.filtered_rows.get(self.row_cursor).and_then(|r| {
-            if let RepoRow::Repo(idx) = r { Some(*idx) } else { None }
+            if let RepoRow::Repo(idx) = r {
+                Some(*idx)
+            } else {
+                None
+            }
         })
     }
 
@@ -161,17 +179,23 @@ impl App {
                 }
                 i += 1;
             }
-            if i >= self.filtered_rows.len() { break; }
+            if i >= self.filtered_rows.len() {
+                break;
+            }
         }
         self.reset_detail();
     }
 
     pub fn repo_move_up(&mut self, n: usize) {
         for _ in 0..n {
-            if self.row_cursor == 0 { break; }
+            if self.row_cursor == 0 {
+                break;
+            }
             let mut i = self.row_cursor;
             loop {
-                if i == 0 { break; }
+                if i == 0 {
+                    break;
+                }
                 i -= 1;
                 if matches!(self.filtered_rows[i], RepoRow::Repo(_)) {
                     self.row_cursor = i;
@@ -182,8 +206,12 @@ impl App {
         self.reset_detail();
     }
 
-    pub fn repo_page_down(&mut self) { self.repo_move_down(self.left_visible.saturating_sub(1).max(1)); }
-    pub fn repo_page_up(&mut self)   { self.repo_move_up(self.left_visible.saturating_sub(1).max(1)); }
+    pub fn repo_page_down(&mut self) {
+        self.repo_move_down(self.left_visible.saturating_sub(1).max(1));
+    }
+    pub fn repo_page_up(&mut self) {
+        self.repo_move_up(self.left_visible.saturating_sub(1).max(1));
+    }
 
     fn reset_detail(&mut self) {
         self.detail_selected = 0;
@@ -191,7 +219,9 @@ impl App {
     }
 
     pub fn adjust_row_scroll(&mut self, visible: usize) {
-        if visible == 0 { return; }
+        if visible == 0 {
+            return;
+        }
         if self.row_cursor < self.row_scroll {
             self.row_scroll = self.row_cursor;
         } else if self.row_cursor >= self.row_scroll + visible {
@@ -202,8 +232,11 @@ impl App {
     // ── right pane movement ──────────────────────────────────────────────────
 
     pub fn detail_len(&self) -> usize {
-        if let Some(r) = self.selected_repo() { build_detail_items(r).len() }
-        else { 0 }
+        if let Some(r) = self.selected_repo() {
+            build_detail_items(r).len()
+        } else {
+            0
+        }
     }
 
     pub fn detail_move_down(&mut self, n: usize) {
@@ -215,11 +248,17 @@ impl App {
         self.detail_selected = self.detail_selected.saturating_sub(n);
     }
 
-    pub fn detail_page_down(&mut self) { self.detail_move_down(self.right_visible.saturating_sub(1).max(1)); }
-    pub fn detail_page_up(&mut self)   { self.detail_move_up(self.right_visible.saturating_sub(1).max(1)); }
+    pub fn detail_page_down(&mut self) {
+        self.detail_move_down(self.right_visible.saturating_sub(1).max(1));
+    }
+    pub fn detail_page_up(&mut self) {
+        self.detail_move_up(self.right_visible.saturating_sub(1).max(1));
+    }
 
     pub fn adjust_detail_scroll(&mut self, visible: usize) {
-        if visible == 0 { return; }
+        if visible == 0 {
+            return;
+        }
         if self.detail_selected < self.detail_scroll {
             self.detail_scroll = self.detail_selected;
         } else if self.detail_selected >= self.detail_scroll + visible {
@@ -229,7 +268,9 @@ impl App {
 
     pub fn selected_detail_url(&self) -> Option<String> {
         let repo = self.selected_repo()?;
-        build_detail_items(repo).get(self.detail_selected).map(|i| i.url.clone())
+        build_detail_items(repo)
+            .get(self.detail_selected)
+            .map(|i| i.url.clone())
     }
 
     // ── lキー: jump to first PR, else first issue ─────────────────────────
@@ -237,9 +278,13 @@ impl App {
     pub fn focus_detail_first_pr_or_issue(&mut self) {
         if let Some(repo) = self.selected_repo() {
             let items = build_detail_items(repo);
-            if items.is_empty() { return; }
+            if items.is_empty() {
+                return;
+            }
             // find first PR
-            let idx = items.iter().position(|it| it.is_pr)
+            let idx = items
+                .iter()
+                .position(|it| it.is_pr)
                 .or_else(|| Some(0))
                 .unwrap();
             self.detail_selected = idx;
@@ -255,7 +300,11 @@ impl App {
     }
 
     pub fn consume_prefix(&mut self) -> usize {
-        let n = if self.num_prefix == 0 { 1 } else { self.num_prefix as usize };
+        let n = if self.num_prefix == 0 {
+            1
+        } else {
+            self.num_prefix as usize
+        };
         self.num_prefix = 0;
         n
     }
@@ -314,22 +363,32 @@ impl App {
     }
 
     pub fn search_next_match(&mut self) {
-        let matches: Vec<usize> = self.filtered_rows.iter().enumerate()
+        let matches: Vec<usize> = self
+            .filtered_rows
+            .iter()
+            .enumerate()
             .filter(|(_, r)| matches!(r, RepoRow::Repo(_)))
             .map(|(i, _)| i)
             .collect();
-        if matches.is_empty() { return; }
+        if matches.is_empty() {
+            return;
+        }
         self.search_match_idx = (self.search_match_idx + 1) % matches.len();
         self.row_cursor = matches[self.search_match_idx];
         self.row_scroll = self.row_cursor.saturating_sub(self.left_visible / 2);
     }
 
     pub fn search_prev_match(&mut self) {
-        let matches: Vec<usize> = self.filtered_rows.iter().enumerate()
+        let matches: Vec<usize> = self
+            .filtered_rows
+            .iter()
+            .enumerate()
             .filter(|(_, r)| matches!(r, RepoRow::Repo(_)))
             .map(|(i, _)| i)
             .collect();
-        if matches.is_empty() { return; }
+        if matches.is_empty() {
+            return;
+        }
         self.search_match_idx = if self.search_match_idx == 0 {
             matches.len() - 1
         } else {
@@ -342,16 +401,23 @@ impl App {
     pub fn search_confirm(&mut self) {
         self.search_state = SearchState::Off;
         // Save the repo index the cursor is currently on (in filtered list)
-        let target_repo_idx = self.filtered_rows.get(self.row_cursor)
-            .and_then(|r| if let RepoRow::Repo(i) = r { Some(*i) } else { None });
+        let target_repo_idx = self.filtered_rows.get(self.row_cursor).and_then(|r| {
+            if let RepoRow::Repo(i) = r {
+                Some(*i)
+            } else {
+                None
+            }
+        });
         // Clear filter – filtered_rows becomes full rows again
         self.search_query.clear();
         self.filtered_rows = self.rows.clone();
         // Restore cursor to the same repo in the full list
         if let Some(target) = target_repo_idx {
-            if let Some(pos) = self.filtered_rows.iter().position(
-                |r| matches!(r, RepoRow::Repo(i) if *i == target)
-            ) {
+            if let Some(pos) = self
+                .filtered_rows
+                .iter()
+                .position(|r| matches!(r, RepoRow::Repo(i) if *i == target))
+            {
                 self.row_cursor = pos;
                 self.row_scroll = pos.saturating_sub(self.left_visible / 2);
             }
@@ -363,13 +429,11 @@ impl App {
         self.search_state = SearchState::Off;
         self.search_query.clear();
         self.apply_filter();
-        self.row_cursor = self.search_saved_cursor.min(
-            self.filtered_rows.len().saturating_sub(1)
-        );
+        self.row_cursor = self
+            .search_saved_cursor
+            .min(self.filtered_rows.len().saturating_sub(1));
         self.row_scroll = self.row_cursor.saturating_sub(self.left_visible / 2);
-        self.status_msg = String::from(
-            READY_MSG,
-        );
+        self.status_msg = String::from(READY_MSG);
     }
 }
 
