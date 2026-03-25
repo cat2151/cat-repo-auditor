@@ -389,7 +389,12 @@ where
         &super::format_cargo_hash_summary(&remote_hash, &installed_hash, &local_hash),
     );
 
-    Some((installed_hash == local_hash, installed_hash, local_hash, remote_hash))
+    Some((
+        installed_hash == local_hash,
+        installed_hash,
+        local_hash,
+        remote_hash,
+    ))
 }
 
 #[cfg(test)]

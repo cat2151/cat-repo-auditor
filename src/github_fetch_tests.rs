@@ -23,14 +23,16 @@ fn fnv1a_is_deterministic() {
 #[test]
 fn relative_date_today() {
     let ts = (Utc::now() - Duration::hours(1))
-        .format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
     assert_eq!(relative_date(&ts), "today");
 }
 
 #[test]
 fn relative_date_days() {
     let ts = (Utc::now() - Duration::days(3))
-        .format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
     let result = relative_date(&ts);
     assert!(result.ends_with('d'), "expected Nd format, got: {result}");
 }
@@ -38,7 +40,8 @@ fn relative_date_days() {
 #[test]
 fn relative_date_weeks() {
     let ts = (Utc::now() - Duration::weeks(2))
-        .format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
     let result = relative_date(&ts);
     assert!(result.ends_with('w'), "expected Nw format, got: {result}");
 }
@@ -46,7 +49,8 @@ fn relative_date_weeks() {
 #[test]
 fn relative_date_months() {
     let ts = (Utc::now() - Duration::days(45))
-        .format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
     let result = relative_date(&ts);
     assert!(result.ends_with("mo"), "expected Nmo format, got: {result}");
 }

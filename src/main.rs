@@ -13,7 +13,10 @@ mod ui_types;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture,
+        Event, KeyCode, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -29,10 +32,10 @@ use crate::{
     config::Config,
     github::FetchProgress,
     github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
+    history::History,
     main_fetch::drain_fetch_channel,
     main_helpers::{make_x_log_line, persist_log_line, refresh_log_lines_if_changed, start_fetch},
     self_update::{check_self_update, run_self_update},
-    history::History,
     ui::{draw_ui, Focus, SearchState},
 };
 
@@ -91,13 +94,20 @@ fn main() -> Result<()> {
     // Self-update check (background, non-blocking)
     let update_rx = {
         let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-        std::thread::spawn(move || { let _ = tx.send(check_self_update()); });
+        std::thread::spawn(move || {
+            let _ = tx.send(check_self_update());
+        });
         rx
     };
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, EnableFocusChange)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableFocusChange
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -149,12 +159,16 @@ fn main() -> Result<()> {
                 continue;
             }
             if let Event::Key(key) = ev {
-                if key.kind != KeyEventKind::Press { continue; }
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
 
                 // debounce 50ms
                 let now = Instant::now();
                 if let Some((lk, lt)) = last_key {
-                    if lk == key.code && now.duration_since(lt) < Duration::from_millis(50) { continue; }
+                    if lk == key.code && now.duration_since(lt) < Duration::from_millis(50) {
+                        continue;
+                    }
                 }
                 last_key = Some((key.code, now));
 
@@ -164,7 +178,9 @@ fn main() -> Result<()> {
                 // ── help dialog: close on ? or Esc ──────────────────────
                 if app.show_help {
                     match key.code {
-                        KeyCode::Char('?') | KeyCode::Esc => { app.show_help = false; }
+                        KeyCode::Char('?') | KeyCode::Esc => {
+                            app.show_help = false;
+                        }
                         _ => {}
                     }
                     continue;
@@ -173,9 +189,15 @@ fn main() -> Result<()> {
                 // ── search mode ──────────────────────────────────────────
                 if app.search_state == SearchState::Active {
                     match key.code {
-                        KeyCode::Esc => { app.search_cancel(); }
-                        KeyCode::Enter => { app.search_confirm(); }
-                        KeyCode::Backspace => { app.search_pop(); }
+                        KeyCode::Esc => {
+                            app.search_cancel();
+                        }
+                        KeyCode::Enter => {
+                            app.search_confirm();
+                        }
+                        KeyCode::Backspace => {
+                            app.search_pop();
+                        }
                         KeyCode::Down | KeyCode::Char('j') => {
                             // next match (also allow j/k for navigation during search)
                             app.search_next_match();
@@ -189,7 +211,9 @@ fn main() -> Result<()> {
                         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             app.search_prev_match();
                         }
-                        KeyCode::Char(c) => { app.search_push(c); }
+                        KeyCode::Char(c) => {
+                            app.search_push(c);
+                        }
                         _ => {}
                     }
                     continue;
@@ -215,13 +239,21 @@ fn main() -> Result<()> {
                     Focus::Repos => match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
-                            let n = app.consume_prefix(); app.repo_move_down(n);
+                            let n = app.consume_prefix();
+                            app.repo_move_down(n);
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            let n = app.consume_prefix(); app.repo_move_up(n);
+                            let n = app.consume_prefix();
+                            app.repo_move_up(n);
                         }
-                        KeyCode::PageDown => { app.num_prefix = 0; app.repo_page_down(); }
-                        KeyCode::PageUp   => { app.num_prefix = 0; app.repo_page_up(); }
+                        KeyCode::PageDown => {
+                            app.num_prefix = 0;
+                            app.repo_page_down();
+                        }
+                        KeyCode::PageUp => {
+                            app.num_prefix = 0;
+                            app.repo_page_up();
+                        }
                         KeyCode::Char('l') | KeyCode::Right => {
                             app.num_prefix = 0;
                             app.focus_detail_first_pr_or_issue();
@@ -287,8 +319,7 @@ fn main() -> Result<()> {
                         KeyCode::Char('c') => {
                             app.num_prefix = 0;
                             if let Some(repo) = app.selected_repo() {
-                                let base = app.config.local_base_dir
-                                    .trim_end_matches(['/', '\\']);
+                                let base = app.config.local_base_dir.trim_end_matches(['/', '\\']);
                                 // Always end with backslash (Windows path)
                                 let path = format!("{}\\{}", base, repo.name);
                                 let clip_path = format!("{}\\", path);
@@ -296,8 +327,12 @@ fn main() -> Result<()> {
                                     .args(["/C", &format!("echo {}| clip", clip_path.trim())])
                                     .status();
                                 match result {
-                                    Ok(_) => { app.transient_msg = Some(format!("copied: {clip_path}")); }
-                                    Err(e) => { app.transient_msg = Some(format!("clip failed: {e}")); }
+                                    Ok(_) => {
+                                        app.transient_msg = Some(format!("copied: {clip_path}"));
+                                    }
+                                    Err(e) => {
+                                        app.transient_msg = Some(format!("clip failed: {e}"));
+                                    }
                                 }
                             }
                         }
@@ -311,9 +346,15 @@ fn main() -> Result<()> {
                         }
                         KeyCode::Char('x') => {
                             app.num_prefix = 0;
-                            if let Some((repo_full_name, repo_name, cargo_install)) = app.selected_repo().map(|repo| {
-                                (repo.full_name.clone(), repo.name.clone(), repo.cargo_install)
-                            }) {
+                            if let Some((repo_full_name, repo_name, cargo_install)) =
+                                app.selected_repo().map(|repo| {
+                                    (
+                                        repo.full_name.clone(),
+                                        repo.name.clone(),
+                                        repo.cargo_install,
+                                    )
+                                })
+                            {
                                 if let Some(args) = cargo_status_to_launch_args(cargo_install) {
                                     let owner = app.config.owner.clone();
                                     let run_dir = app.config.resolved_app_run_dir();
@@ -326,12 +367,15 @@ fn main() -> Result<()> {
                                             match launch_app_with_args(&bin, args, &run_dir) {
                                                 Ok(()) => {
                                                     terminal.clear().ok();
-                                                    app.transient_msg = Some(format!("launched: {cmd}"));
-                                                    let line = make_x_log_line(&repo_full_name, &cmd_desc);
+                                                    app.transient_msg =
+                                                        Some(format!("launched: {cmd}"));
+                                                    let line =
+                                                        make_x_log_line(&repo_full_name, &cmd_desc);
                                                     persist_log_line(&mut app, line);
                                                 }
                                                 Err(e) => {
-                                                    app.transient_msg = Some(format!("run failed: {e}"));
+                                                    app.transient_msg =
+                                                        Some(format!("run failed: {e}"));
                                                     let line = make_x_log_line(
                                                         &repo_full_name,
                                                         &format!("{cmd_desc} => failed: {e}"),
@@ -344,7 +388,9 @@ fn main() -> Result<()> {
                                                 &repo_full_name,
                                                 "not run: no installed cargo bin found",
                                             );
-                                            app.transient_msg = Some(String::from("x: no installed cargo bin found"));
+                                            app.transient_msg = Some(String::from(
+                                                "x: no installed cargo bin found",
+                                            ));
                                             persist_log_line(&mut app, line);
                                         }
                                     } else {
@@ -352,7 +398,9 @@ fn main() -> Result<()> {
                                             &repo_full_name,
                                             "not run: .crates2.json has no matching install entry",
                                         );
-                                        app.transient_msg = Some(String::from("x: no matching cargo install entry"));
+                                        app.transient_msg = Some(String::from(
+                                            "x: no matching cargo install entry",
+                                        ));
                                         persist_log_line(&mut app, line);
                                     }
                                 } else {
@@ -361,8 +409,7 @@ fn main() -> Result<()> {
                                     app.transient_msg = Some(transient_msg);
                                     persist_log_line(&mut app, log_line);
                                 }
-                            }
-                            else {
+                            } else {
                                 let line = make_x_log_line("-", "not run: no repository selected");
                                 app.transient_msg = Some(String::from("x: no repository selected"));
                                 persist_log_line(&mut app, line);
@@ -381,24 +428,36 @@ fn main() -> Result<()> {
                                 app.bg_tasks.clear();
                                 app.loading = true;
                                 app.status_msg = String::from(READY_MSG);
-                                let h = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
+                                let h = History::load(&Config::history_path().to_string_lossy())
+                                    .unwrap_or_default();
                                 fetch_rx = Some(start_fetch(config.clone(), h));
                             }
                         }
-                        _ => { app.num_prefix = 0; }
+                        _ => {
+                            app.num_prefix = 0;
+                        }
                     },
                     Focus::Detail => match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
-                            let n = app.consume_prefix(); app.detail_move_down(n);
+                            let n = app.consume_prefix();
+                            app.detail_move_down(n);
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            let n = app.consume_prefix(); app.detail_move_up(n);
+                            let n = app.consume_prefix();
+                            app.detail_move_up(n);
                         }
-                        KeyCode::PageDown => { app.num_prefix = 0; app.detail_page_down(); }
-                        KeyCode::PageUp   => { app.num_prefix = 0; app.detail_page_up(); }
+                        KeyCode::PageDown => {
+                            app.num_prefix = 0;
+                            app.detail_page_down();
+                        }
+                        KeyCode::PageUp => {
+                            app.num_prefix = 0;
+                            app.detail_page_up();
+                        }
                         KeyCode::Char('h') | KeyCode::Left => {
-                            app.num_prefix = 0; app.focus = Focus::Repos;
+                            app.num_prefix = 0;
+                            app.focus = Focus::Repos;
                         }
                         KeyCode::Enter => {
                             app.num_prefix = 0;
@@ -416,11 +475,14 @@ fn main() -> Result<()> {
                                 app.apply_filter();
                                 app.loading = true;
                                 app.status_msg = String::from(READY_MSG);
-                                let h = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
+                                let h = History::load(&Config::history_path().to_string_lossy())
+                                    .unwrap_or_default();
                                 fetch_rx = Some(start_fetch(config.clone(), h));
                             }
                         }
-                        _ => { app.num_prefix = 0; }
+                        _ => {
+                            app.num_prefix = 0;
+                        }
                     },
                 }
             }
@@ -428,7 +490,12 @@ fn main() -> Result<()> {
     }
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture, DisableFocusChange)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture,
+        DisableFocusChange
+    )?;
     terminal.show_cursor()?;
 
     // Print update notice after terminal restore (visible in shell)

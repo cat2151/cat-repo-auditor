@@ -1,6 +1,6 @@
 use super::*;
 use crate::config::Config;
-use crate::github::{FetchProgress, RateLimit, RepoInfo, LocalStatus};
+use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
 
 fn make_repo(name: &str) -> RepoInfo {
     RepoInfo {
@@ -95,7 +95,8 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
         cargo_installed_hash: String::from("installed789"),
         wf_workflows: None,
         wf_cat: String::new(),
-    }).unwrap();
+    })
+    .unwrap();
     drop(tx);
 
     let mut fetch_rx = Some(rx);
