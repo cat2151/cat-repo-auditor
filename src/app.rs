@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
+use std::time::SystemTime;
 
 const MAX_LOG_LINES: usize = 2_000;
 
@@ -34,6 +35,7 @@ pub struct App {
     pub show_columns: bool,
     pub show_log: bool,
     pub log_lines: Vec<String>,
+    pub log_last_modified: Option<SystemTime>,
     /// Some("owner/repo") when update is available
     pub update_available: Option<String>,
     pub term_height: usize,
@@ -72,6 +74,7 @@ impl App {
             show_columns: true,
             show_log: false,
             log_lines: vec![],
+            log_last_modified: None,
             update_available: None,
             term_height: 40,
             left_visible: 30,
@@ -261,12 +264,21 @@ impl App {
         self.show_log = !self.show_log;
     }
 
+    fn trim_log_lines(lines: &mut Vec<String>) {
+        if lines.len() > MAX_LOG_LINES {
+            let excess = lines.len() - MAX_LOG_LINES;
+            lines.drain(0..excess);
+        }
+    }
+
+    pub fn set_log_lines(&mut self, mut lines: Vec<String>) {
+        Self::trim_log_lines(&mut lines);
+        self.log_lines = lines;
+    }
+
     pub fn append_log_line(&mut self, line: String) {
         self.log_lines.push(line);
-        if self.log_lines.len() > MAX_LOG_LINES {
-            let excess = self.log_lines.len() - MAX_LOG_LINES;
-            self.log_lines.drain(0..excess);
-        }
+        Self::trim_log_lines(&mut self.log_lines);
     }
 
     // ── search ───────────────────────────────────────────────────────────────

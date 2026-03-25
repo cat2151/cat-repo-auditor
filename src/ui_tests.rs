@@ -79,6 +79,40 @@ fn make_test_app_with_focus(window_focused: bool) -> App {
     app
 }
 
+fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_nanos();
+    let pid = std::process::id();
+    let dir_name = format!("{prefix}_{pid}_{nanos}");
+    let dir = std::env::temp_dir().join(dir_name);
+    std::fs::create_dir_all(&dir).expect("failed to create temporary UI test directory");
+    dir
+}
+
+struct TempDirGuard {
+    path: std::path::PathBuf,
+}
+
+impl TempDirGuard {
+    fn new(prefix: &str) -> Self {
+        Self {
+            path: unique_temp_dir(prefix),
+        }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 // ── build_rows ────────────────────────────────────────────────────────────────
 
 #[test]
@@ -312,6 +346,54 @@ fn draw_ui_keeps_active_border_color_when_window_is_focused() {
     let cell = &terminal.backend().buffer()[(0, 1)];
     assert_eq!(cell.symbol(), "┌");
     assert_eq!(cell.fg, MK_CYAN);
+}
+
+#[test]
+fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
+    let tmp = TempDirGuard::new("ui_log_refresh");
+    let log_path = tmp.path().join("log.txt");
+    std::fs::write(&log_path, "disk line 1\ndisk line 2\n").unwrap();
+
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = true;
+    app.log_lines = vec![String::from("stale line")];
+    refresh_visible_log_panel(&mut app, &log_path);
+
+    assert_eq!(app.log_lines, vec!["disk line 1", "disk line 2"]);
+}
+
+#[test]
+fn refresh_visible_log_panel_does_not_reload_when_log_panel_is_hidden() {
+    let tmp = TempDirGuard::new("ui_log_hidden");
+    let log_path = tmp.path().join("log.txt");
+    std::fs::write(&log_path, "disk line 1\ndisk line 2\n").unwrap();
+
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = false;
+    app.log_lines = vec![String::from("stale line")];
+    refresh_visible_log_panel(&mut app, &log_path);
+
+    assert_eq!(app.log_lines, vec!["stale line"]);
+    assert!(app.log_last_modified.is_none());
+}
+
+#[test]
+fn refresh_visible_log_panel_caps_reloaded_log_history() {
+    let tmp = TempDirGuard::new("ui_log_refresh_cap");
+    let log_path = tmp.path().join("log.txt");
+    let content = (0..2_100)
+        .map(|i| format!("line{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&log_path, format!("{content}\n")).unwrap();
+
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = true;
+    refresh_visible_log_panel(&mut app, &log_path);
+
+    assert_eq!(app.log_lines.len(), 2_000);
+    assert_eq!(app.log_lines.first().unwrap(), "line100");
+    assert_eq!(app.log_lines.last().unwrap(), "line2099");
 }
 
 // ── background task spinner ───────────────────────────────────────────────────
