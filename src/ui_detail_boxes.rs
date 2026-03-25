@@ -16,7 +16,7 @@ use ratatui::{
 pub(crate) const CARGO_OLD_BOX_H: u16 = 5;
 pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
 
-fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Color {
+pub(super) fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Color {
     window_color(app.window_focused, color)
 }
 
@@ -106,7 +106,8 @@ pub(crate) fn draw_local_staging_box(
     area: Rect,
     bottom_offset: u16,
 ) {
-    let local_changes_count = app.repos[repo_idx].staging_files.len();
+    let repo = &app.repos[repo_idx];
+    let local_changes_count = repo.staging_files.len();
 
     let content_w: u16 = 38;
     let box_w = content_w + 2;

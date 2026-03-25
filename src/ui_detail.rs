@@ -1,8 +1,8 @@
 use crate::{
     app::App,
     ui::{
-        build_detail_items, truncate, window_color, Focus, MK_BG, MK_BG_SEL, MK_BLUE, MK_COMMENT,
-        MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED,
+        build_detail_items, truncate, Focus, MK_BG, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG,
+        MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED,
     },
 };
 use ratatui::{
@@ -15,14 +15,11 @@ use ratatui::{
 
 #[path = "ui_detail_boxes.rs"]
 mod boxes;
+use boxes::c;
 pub(crate) use boxes::{
     draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, CARGO_OLD_BOX_H,
     LOCAL_CHANGES_BOX_H,
 };
-
-fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Color {
-    window_color(app.window_focused, color)
-}
 
 // ── right pane ───────────────────────────────────────────────────────────────
 
