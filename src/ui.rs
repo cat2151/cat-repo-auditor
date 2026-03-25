@@ -46,7 +46,7 @@ fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
             repo.local_status,
             LocalStatus::Conflict | LocalStatus::Modified | LocalStatus::Staging
         ) || !repo.staging_files.is_empty(),
-        repo.cargo_install == Some(false),
+        true,
     )
 }
 

@@ -2,9 +2,8 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_cargo_git_install, check_deepwiki_exists, check_file_exists,
-        check_pages_exists, check_readme_ja_badge, check_workflows, git_pull,
-        local_head_matches_upstream,
+        check_cargo_git_install, check_deepwiki_exists, check_file_exists, check_pages_exists,
+        check_readme_ja_badge, check_workflows, git_pull, local_head_matches_upstream,
     },
     history::History,
 };
@@ -28,7 +27,10 @@ pub struct IssueOrPr {
 impl IssueOrPr {
     pub fn url(&self) -> String {
         let kind = if self.is_pr { "pull" } else { "issues" };
-        format!("https://github.com/{}/{}/{}", self.repo_full, kind, self.number)
+        format!(
+            "https://github.com/{}/{}/{}",
+            self.repo_full, kind, self.number
+        )
     }
 }
 
@@ -77,7 +79,10 @@ pub struct RepoInfo {
     /// local git HEAD hash when cargo_install was last checked (doubles as display value for local hash)
     #[serde(default)]
     pub cargo_checked_at: String,
-    /// installed commit hash from .crates2.json (only meaningful when cargo_install == Some(false))
+    /// remote main branch HEAD hash from GitHub (used for cargo hash display/comparison)
+    #[serde(default)]
+    pub cargo_remote_hash: String,
+    /// installed commit hash from .crates2.json
     #[serde(default)]
     pub cargo_installed_hash: String,
 
@@ -107,11 +112,11 @@ impl std::fmt::Display for LocalStatus {
             LocalStatus::Conflict => write!(f, "conflict"),
             LocalStatus::Modified => write!(f, "modified"),
             LocalStatus::Pullable => write!(f, "pullable"),
-            LocalStatus::Clean    => write!(f, "clean"),
-            LocalStatus::Staging  => write!(f, "staging"),
-            LocalStatus::Other    => write!(f, "other"),
+            LocalStatus::Clean => write!(f, "clean"),
+            LocalStatus::Staging => write!(f, "staging"),
+            LocalStatus::Other => write!(f, "other"),
             LocalStatus::NotFound => write!(f, "-"),
-            LocalStatus::NoGit    => write!(f, "no-git"),
+            LocalStatus::NoGit => write!(f, "no-git"),
         }
     }
 }
@@ -131,25 +136,30 @@ pub enum FetchProgress {
     Status(String),
     /// Structured progress for background task display: (tag, cur, total)
     /// tag examples: "gh↓", "scan", "pull", "chk"
-    PhaseProgress { tag: &'static str, cur: usize, total: usize },
+    PhaseProgress {
+        tag: &'static str,
+        cur: usize,
+        total: usize,
+    },
     /// Signal that a specific repo is currently being checked (for UI feedback)
     CheckingRepo(String),
     /// Incremental update per repo after phase-3 checks
     ExistenceUpdate {
-        name:                   String,
-        readme_ja:              Option<bool>,
-        readme_ja_cat:          String,
-        readme_ja_badge:        Option<bool>,
-        readme_ja_badge_cat:    String,
-        pages:                  Option<bool>,
-        pages_cat:              String,
-        deepwiki:               Option<bool>,
-        deepwiki_cat:           String,
-        cargo_install:          Option<bool>,
-        cargo_cat:              String,
-        cargo_installed_hash:   String,
-        wf_workflows:           Option<bool>,
-        wf_cat:                 String,
+        name: String,
+        readme_ja: Option<bool>,
+        readme_ja_cat: String,
+        readme_ja_badge: Option<bool>,
+        readme_ja_badge_cat: String,
+        pages: Option<bool>,
+        pages_cat: String,
+        deepwiki: Option<bool>,
+        deepwiki_cat: String,
+        cargo_install: Option<bool>,
+        cargo_cat: String,
+        cargo_remote_hash: String,
+        cargo_installed_hash: String,
+        wf_workflows: Option<bool>,
+        wf_cat: String,
     },
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }
@@ -163,9 +173,10 @@ fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bo
 }
 
 fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
-    let head_matches_upstream =
-        matches!(repo.local_status, LocalStatus::Modified | LocalStatus::Staging)
-            && local_head_matches_upstream(base_dir, &repo.name);
+    let head_matches_upstream = matches!(
+        repo.local_status,
+        LocalStatus::Modified | LocalStatus::Staging
+    ) && local_head_matches_upstream(base_dir, &repo.name);
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
@@ -181,26 +192,43 @@ pub fn fetch_repos_with_progress(
     // Phase 1: fetch repo list
     let result = do_fetch(&config, &mut history, &tx);
     match result {
-        Err(e) => { let _ = tx.send(FetchProgress::Done(Err(e))); }
+        Err(e) => {
+            let _ = tx.send(FetchProgress::Done(Err(e)));
+        }
         Ok((mut repos, rl)) => {
             // Phase 2: auto-pull repos that can be safely fast-forwarded.
             // Dirty repos are handled by stashing before pull and restoring after.
             let pullable: Vec<String> = if config.auto_pull {
-                repos.iter()
+                repos
+                    .iter()
                     .filter(|r| should_auto_pull_repo(&config.local_base_dir, r))
                     .map(|r| r.name.clone())
                     .collect()
-            } else { vec![] };
+            } else {
+                vec![]
+            };
             if !pullable.is_empty() {
                 let total = pullable.len();
                 for (i, name) in pullable.iter().enumerate() {
-                    let _ = tx.send(FetchProgress::PhaseProgress { tag: "pull", cur: i + 1, total });
+                    let _ = tx.send(FetchProgress::PhaseProgress {
+                        tag: "pull",
+                        cur: i + 1,
+                        total,
+                    });
                     let _ = git_pull(&config.local_base_dir, name);
                 }
-                let _ = tx.send(FetchProgress::Status(String::from("Refreshing after auto-pull…")));
+                let _ = tx.send(FetchProgress::Status(String::from(
+                    "Refreshing after auto-pull…",
+                )));
                 match do_fetch(&config, &mut history, &tx) {
-                    Ok((r2, rl2)) => { repos = r2; let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl2)))); }
-                    Err(e)        => { let _ = tx.send(FetchProgress::Done(Err(e))); return; }
+                    Ok((r2, rl2)) => {
+                        repos = r2;
+                        let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl2))));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(FetchProgress::Done(Err(e)));
+                        return;
+                    }
                 }
             } else {
                 let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl))));
@@ -211,31 +239,44 @@ pub fn fetch_repos_with_progress(
             // cargo_checked_at stores the local HEAD hash → rechecks only on new commit.
             let owner = config.owner.clone();
 
-
             // Collect local HEAD hashes once (cheap, no network)
-            let local_heads: std::collections::HashMap<String, String> = repos.iter()
+            let local_heads: std::collections::HashMap<String, String> = repos
+                .iter()
                 .filter(|r| r.has_local_git)
                 .filter_map(|r| {
-                    let path = format!("{}/{}", config.local_base_dir.trim_end_matches(|c| c == '/' || c == '\\'), r.name);
+                    let path = format!(
+                        "{}/{}",
+                        config
+                            .local_base_dir
+                            .trim_end_matches(|c| c == '/' || c == '\\'),
+                        r.name
+                    );
                     let out = std::process::Command::new("git")
                         .args(["-C", &path, "rev-parse", "HEAD"])
-                        .output().ok()?;
-                    if !out.status.success() { return None; }
-                    Some((r.name.clone(), String::from_utf8_lossy(&out.stdout).trim().to_string()))
+                        .output()
+                        .ok()?;
+                    if !out.status.success() {
+                        return None;
+                    }
+                    Some((
+                        r.name.clone(),
+                        String::from_utf8_lossy(&out.stdout).trim().to_string(),
+                    ))
                 })
                 .collect();
 
             // Build per-repo check tasks: only repos that need at least one field updated
-            let to_check: Vec<String> = repos.iter()
+            let to_check: Vec<String> = repos
+                .iter()
                 .filter(|r| {
                     let cat = &r.updated_at_raw;
                     let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
-                    r.readme_ja_checked_at       != *cat
-                    || r.readme_ja_badge_checked_at != local_head
-                    || r.pages_checked_at            != *cat
-                    || r.deepwiki_checked_at         != local_head
-                    || r.cargo_checked_at            != local_head
-                    || r.wf_checked_at               != local_head
+                    r.readme_ja_checked_at != *cat
+                        || r.readme_ja_badge_checked_at != local_head
+                        || r.pages_checked_at != *cat
+                        || r.deepwiki_checked_at != local_head
+                        || r.cargo_checked_at != local_head
+                        || r.wf_checked_at != local_head
                 })
                 .map(|r| r.name.clone())
                 .collect();
@@ -250,17 +291,20 @@ pub fn fetch_repos_with_progress(
                 let cat = repo.updated_at_raw.clone();
                 let local_head = local_heads.get(name).cloned().unwrap_or_default();
 
-                let needs_readme       = repo.readme_ja_checked_at       != cat;
-                let needs_ja_badge     = repo.readme_ja_badge_checked_at != local_head;
-                let needs_pages        = repo.pages_checked_at            != cat;
-                let needs_deepwiki     = repo.deepwiki_checked_at         != local_head;
-                let needs_cargo        = repo.cargo_checked_at            != local_head;
-                let needs_wf           = repo.wf_checked_at               != local_head;
-
+                let needs_readme = repo.readme_ja_checked_at != cat;
+                let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
+                let needs_pages = repo.pages_checked_at != cat;
+                let needs_deepwiki = repo.deepwiki_checked_at != local_head;
+                let needs_cargo = repo.cargo_checked_at != local_head;
+                let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked
                 let _ = tx.send(FetchProgress::CheckingRepo(name.clone()));
-                let _ = tx.send(FetchProgress::PhaseProgress { tag: "chk", cur: i + 1, total: total_check });
+                let _ = tx.send(FetchProgress::PhaseProgress {
+                    tag: "chk",
+                    cur: i + 1,
+                    total: total_check,
+                });
 
                 let (readme_ja, readme_ja_cat) = if needs_readme {
                     let v = check_file_exists(&owner, name, "README.ja.md");
@@ -273,7 +317,10 @@ pub fn fetch_repos_with_progress(
                     let v = check_readme_ja_badge(&config.local_base_dir, name);
                     (Some(v), local_head.clone())
                 } else {
-                    (repo.readme_ja_badge, repo.readme_ja_badge_checked_at.clone())
+                    (
+                        repo.readme_ja_badge,
+                        repo.readme_ja_badge_checked_at.clone(),
+                    )
                 };
 
                 let (pages, pages_cat) = if needs_pages {
@@ -290,17 +337,22 @@ pub fn fetch_repos_with_progress(
                     (repo.deepwiki, repo.deepwiki_checked_at.clone())
                 };
 
-                let (cargo_install, cargo_cat, cargo_installed_hash) = if needs_cargo {
-                    match check_cargo_git_install(&owner, name, &config.local_base_dir) {
-                        // Use `loc` (the actual hash read from git) as cargo_cat so the stored
-                        // value is always the precise hash used in the comparison.
-                        Some((ok, inst, loc)) => (Some(ok), loc, inst),
-                        None => (None, local_head.clone(), String::new()),
-                    }
-                } else {
-                    (repo.cargo_install, repo.cargo_checked_at.clone(),
-                     repo.cargo_installed_hash.clone())
-                };
+                let (cargo_install, cargo_cat, cargo_remote_hash, cargo_installed_hash) =
+                    if needs_cargo {
+                        match check_cargo_git_install(&owner, name, &config.local_base_dir) {
+                            // Use `loc` (the actual hash read from git) as cargo_cat so the stored
+                            // value is always the precise hash used in the comparison.
+                            Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, inst),
+                            None => (None, local_head.clone(), String::new(), String::new()),
+                        }
+                    } else {
+                        (
+                            repo.cargo_install,
+                            repo.cargo_checked_at.clone(),
+                            repo.cargo_remote_hash.clone(),
+                            repo.cargo_installed_hash.clone(),
+                        )
+                    };
 
                 let (wf_workflows, wf_cat) = if needs_wf {
                     let v = check_workflows(&config.local_base_dir, name);
@@ -310,36 +362,50 @@ pub fn fetch_repos_with_progress(
                 };
 
                 if let Some(r) = history.repos.iter_mut().find(|r| &r.name == name) {
-                    r.readme_ja                    = readme_ja;
-                    r.readme_ja_checked_at         = readme_ja_cat.clone();
-                    r.readme_ja_badge              = readme_ja_badge;
-                    r.readme_ja_badge_checked_at   = readme_ja_badge_cat.clone();
-                    r.pages                        = pages;
-                    r.pages_checked_at             = pages_cat.clone();
-                    r.deepwiki                     = deepwiki;
-                    r.deepwiki_checked_at          = deepwiki_cat.clone();
-                    r.cargo_install                = cargo_install;
-                    r.cargo_checked_at             = cargo_cat.clone();
-                    r.cargo_installed_hash         = cargo_installed_hash.clone();
-                    r.wf_workflows                 = wf_workflows;
-                    r.wf_checked_at                = wf_cat.clone();
+                    r.readme_ja = readme_ja;
+                    r.readme_ja_checked_at = readme_ja_cat.clone();
+                    r.readme_ja_badge = readme_ja_badge;
+                    r.readme_ja_badge_checked_at = readme_ja_badge_cat.clone();
+                    r.pages = pages;
+                    r.pages_checked_at = pages_cat.clone();
+                    r.deepwiki = deepwiki;
+                    r.deepwiki_checked_at = deepwiki_cat.clone();
+                    r.cargo_install = cargo_install;
+                    r.cargo_checked_at = cargo_cat.clone();
+                    r.cargo_remote_hash = cargo_remote_hash.clone();
+                    r.cargo_installed_hash = cargo_installed_hash.clone();
+                    r.wf_workflows = wf_workflows;
+                    r.wf_checked_at = wf_cat.clone();
                 }
 
                 let _ = tx.send(FetchProgress::ExistenceUpdate {
-                    name:                name.clone(),
-                    readme_ja,           readme_ja_cat,
-                    readme_ja_badge,     readme_ja_badge_cat,
-                    pages,               pages_cat,
-                    deepwiki,            deepwiki_cat,
-                    cargo_install,       cargo_cat,
+                    name: name.clone(),
+                    readme_ja,
+                    readme_ja_cat,
+                    readme_ja_badge,
+                    readme_ja_badge_cat,
+                    pages,
+                    pages_cat,
+                    deepwiki,
+                    deepwiki_cat,
+                    cargo_install,
+                    cargo_cat,
+                    cargo_remote_hash,
                     cargo_installed_hash,
-                    wf_workflows,        wf_cat,
+                    wf_workflows,
+                    wf_cat,
                 });
             }
             // Clear progress indicators
             let _ = tx.send(FetchProgress::CheckingRepo(String::new()));
-            let _ = tx.send(FetchProgress::PhaseProgress { tag: "chk", cur: 0, total: 0 });
-            history.save(&crate::config::Config::history_path().to_string_lossy()).ok();
+            let _ = tx.send(FetchProgress::PhaseProgress {
+                tag: "chk",
+                cur: 0,
+                total: 0,
+            });
+            history
+                .save(&crate::config::Config::history_path().to_string_lossy())
+                .ok();
         }
     }
 }

@@ -13,7 +13,10 @@ fn test_x_launch_args_cargo_ok_returns_empty_slice() {
 
 #[test]
 fn test_x_launch_args_cargo_old_returns_update() {
-    assert_eq!(cargo_status_to_launch_args(Some(false)), Some(&["update"][..]));
+    assert_eq!(
+        cargo_status_to_launch_args(Some(false)),
+        Some(&["update"][..])
+    );
 }
 
 #[test]
@@ -23,7 +26,10 @@ fn test_x_launch_args_none_returns_none() {
 
 #[test]
 fn test_x_launch_display_joins_args() {
-    assert_eq!(format_launch_command("foo.exe", &["update"]), "foo.exe update");
+    assert_eq!(
+        format_launch_command("foo.exe", &["update"]),
+        "foo.exe update"
+    );
 }
 
 #[test]

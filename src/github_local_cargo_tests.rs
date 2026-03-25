@@ -251,10 +251,11 @@ fn cargo_install_returns_some_true_when_hashes_match() {
     );
     std::fs::remove_dir_all(&tmp).ok();
 
-    let (matches, inst, loc) = result.expect("should return Some");
+    let (matches, inst, loc, remote) = result.expect("should return Some");
     assert!(matches, "hashes should match: inst={inst} loc={loc}");
     assert_eq!(inst, local_hash);
     assert_eq!(loc, local_hash);
+    assert_eq!(remote, remote_hash);
 }
 
 #[test]
@@ -366,10 +367,11 @@ fn cargo_install_returns_some_false_when_hashes_differ() {
     );
     std::fs::remove_dir_all(&tmp).ok();
 
-    let (matches, inst, loc) = result.expect("should return Some");
+    let (matches, inst, loc, remote) = result.expect("should return Some");
     assert!(!matches, "hashes should differ: inst={inst} loc={loc}");
     assert_eq!(inst, installed_hash);
     assert_eq!(loc, local_hash);
+    assert_eq!(remote, remote_hash);
 }
 
 #[test]
@@ -406,9 +408,10 @@ fn cargo_install_picks_latest_mtime_subdir() {
     );
     std::fs::remove_dir_all(&tmp).ok();
 
-    let (_matches, inst, _loc) = result.expect("should return Some");
+    let (_matches, inst, _loc, remote) = result.expect("should return Some");
     assert_eq!(inst, expected_installed_hash);
     assert_ne!(inst, local_hash);
+    assert_eq!(remote, remote_hash);
 }
 
 #[test]

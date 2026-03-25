@@ -20,13 +20,13 @@ use std::process::Command;
 ///                                  checkout directory not found, OR
 ///                                  `git rev-parse HEAD` failed, OR
 ///                                  `git ls-remote` failed
-///   Some((true,  inst, local))   – installed hash == local HEAD
-///   Some((false, inst, local))   – installed hash != local HEAD (stale install)
+///   Some((true,  inst, local, remote))   – installed hash == local HEAD
+///   Some((false, inst, local, remote))   – installed hash != local HEAD (stale install)
 pub(crate) fn check_cargo_git_install(
     owner: &str,
     repo_name: &str,
     base_dir: &str,
-) -> Option<(bool, String, String)> {
+) -> Option<(bool, String, String, String)> {
     check_cargo_git_install_inner(
         owner,
         repo_name,
@@ -82,7 +82,7 @@ pub(super) fn check_cargo_git_install_inner(
     base_dir: &str,
     cargo_home: &str,
     mut log_fn: impl FnMut(&str),
-) -> Option<(bool, String, String)> {
+) -> Option<(bool, String, String, String)> {
     check_cargo_git_install_inner_with_resolver(
         owner,
         repo_name,
@@ -100,7 +100,7 @@ fn check_cargo_git_install_inner_with_resolver<L, R>(
     cargo_home: &str,
     log_fn: &mut L,
     mut resolve_remote_hash: R,
-) -> Option<(bool, String, String)>
+) -> Option<(bool, String, String, String)>
 where
     L: FnMut(&str),
     R: FnMut(&mut L, &str, &str) -> Option<String>,
@@ -389,7 +389,12 @@ where
         &super::format_cargo_hash_summary(&remote_hash, &installed_hash, &local_hash),
     );
 
-    Some((installed_hash == local_hash, installed_hash, local_hash))
+    Some((
+        installed_hash == local_hash,
+        installed_hash,
+        local_hash,
+        remote_hash,
+    ))
 }
 
 #[cfg(test)]
@@ -400,7 +405,7 @@ pub(super) fn check_cargo_git_install_inner_with_remote_hash(
     cargo_home: &str,
     remote_hash: &str,
     mut log_fn: impl FnMut(&str),
-) -> Option<(bool, String, String)> {
+) -> Option<(bool, String, String, String)> {
     check_cargo_git_install_inner_with_resolver(
         owner,
         repo_name,

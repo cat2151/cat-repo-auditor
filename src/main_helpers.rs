@@ -16,7 +16,9 @@ use crate::{
 
 pub(crate) fn start_fetch(config: Config, history: History) -> mpsc::Receiver<FetchProgress> {
     let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || { fetch_repos_with_progress(config, history, tx); });
+    std::thread::spawn(move || {
+        fetch_repos_with_progress(config, history, tx);
+    });
     rx
 }
 
@@ -58,10 +60,7 @@ fn append_log_line(line: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     writeln!(f, "{line}")?;
     f.flush()
 }

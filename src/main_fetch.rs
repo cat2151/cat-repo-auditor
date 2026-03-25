@@ -47,6 +47,7 @@ pub(crate) fn drain_fetch_channel(
                 deepwiki_cat,
                 cargo_install,
                 cargo_cat,
+                cargo_remote_hash,
                 cargo_installed_hash,
                 wf_workflows,
                 wf_cat,
@@ -62,6 +63,7 @@ pub(crate) fn drain_fetch_channel(
                     r.deepwiki_checked_at = deepwiki_cat;
                     r.cargo_install = cargo_install;
                     r.cargo_checked_at = cargo_cat;
+                    r.cargo_remote_hash = cargo_remote_hash;
                     r.cargo_installed_hash = cargo_installed_hash;
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;
