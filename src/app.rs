@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
+use std::time::SystemTime;
 
 const MAX_LOG_LINES: usize = 2_000;
 
@@ -34,6 +35,7 @@ pub struct App {
     pub show_columns: bool,
     pub show_log: bool,
     pub log_lines: Vec<String>,
+    pub log_last_modified: Option<SystemTime>,
     /// Some("owner/repo") when update is available
     pub update_available: Option<String>,
     pub term_height: usize,
@@ -72,6 +74,7 @@ impl App {
             show_columns: true,
             show_log: false,
             log_lines: vec![],
+            log_last_modified: None,
             update_available: None,
             term_height: 40,
             left_visible: 30,

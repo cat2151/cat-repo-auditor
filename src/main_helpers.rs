@@ -3,6 +3,7 @@ use std::{
     fs::OpenOptions,
     io::{self, BufRead, BufReader, Write},
     sync::mpsc,
+    time::SystemTime,
 };
 
 use crate::{
@@ -30,6 +31,20 @@ pub(crate) fn read_log_lines() -> Vec<String> {
         .collect()
 }
 
+pub(crate) fn log_last_modified() -> Option<SystemTime> {
+    std::fs::metadata(Config::log_path())
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+}
+
+pub(crate) fn refresh_log_lines_if_changed(app: &mut App) {
+    let last_modified = log_last_modified();
+    if app.log_last_modified != last_modified {
+        app.log_lines = read_log_lines();
+        app.log_last_modified = last_modified;
+    }
+}
+
 fn append_log_line(line: &str) -> io::Result<()> {
     let path = Config::log_path();
     if let Some(parent) = path.parent() {
@@ -53,5 +68,6 @@ pub(crate) fn persist_log_line(app: &mut App, line: String) {
         app.transient_msg = Some(format!("log write failed: {e}"));
     } else {
         app.append_log_line(line);
+        app.log_last_modified = log_last_modified();
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     app::App,
     github::LocalStatus,
-    main_helpers::read_log_lines,
+    main_helpers::refresh_log_lines_if_changed,
     ui_detail::{
         draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right, CARGO_OLD_BOX_H,
         LOCAL_CHANGES_BOX_H,
@@ -118,7 +118,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     let area = f.area();
 
     if app.show_log {
-        app.log_lines = read_log_lines();
+        refresh_log_lines_if_changed(app);
     }
 
     let outer = Layout::default()

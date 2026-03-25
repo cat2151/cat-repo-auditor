@@ -30,7 +30,7 @@ use crate::{
     github::FetchProgress,
     github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
     main_fetch::drain_fetch_channel,
-    main_helpers::{make_x_log_line, persist_log_line, read_log_lines, start_fetch},
+    main_helpers::{make_x_log_line, persist_log_line, refresh_log_lines_if_changed, start_fetch},
     self_update::{check_self_update, run_self_update},
     history::History,
     ui::{draw_ui, Focus, SearchState},
@@ -102,7 +102,7 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(config.clone());
-    app.log_lines = read_log_lines();
+    refresh_log_lines_if_changed(&mut app);
 
     {
         let h = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
