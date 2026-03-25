@@ -163,16 +163,10 @@ fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bo
 }
 
 fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
-    match repo.local_status {
-        LocalStatus::Pullable => should_auto_pull_status(&repo.local_status, false),
-        LocalStatus::Modified | LocalStatus::Staging => {
-            should_auto_pull_status(
-                &repo.local_status,
-                local_head_matches_upstream(base_dir, &repo.name),
-            )
-        }
-        _ => should_auto_pull_status(&repo.local_status, false),
-    }
+    let head_matches_upstream =
+        matches!(repo.local_status, LocalStatus::Modified | LocalStatus::Staging)
+            && local_head_matches_upstream(base_dir, &repo.name);
+    should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
 // ──────────────────────────────────────────────
