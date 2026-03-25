@@ -39,3 +39,14 @@ fn local_status_display() {
     assert_eq!(LocalStatus::NotFound.to_string(), "-");
     assert_eq!(LocalStatus::NoGit.to_string(), "no-git");
 }
+
+#[test]
+fn should_auto_pull_status_matches_issue_rules() {
+    assert!(should_auto_pull_status(&LocalStatus::Pullable, false));
+    assert!(should_auto_pull_status(&LocalStatus::Modified, false));
+    assert!(should_auto_pull_status(&LocalStatus::Staging, false));
+    assert!(!should_auto_pull_status(&LocalStatus::Modified, true));
+    assert!(!should_auto_pull_status(&LocalStatus::Staging, true));
+    assert!(!should_auto_pull_status(&LocalStatus::Clean, false));
+    assert!(!should_auto_pull_status(&LocalStatus::Other, false));
+}

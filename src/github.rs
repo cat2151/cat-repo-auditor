@@ -4,6 +4,7 @@ use crate::{
     github_local::{
         check_cargo_git_install, check_deepwiki_exists, check_file_exists,
         check_pages_exists, check_readme_ja_badge, check_workflows, git_pull,
+        local_head_matches_upstream,
     },
     history::History,
 };
@@ -153,6 +154,27 @@ pub enum FetchProgress {
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }
 
+fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bool) -> bool {
+    match local_status {
+        LocalStatus::Pullable => true,
+        LocalStatus::Modified | LocalStatus::Staging => !head_matches_upstream,
+        _ => false,
+    }
+}
+
+fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
+    match repo.local_status {
+        LocalStatus::Pullable => should_auto_pull_status(&repo.local_status, false),
+        LocalStatus::Modified | LocalStatus::Staging => {
+            should_auto_pull_status(
+                &repo.local_status,
+                local_head_matches_upstream(base_dir, &repo.name),
+            )
+        }
+        _ => should_auto_pull_status(&repo.local_status, false),
+    }
+}
+
 // ──────────────────────────────────────────────
 // Fetch orchestration
 // ──────────────────────────────────────────────
@@ -171,10 +193,7 @@ pub fn fetch_repos_with_progress(
             // Dirty repos are handled by stashing before pull and restoring after.
             let pullable: Vec<String> = if config.auto_pull {
                 repos.iter()
-                    .filter(|r| matches!(
-                        r.local_status,
-                        LocalStatus::Pullable | LocalStatus::Modified | LocalStatus::Staging
-                    ))
+                    .filter(|r| should_auto_pull_repo(&config.local_base_dir, r))
                     .map(|r| r.name.clone())
                     .collect()
             } else { vec![] };
