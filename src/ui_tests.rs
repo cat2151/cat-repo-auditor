@@ -2,6 +2,7 @@ use super::*;
 use crate::{app::App, config::Config};
 use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
 use ratatui::{backend::TestBackend, Terminal};
+use std::sync::{Mutex, OnceLock};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,44 @@ fn make_test_app_with_focus(window_focused: bool) -> App {
     app.window_focused = window_focused;
     app.rebuild_rows();
     app
+}
+
+fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct ScopedEnvVar {
+    key: &'static str,
+    value: Option<std::ffi::OsString>,
+}
+
+impl ScopedEnvVar {
+    fn set(key: &'static str, value: &std::path::Path) -> Self {
+        let old = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, value: old }
+    }
+}
+
+impl Drop for ScopedEnvVar {
+    fn drop(&mut self) {
+        if let Some(value) = &self.value {
+            std::env::set_var(self.key, value);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
 }
 
 // ── build_rows ────────────────────────────────────────────────────────────────
@@ -312,6 +351,29 @@ fn draw_ui_keeps_active_border_color_when_window_is_focused() {
     let cell = &terminal.backend().buffer()[(0, 1)];
     assert_eq!(cell.symbol(), "┌");
     assert_eq!(cell.fg, MK_CYAN);
+}
+
+#[test]
+fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
+    let _env_guard = env_lock().lock().unwrap();
+    let tmp = unique_temp_dir("ui_log_refresh");
+    let _xdg = ScopedEnvVar::set("XDG_CONFIG_HOME", &tmp);
+
+    let log_path = Config::log_path();
+    std::fs::create_dir_all(log_path.parent().unwrap()).unwrap();
+    std::fs::write(&log_path, "disk line 1\ndisk line 2\n").unwrap();
+
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = true;
+    app.log_lines = vec![String::from("stale line")];
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    assert_eq!(app.log_lines, vec!["disk line 1", "disk line 2"]);
+
+    std::fs::remove_dir_all(&tmp).ok();
 }
 
 // ── background task spinner ───────────────────────────────────────────────────
