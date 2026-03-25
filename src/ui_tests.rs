@@ -85,7 +85,9 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos));
+    let pid = std::process::id();
+    let dir_name = format!("{prefix}_{pid}_{nanos}");
+    let dir = std::env::temp_dir().join(dir_name);
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -355,7 +357,7 @@ fn draw_ui_keeps_active_border_color_when_window_is_focused() {
 
 #[test]
 fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
-    let _env_guard = env_lock().lock().unwrap();
+    let _lock_guard = env_lock().lock().unwrap();
     let tmp = unique_temp_dir("ui_log_refresh");
     let _xdg = ScopedEnvVar::set("XDG_CONFIG_HOME", &tmp);
 
