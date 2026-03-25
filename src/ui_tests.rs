@@ -363,6 +363,21 @@ fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
 }
 
 #[test]
+fn refresh_visible_log_panel_does_not_reload_when_log_panel_is_hidden() {
+    let tmp = TempDirGuard::new("ui_log_hidden");
+    let log_path = tmp.path().join("log.txt");
+    std::fs::write(&log_path, "disk line 1\ndisk line 2\n").unwrap();
+
+    let mut app = make_test_app_with_focus(true);
+    app.show_log = false;
+    app.log_lines = vec![String::from("stale line")];
+    refresh_visible_log_panel(&mut app, &log_path);
+
+    assert_eq!(app.log_lines, vec!["stale line"]);
+    assert!(app.log_last_modified.is_none());
+}
+
+#[test]
 fn refresh_visible_log_panel_caps_reloaded_log_history() {
     let tmp = TempDirGuard::new("ui_log_refresh_cap");
     let log_path = tmp.path().join("log.txt");
