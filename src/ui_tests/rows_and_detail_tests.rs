@@ -1,5 +1,18 @@
 use super::*;
 
+fn has_separator_label<F>(rows: &[RepoRow], matches_label: F) -> bool
+where
+    F: Fn(&str) -> bool,
+{
+    rows.iter().any(|r| {
+        if let RepoRow::Separator(label) = r {
+            matches_label(label)
+        } else {
+            false
+        }
+    })
+}
+
 // ── build_rows ────────────────────────────────────────────────────────────────
 
 #[test]
@@ -75,13 +88,7 @@ fn build_rows_private_repos_get_separator() {
         sep_count, 1,
         "expected one separator between public and private groups"
     );
-    let has_label = rows.iter().any(|r| {
-        if let RepoRow::Separator(label) = r {
-            label.to_lowercase().contains("private")
-        } else {
-            false
-        }
-    });
+    let has_label = has_separator_label(&rows, |label| label.to_lowercase().contains("private"));
     assert!(has_label, "separator label should mention 'private'");
 }
 
@@ -102,13 +109,7 @@ fn build_rows_not_found_repos_get_separator() {
         sep_count, 1,
         "expected exactly one separator for NotFound group"
     );
-    let has_label = rows.iter().any(|r| {
-        if let RepoRow::Separator(label) = r {
-            label.contains("no local clone")
-        } else {
-            false
-        }
-    });
+    let has_label = has_separator_label(&rows, |label| label.contains("no local clone"));
     assert!(
         has_label,
         "separator label should mention 'no local clone' for NotFound repos"
