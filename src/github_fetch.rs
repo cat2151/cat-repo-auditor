@@ -195,7 +195,7 @@ pub(crate) fn do_fetch(
              readme_ja_badge, readme_ja_badge_checked_at,
              pages, pages_checked_at,
              deepwiki, deepwiki_checked_at,
-             cargo_install, cargo_checked_at, cargo_installed_hash,
+             cargo_install, cargo_checked_at, cargo_remote_hash, cargo_remote_hash_checked_at, cargo_installed_hash,
              wf_workflows, wf_checked_at) = history.repos.iter()
             .find(|h| h.name == r.name)
             .map(|h| (
@@ -204,12 +204,14 @@ pub(crate) fn do_fetch(
                 h.pages,              h.pages_checked_at.clone(),
                 h.deepwiki,           h.deepwiki_checked_at.clone(),
                 h.cargo_install,      h.cargo_checked_at.clone(),
+                h.cargo_remote_hash.clone(),
+                h.cargo_remote_hash_checked_at.clone(),
                 h.cargo_installed_hash.clone(),
                 h.wf_workflows,       h.wf_checked_at.clone(),
             ))
             .unwrap_or((None, String::new(), None, String::new(),
                         None, String::new(), None, String::new(),
-                        None, String::new(), String::new(),
+                        None, String::new(), String::new(), String::new(), String::new(),
                         None, String::new()));
 
         repo_infos.push(RepoInfo {
@@ -227,7 +229,7 @@ pub(crate) fn do_fetch(
             readme_ja_badge,      readme_ja_badge_checked_at,
             pages,                pages_checked_at,
             deepwiki,             deepwiki_checked_at,
-            cargo_install,        cargo_checked_at,
+            cargo_install,        cargo_checked_at, cargo_remote_hash, cargo_remote_hash_checked_at,
             cargo_installed_hash,
             wf_workflows,         wf_checked_at,
             issues: r.issues.nodes.into_iter().map(|i| {

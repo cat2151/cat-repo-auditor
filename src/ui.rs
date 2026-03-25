@@ -46,7 +46,7 @@ fn bottom_right_box_flags(app: &App, repo_idx: usize) -> (bool, bool) {
             repo.local_status,
             LocalStatus::Conflict | LocalStatus::Modified | LocalStatus::Staging
         ) || !repo.staging_files.is_empty(),
-        repo.cargo_install == Some(false),
+        true,
     )
 }
 
@@ -64,14 +64,14 @@ fn bottom_right_stack_offsets(box_heights: &[u16]) -> Vec<u16> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BottomRightBox {
-    CargoOld,
+    CargoHash,
     LocalChanges,
 }
 
-fn bottom_right_boxes(show_staging: bool, show_cargo_old: bool) -> Vec<BottomRightBox> {
+fn bottom_right_boxes(show_staging: bool, show_cargo_hash: bool) -> Vec<BottomRightBox> {
     let mut boxes = Vec::new();
-    if show_cargo_old {
-        boxes.push(BottomRightBox::CargoOld);
+    if show_cargo_hash {
+        boxes.push(BottomRightBox::CargoHash);
     }
     if show_staging {
         boxes.push(BottomRightBox::LocalChanges);
@@ -81,7 +81,7 @@ fn bottom_right_boxes(show_staging: bool, show_cargo_old: bool) -> Vec<BottomRig
 
 fn bottom_right_box_height(b: BottomRightBox) -> u16 {
     match b {
-        BottomRightBox::CargoOld => CARGO_OLD_BOX_H,
+        BottomRightBox::CargoHash => CARGO_OLD_BOX_H,
         BottomRightBox::LocalChanges => LOCAL_CHANGES_BOX_H,
     }
 }
@@ -220,14 +220,14 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
 
     // ── bottom-right status boxes ────────────────────────────────────────────
     if let Some(idx) = app.selected_repo_idx() {
-        let (show_staging, show_cargo_old) = bottom_right_box_flags(app, idx);
-        let boxes = bottom_right_boxes(show_staging, show_cargo_old);
+        let (show_staging, show_cargo_hash) = bottom_right_box_flags(app, idx);
+        let boxes = bottom_right_boxes(show_staging, show_cargo_hash);
         let heights: Vec<u16> = boxes.iter().map(|b| bottom_right_box_height(*b)).collect();
         let offsets = bottom_right_stack_offsets(&heights);
 
         for (b, offset) in boxes.into_iter().zip(offsets.into_iter()) {
             match b {
-                BottomRightBox::CargoOld => draw_cargo_old_box(f, app, idx, area, offset),
+                BottomRightBox::CargoHash => draw_cargo_old_box(f, app, idx, area, offset),
                 BottomRightBox::LocalChanges => draw_local_staging_box(f, app, idx, area, offset),
             }
         }

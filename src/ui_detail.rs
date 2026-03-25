@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-pub(crate) const CARGO_OLD_BOX_H: u16 = 4;
+pub(crate) const CARGO_OLD_BOX_H: u16 = 5;
 pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
 
 fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Color {
@@ -177,15 +177,16 @@ pub(crate) fn draw_cargo_old_box(
     f: &mut Frame, app: &App, repo_idx: usize, area: Rect, bottom_offset: u16,
 ) {
     let repo = &app.repos[repo_idx];
-    let inst  = if repo.cargo_installed_hash.is_empty() { "?" } else { &repo.cargo_installed_hash };
+    let remote = if repo.cargo_remote_hash.is_empty() { "?" } else { &repo.cargo_remote_hash };
     // cargo_checked_at stores the local HEAD hash used in the last comparison
     let local = if repo.cargo_checked_at.is_empty()     { "?" } else { &repo.cargo_checked_at };
+    let inst  = if repo.cargo_installed_hash.is_empty() { "?" } else { &repo.cargo_installed_hash };
 
     // Inner content width: " installed: " (12) + hash up to 40 chars + 1 padding = 53
     // Box width (including borders): 53 + 2 = 55
     let content_w: u16 = 53;
     let box_w = content_w + 2; // +2 for left/right borders
-    let box_h: u16 = CARGO_OLD_BOX_H; // top border + 2 lines + bottom border
+    let box_h: u16 = CARGO_OLD_BOX_H; // top border + 3 lines + bottom border
 
     // Place in bottom-right, above the bottom status bar (outer[2] is 1 line tall)
     let x = area.x + area.width.saturating_sub(box_w + 1);
@@ -194,7 +195,7 @@ pub(crate) fn draw_cargo_old_box(
 
     f.render_widget(Clear, rect);
     let block = Block::default()
-        .title(" cgo old: commit hash ")
+        .title(" cgo: commit hash ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(c(app, MK_ORANGE)))
         .style(Style::default().bg(c(app, MK_BG)));
@@ -205,12 +206,16 @@ pub(crate) fn draw_cargo_old_box(
     let max_w = inner.width.saturating_sub(label_w) as usize;
     let lines = vec![
         Line::from(vec![
-            Span::styled(" installed: ", Style::default().fg(c(app, MK_COMMENT))),
-            Span::styled(truncate(inst,  max_w), Style::default().fg(c(app, MK_ORANGE))),
-        ]),
-        Line::from(vec![
             Span::styled("     local: ", Style::default().fg(c(app, MK_COMMENT))),
             Span::styled(truncate(local, max_w), Style::default().fg(c(app, MK_GREEN))),
+        ]),
+        Line::from(vec![
+            Span::styled("    remote: ", Style::default().fg(c(app, MK_COMMENT))),
+            Span::styled(truncate(remote, max_w), Style::default().fg(c(app, MK_CYAN))),
+        ]),
+        Line::from(vec![
+            Span::styled(" installed: ", Style::default().fg(c(app, MK_COMMENT))),
+            Span::styled(truncate(inst,  max_w), Style::default().fg(c(app, MK_ORANGE))),
         ]),
     ];
     f.render_widget(Paragraph::new(lines).style(Style::default().bg(c(app, MK_BG))), inner);
