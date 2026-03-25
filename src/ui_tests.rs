@@ -92,6 +92,28 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     dir
 }
 
+struct TempDirGuard {
+    path: std::path::PathBuf,
+}
+
+impl TempDirGuard {
+    fn new(prefix: &str) -> Self {
+        Self {
+            path: unique_temp_dir(prefix),
+        }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.path).unwrap();
+    }
+}
+
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -358,8 +380,8 @@ fn draw_ui_keeps_active_border_color_when_window_is_focused() {
 #[test]
 fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
     let _lock_guard = env_lock().lock().unwrap();
-    let tmp = unique_temp_dir("ui_log_refresh");
-    let _xdg = ScopedEnvVar::set("XDG_CONFIG_HOME", &tmp);
+    let tmp = TempDirGuard::new("ui_log_refresh");
+    let _xdg = ScopedEnvVar::set("XDG_CONFIG_HOME", tmp.path());
 
     let log_path = Config::log_path();
     std::fs::create_dir_all(log_path.parent().unwrap()).unwrap();
@@ -374,8 +396,6 @@ fn draw_ui_refreshes_log_lines_from_file_when_log_panel_is_visible() {
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
     assert_eq!(app.log_lines, vec!["disk line 1", "disk line 2"]);
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 // ── background task spinner ───────────────────────────────────────────────────
