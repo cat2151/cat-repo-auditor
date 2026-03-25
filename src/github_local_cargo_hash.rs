@@ -106,17 +106,12 @@ where
     R: FnMut(&mut L, &str, &str) -> Option<String>,
 {
     let crates2_path = Path::new(cargo_home).join(".crates2.json");
-    super::log_cargo_check_path_result(
-        log_fn,
-        owner,
-        repo_name,
-        &crates2_path,
-        "cargo install metadata file",
-    );
-
     let content = match std::fs::read_to_string(&crates2_path) {
         Ok(content) => content,
         Err(err) => {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                return None;
+            }
             super::log_cargo_check_path_result(
                 log_fn,
                 owner,
@@ -164,15 +159,7 @@ where
         .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
     {
         Some(entry) => entry.to_string(),
-        None => {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "no cargo install entry matched repository",
-            );
-            return None;
-        }
+        None => return None,
     };
     let app_name = match matched_entry
         .split_whitespace()
