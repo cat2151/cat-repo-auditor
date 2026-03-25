@@ -70,7 +70,7 @@ fn build_rows_private_repos_get_separator() {
         .iter()
         .filter(|r| matches!(r, RepoRow::Separator(_)))
         .count();
-    // private group (4) gets a separator
+    // entering the private group should insert a separator
     assert_eq!(
         sep_count, 1,
         "expected one separator between public and private groups"
