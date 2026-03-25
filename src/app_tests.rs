@@ -41,6 +41,7 @@ fn make_repo(name: &str) -> RepoInfo {
         cargo_install: None,
         cargo_checked_at: String::new(),
         cargo_remote_hash: String::new(),
+        cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
         wf_workflows: None,
         wf_checked_at: String::new(),

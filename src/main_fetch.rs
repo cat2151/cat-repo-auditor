@@ -48,6 +48,7 @@ pub(crate) fn drain_fetch_channel(
                 cargo_install,
                 cargo_cat,
                 cargo_remote_hash,
+                cargo_remote_hash_cat,
                 cargo_installed_hash,
                 wf_workflows,
                 wf_cat,
@@ -64,6 +65,7 @@ pub(crate) fn drain_fetch_channel(
                     r.cargo_install = cargo_install;
                     r.cargo_checked_at = cargo_cat;
                     r.cargo_remote_hash = cargo_remote_hash;
+                    r.cargo_remote_hash_checked_at = cargo_remote_hash_cat;
                     r.cargo_installed_hash = cargo_installed_hash;
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;

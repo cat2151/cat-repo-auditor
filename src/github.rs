@@ -80,6 +80,9 @@ pub struct RepoInfo {
     /// remote main branch HEAD hash from GitHub (used for cargo hash display/comparison)
     #[serde(default)]
     pub cargo_remote_hash: String,
+    /// updated_at_raw when cargo_remote_hash was last checked
+    #[serde(default)]
+    pub cargo_remote_hash_checked_at: String,
     /// installed commit hash from .crates2.json
     #[serde(default)]
     pub cargo_installed_hash: String,
@@ -151,6 +154,7 @@ pub enum FetchProgress {
         cargo_install:          Option<bool>,
         cargo_cat:              String,
         cargo_remote_hash:      String,
+        cargo_remote_hash_cat:  String,
         cargo_installed_hash:   String,
         wf_workflows:           Option<bool>,
         wf_cat:                 String,
@@ -212,7 +216,8 @@ pub fn fetch_repos_with_progress(
 
             // Phase 3: per-field independent checked_at.
             // Each field is rechecked only when its own checked_at is stale.
-            // cargo_checked_at stores the local HEAD hash → rechecks only on new commit.
+            // cargo_checked_at stores the local HEAD hash → rechecks cargo local/installed on new commit.
+            // cargo_remote_hash_checked_at stores updated_at_raw → rechecks remote hash on repo updates.
             let owner = config.owner.clone();
 
 
@@ -239,6 +244,8 @@ pub fn fetch_repos_with_progress(
                     || r.pages_checked_at            != *cat
                     || r.deepwiki_checked_at         != local_head
                     || r.cargo_checked_at            != local_head
+                    || r.cargo_remote_hash_checked_at != *cat
+                    || r.cargo_remote_hash.is_empty()
                     || r.wf_checked_at               != local_head
                 })
                 .map(|r| r.name.clone())
@@ -258,7 +265,10 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge     = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages        = repo.pages_checked_at            != cat;
                 let needs_deepwiki     = repo.deepwiki_checked_at         != local_head;
-                let needs_cargo        = repo.cargo_checked_at            != local_head;
+                let needs_cargo_local  = repo.cargo_checked_at            != local_head;
+                let needs_cargo_remote = repo.cargo_remote_hash_checked_at != cat
+                    || repo.cargo_remote_hash.is_empty();
+                let needs_cargo        = needs_cargo_local || needs_cargo_remote;
                 let needs_wf           = repo.wf_checked_at               != local_head;
 
 
@@ -294,16 +304,17 @@ pub fn fetch_repos_with_progress(
                     (repo.deepwiki, repo.deepwiki_checked_at.clone())
                 };
 
-                let (cargo_install, cargo_cat, cargo_remote_hash, cargo_installed_hash) = if needs_cargo {
+                let (cargo_install, cargo_cat, cargo_remote_hash, cargo_remote_hash_cat, cargo_installed_hash) = if needs_cargo {
                     match check_cargo_git_install(&owner, name, &config.local_base_dir) {
                         // Use `loc` (the actual hash read from git) as cargo_cat so the stored
                         // value is always the precise hash used in the comparison.
-                        Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, inst),
-                        None => (None, local_head.clone(), String::new(), String::new()),
+                        Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, cat.clone(), inst),
+                        None => (None, local_head.clone(), String::new(), cat.clone(), String::new()),
                     }
                 } else {
                     (repo.cargo_install, repo.cargo_checked_at.clone(),
-                     repo.cargo_remote_hash.clone(), repo.cargo_installed_hash.clone())
+                     repo.cargo_remote_hash.clone(), repo.cargo_remote_hash_checked_at.clone(),
+                     repo.cargo_installed_hash.clone())
                 };
 
                 let (wf_workflows, wf_cat) = if needs_wf {
@@ -325,6 +336,7 @@ pub fn fetch_repos_with_progress(
                     r.cargo_install                = cargo_install;
                     r.cargo_checked_at             = cargo_cat.clone();
                     r.cargo_remote_hash            = cargo_remote_hash.clone();
+                    r.cargo_remote_hash_checked_at = cargo_remote_hash_cat.clone();
                     r.cargo_installed_hash         = cargo_installed_hash.clone();
                     r.wf_workflows                 = wf_workflows;
                     r.wf_checked_at                = wf_cat.clone();
@@ -336,7 +348,7 @@ pub fn fetch_repos_with_progress(
                     readme_ja_badge,     readme_ja_badge_cat,
                     pages,               pages_cat,
                     deepwiki,            deepwiki_cat,
-                    cargo_install,       cargo_cat, cargo_remote_hash,
+                    cargo_install,       cargo_cat, cargo_remote_hash, cargo_remote_hash_cat,
                     cargo_installed_hash,
                     wf_workflows,        wf_cat,
                 });

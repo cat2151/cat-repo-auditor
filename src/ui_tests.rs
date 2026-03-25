@@ -30,6 +30,7 @@ fn make_repo(name: &str) -> RepoInfo {
         cargo_install: None,
         cargo_checked_at: String::new(),
         cargo_remote_hash: String::new(),
+        cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
         wf_workflows: None,
         wf_checked_at: String::new(),
@@ -448,9 +449,9 @@ fn bottom_right_box_flags_staging_only() {
     let mut repo = make_repo("staging-only");
     repo.local_status = LocalStatus::Staging;
     app.repos = vec![repo];
-    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    let (show_staging, show_cargo_hash) = bottom_right_box_flags(&app, 0);
     assert!(show_staging);
-    assert!(show_cargo_old);
+    assert!(show_cargo_hash);
 }
 
 #[test]
@@ -465,9 +466,9 @@ fn bottom_right_box_flags_modified_only() {
     repo.local_status = LocalStatus::Modified;
     repo.staging_files = vec![" M file.txt".to_string()];
     app.repos = vec![repo];
-    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    let (show_staging, show_cargo_hash) = bottom_right_box_flags(&app, 0);
     assert!(show_staging);
-    assert!(show_cargo_old);
+    assert!(show_cargo_hash);
 }
 
 #[test]
@@ -482,9 +483,9 @@ fn bottom_right_box_flags_conflict_only() {
     repo.local_status = LocalStatus::Conflict;
     repo.staging_files = vec!["UU file.txt".to_string()];
     app.repos = vec![repo];
-    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    let (show_staging, show_cargo_hash) = bottom_right_box_flags(&app, 0);
     assert!(show_staging);
-    assert!(show_cargo_old);
+    assert!(show_cargo_hash);
 }
 
 #[test]
@@ -498,9 +499,9 @@ fn bottom_right_box_flags_cargo_old_only() {
     let mut repo = make_repo("cargo-old-only");
     repo.cargo_install = Some(true);
     app.repos = vec![repo];
-    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    let (show_staging, show_cargo_hash) = bottom_right_box_flags(&app, 0);
     assert!(!show_staging);
-    assert!(show_cargo_old);
+    assert!(show_cargo_hash);
 }
 
 #[test]
@@ -515,9 +516,9 @@ fn bottom_right_box_flags_staging_and_cargo_old() {
     repo.local_status = LocalStatus::Staging;
     repo.cargo_install = Some(false);
     app.repos = vec![repo];
-    let (show_staging, show_cargo_old) = bottom_right_box_flags(&app, 0);
+    let (show_staging, show_cargo_hash) = bottom_right_box_flags(&app, 0);
     assert!(show_staging);
-    assert!(show_cargo_old);
+    assert!(show_cargo_hash);
 }
 
 #[test]
@@ -547,13 +548,13 @@ fn bottom_right_boxes_order_staging_only() {
 #[test]
 fn bottom_right_boxes_order_cargo_old_only() {
     let boxes = bottom_right_boxes(false, true);
-    assert_eq!(boxes, vec![BottomRightBox::CargoOld]);
+    assert_eq!(boxes, vec![BottomRightBox::CargoHash]);
 }
 
 #[test]
 fn bottom_right_boxes_order_both() {
     let boxes = bottom_right_boxes(true, true);
-    assert_eq!(boxes, vec![BottomRightBox::CargoOld, BottomRightBox::LocalChanges]);
+    assert_eq!(boxes, vec![BottomRightBox::CargoHash, BottomRightBox::LocalChanges]);
 }
 
 #[test]
