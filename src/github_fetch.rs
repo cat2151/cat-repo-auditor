@@ -14,9 +14,7 @@ use std::process::Command;
 // ──────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct GqlResponse {
-    data: GqlData,
-}
+struct GqlResponse { data: GqlData }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,9 +24,7 @@ struct GqlData {
 }
 
 #[derive(Deserialize)]
-struct RepositoryOwner {
-    repositories: RepositoryConnection,
-}
+struct RepositoryOwner { repositories: RepositoryConnection }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,23 +55,17 @@ struct GqlRepo {
 
 #[derive(Deserialize)]
 struct IssueConnection {
-    #[serde(rename = "totalCount")]
-    total_count: u64,
+    #[serde(rename = "totalCount")] total_count: u64,
     nodes: Vec<GqlIssue>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GqlIssue {
-    title: String,
-    number: u64,
-    updated_at: String,
-}
+struct GqlIssue { title: String, number: u64, updated_at: String }
 
 #[derive(Deserialize)]
 struct PrConnection {
-    #[serde(rename = "totalCount")]
-    total_count: u64,
+    #[serde(rename = "totalCount")] total_count: u64,
     nodes: Vec<GqlPr>,
 }
 
@@ -89,22 +79,14 @@ struct GqlPr {
 }
 
 #[derive(Deserialize, Default)]
-struct ClosingIssues {
-    nodes: Vec<ClosingIssueNode>,
-}
+struct ClosingIssues { nodes: Vec<ClosingIssueNode> }
 
 #[derive(Deserialize)]
-struct ClosingIssueNode {
-    number: u64,
-}
+struct ClosingIssueNode { number: u64 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GqlRateLimit {
-    remaining: u64,
-    limit: u64,
-    reset_at: String,
-}
+struct GqlRateLimit { remaining: u64, limit: u64, reset_at: String }
 
 // ──────────────────────────────────────────────
 // Fetch
@@ -126,11 +108,7 @@ pub(crate) fn do_fetch(
 
     loop {
         page_num += 1;
-        let _ = tx.send(FetchProgress::PhaseProgress {
-            tag: "gh↓",
-            cur: page_num as usize,
-            total: 0,
-        });
+        let _ = tx.send(FetchProgress::PhaseProgress { tag: "gh↓", cur: page_num as usize, total: 0 });
 
         let after_clause = match &cursor {
             Some(c) => format!(r#", after: "{}""#, c),
@@ -182,9 +160,7 @@ pub(crate) fn do_fetch(
                 if *cached == response_hash && !history.repos.is_empty() {
                     let rl_out = rate_limit_info.unwrap();
                     history.rate_limit = Some(rl_out.clone());
-                    history
-                        .save(&crate::config::Config::history_path().to_string_lossy())
-                        .ok();
+                    history.save(&crate::config::Config::history_path().to_string_lossy()).ok();
                     return Ok((history.repos.clone(), rl_out));
                 }
             }
@@ -192,18 +168,13 @@ pub(crate) fn do_fetch(
         }
 
         let page_info = &gql.data.repository_owner.repositories.page_info;
-        let has_next = page_info.has_next_page;
+        let has_next  = page_info.has_next_page;
         let end_cursor = page_info.end_cursor.clone();
         all_repos.extend(gql.data.repository_owner.repositories.nodes);
-        if has_next {
-            cursor = end_cursor;
-        } else {
-            break;
-        }
+        if has_next { cursor = end_cursor; } else { break; }
     }
 
-    let filtered: Vec<GqlRepo> = all_repos
-        .into_iter()
+    let filtered: Vec<GqlRepo> = all_repos.into_iter()
         .filter(|r| !r.is_fork && !r.is_archived)
         .collect();
 
@@ -211,9 +182,7 @@ pub(crate) fn do_fetch(
     let mut repo_infos: Vec<RepoInfo> = Vec::with_capacity(total);
     for (scan_i, r) in filtered.into_iter().enumerate() {
         let _ = tx.send(FetchProgress::PhaseProgress {
-            tag: "scan",
-            cur: scan_i + 1,
-            total,
+            tag: "scan", cur: scan_i + 1, total,
         });
         let full_name = r.name_with_owner.clone();
         let (local_status, has_local_git, staging_files) =
@@ -222,59 +191,27 @@ pub(crate) fn do_fetch(
         let updated_at_raw = format_date_iso(&raw);
 
         // Carry over cached existence fields from history (each has its own checked_at)
-        let (
-            readme_ja,
-            readme_ja_checked_at,
-            readme_ja_badge,
-            readme_ja_badge_checked_at,
-            pages,
-            pages_checked_at,
-            deepwiki,
-            deepwiki_checked_at,
-            cargo_install,
-            cargo_checked_at,
-            cargo_remote_hash,
-            cargo_installed_hash,
-            wf_workflows,
-            wf_checked_at,
-        ) = history
-            .repos
-            .iter()
+        let (readme_ja, readme_ja_checked_at,
+             readme_ja_badge, readme_ja_badge_checked_at,
+             pages, pages_checked_at,
+             deepwiki, deepwiki_checked_at,
+             cargo_install, cargo_checked_at, cargo_remote_hash, cargo_installed_hash,
+             wf_workflows, wf_checked_at) = history.repos.iter()
             .find(|h| h.name == r.name)
-            .map(|h| {
-                (
-                    h.readme_ja,
-                    h.readme_ja_checked_at.clone(),
-                    h.readme_ja_badge,
-                    h.readme_ja_badge_checked_at.clone(),
-                    h.pages,
-                    h.pages_checked_at.clone(),
-                    h.deepwiki,
-                    h.deepwiki_checked_at.clone(),
-                    h.cargo_install,
-                    h.cargo_checked_at.clone(),
-                    h.cargo_remote_hash.clone(),
-                    h.cargo_installed_hash.clone(),
-                    h.wf_workflows,
-                    h.wf_checked_at.clone(),
-                )
-            })
-            .unwrap_or((
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                String::new(),
-                String::new(),
-                None,
-                String::new(),
-            ));
+            .map(|h| (
+                h.readme_ja,          h.readme_ja_checked_at.clone(),
+                h.readme_ja_badge,    h.readme_ja_badge_checked_at.clone(),
+                h.pages,              h.pages_checked_at.clone(),
+                h.deepwiki,           h.deepwiki_checked_at.clone(),
+                h.cargo_install,      h.cargo_checked_at.clone(),
+                h.cargo_remote_hash.clone(),
+                h.cargo_installed_hash.clone(),
+                h.wf_workflows,       h.wf_checked_at.clone(),
+            ))
+            .unwrap_or((None, String::new(), None, String::new(),
+                        None, String::new(), None, String::new(),
+                        None, String::new(), String::new(), String::new(),
+                        None, String::new()));
 
         repo_infos.push(RepoInfo {
             name: r.name.clone(),
@@ -287,95 +224,59 @@ pub(crate) fn do_fetch(
             local_status,
             has_local_git,
             staging_files,
-            readme_ja,
-            readme_ja_checked_at,
-            readme_ja_badge,
-            readme_ja_badge_checked_at,
-            pages,
-            pages_checked_at,
-            deepwiki,
-            deepwiki_checked_at,
-            cargo_install,
-            cargo_checked_at,
-            cargo_remote_hash,
+            readme_ja,            readme_ja_checked_at,
+            readme_ja_badge,      readme_ja_badge_checked_at,
+            pages,                pages_checked_at,
+            deepwiki,             deepwiki_checked_at,
+            cargo_install,        cargo_checked_at, cargo_remote_hash,
             cargo_installed_hash,
-            wf_workflows,
-            wf_checked_at,
-            issues: r
-                .issues
-                .nodes
-                .into_iter()
-                .map(|i| {
-                    let raw_i = i.updated_at.clone();
-                    IssueOrPr {
-                        title: i.title,
-                        number: i.number,
-                        updated_at: relative_date(&raw_i),
-                        updated_at_raw: format_date_iso(&raw_i),
-                        repo_full: full_name.clone(),
-                        is_pr: false,
-                        closes_issue: None,
-                    }
-                })
-                .collect(),
-            prs: r
-                .pull_requests
-                .nodes
-                .into_iter()
-                .map(|p| {
-                    let closes_issue = if p.closing_issues_references.nodes.len() == 1 {
-                        Some(p.closing_issues_references.nodes[0].number)
-                    } else {
-                        None
-                    };
-                    let raw_p = p.updated_at.clone();
-                    IssueOrPr {
-                        title: p.title,
-                        number: p.number,
-                        updated_at: relative_date(&raw_p),
-                        updated_at_raw: format_date_iso(&raw_p),
-                        repo_full: full_name.clone(),
-                        is_pr: true,
-                        closes_issue,
-                    }
-                })
-                .collect(),
+            wf_workflows,         wf_checked_at,
+            issues: r.issues.nodes.into_iter().map(|i| {
+                let raw_i = i.updated_at.clone();
+                IssueOrPr {
+                    title: i.title, number: i.number,
+                    updated_at: relative_date(&raw_i),
+                    updated_at_raw: format_date_iso(&raw_i),
+                    repo_full: full_name.clone(),
+                    is_pr: false, closes_issue: None,
+                }
+            }).collect(),
+            prs: r.pull_requests.nodes.into_iter().map(|p| {
+                let closes_issue = if p.closing_issues_references.nodes.len() == 1 {
+                    Some(p.closing_issues_references.nodes[0].number)
+                } else { None };
+                let raw_p = p.updated_at.clone();
+                IssueOrPr {
+                    title: p.title, number: p.number,
+                    updated_at: relative_date(&raw_p),
+                    updated_at_raw: format_date_iso(&raw_p),
+                    repo_full: full_name.clone(),
+                    is_pr: true, closes_issue,
+                }
+            }).collect(),
         });
     } // end for scan loop
 
     fn group_key(r: &RepoInfo) -> u8 {
-        if r.is_private {
-            return 4;
-        }
-        if r.local_status == LocalStatus::NotFound {
-            return 3;
-        }
-        if r.open_issues == 0 && r.open_prs == 0 {
-            return 2;
-        }
-        if r.open_prs == 0 {
-            return 1;
-        }
+        if r.is_private                            { return 4; }
+        if r.local_status == LocalStatus::NotFound { return 3; }
+        if r.open_issues == 0 && r.open_prs == 0  { return 2; }
+        if r.open_prs == 0                         { return 1; }
         0
     }
 
     repo_infos.sort_by(|a, b| {
-        group_key(a)
-            .cmp(&group_key(b))
+        group_key(a).cmp(&group_key(b))
             .then(b.updated_at_raw.cmp(&a.updated_at_raw))
     });
 
     let rl_out = rate_limit_info.unwrap_or(RateLimit {
-        remaining: 0,
-        limit: 5000,
-        reset_at: String::new(),
+        remaining: 0, limit: 5000, reset_at: String::new(),
     });
 
     history.repos = repo_infos.clone();
     history.rate_limit = Some(rl_out.clone());
-    history
-        .save(&crate::config::Config::history_path().to_string_lossy())
-        .ok();
+    history.save(&crate::config::Config::history_path().to_string_lossy()).ok();
 
     Ok((repo_infos, rl_out))
 }
@@ -399,29 +300,19 @@ fn run_gh_graphql(query: &str) -> Result<String> {
 pub(crate) fn format_date_iso(iso: &str) -> String {
     if let Ok(dt) = iso.parse::<DateTime<Utc>>() {
         dt.format("%Y-%m-%dT%H:%M:%SZ").to_string()
-    } else {
-        iso.to_string()
-    }
+    } else { iso.to_string() }
 }
 
 pub fn relative_date(iso: &str) -> String {
     if let Ok(dt) = iso.parse::<DateTime<Utc>>() {
-        let now = Utc::now();
+        let now  = Utc::now();
         let diff = now.signed_duration_since(dt);
-        if diff < Duration::days(1) {
-            String::from("today")
-        } else if diff < Duration::weeks(1) {
-            format!("{}d", diff.num_days())
-        } else if diff < Duration::days(30) {
-            format!("{}w", diff.num_weeks())
-        } else if diff < Duration::days(365) {
-            format!("{}mo", diff.num_days() / 30)
-        } else {
-            format!("{}y", diff.num_days() / 365)
-        }
-    } else {
-        iso.to_string()
-    }
+        if diff < Duration::days(1)   { String::from("today") }
+        else if diff < Duration::weeks(1) { format!("{}d",  diff.num_days()) }
+        else if diff < Duration::days(30) { format!("{}w",  diff.num_weeks()) }
+        else if diff < Duration::days(365){ format!("{}mo", diff.num_days() / 30) }
+        else                              { format!("{}y",  diff.num_days() / 365) }
+    } else { iso.to_string() }
 }
 
 fn fnv1a(s: &str) -> u64 {

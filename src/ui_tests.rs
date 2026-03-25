@@ -1,6 +1,6 @@
 use super::*;
-use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
 use crate::{app::App, config::Config};
+use crate::github::{IssueOrPr, LocalStatus, RepoInfo};
 use ratatui::{backend::TestBackend, Terminal};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -126,18 +126,9 @@ fn build_rows_single_group_no_separator() {
     b.open_prs = 1;
     let repos = vec![a, b];
     let rows = build_rows(&repos);
-    let sep_count = rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Separator(_)))
-        .count();
-    let repo_count = rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Repo(_)))
-        .count();
-    assert_eq!(
-        sep_count, 0,
-        "no separator expected when all repos are in group 0"
-    );
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
+    let repo_count = rows.iter().filter(|r| matches!(r, RepoRow::Repo(_))).count();
+    assert_eq!(sep_count, 0, "no separator expected when all repos are in group 0");
     assert_eq!(repo_count, 2);
 }
 
@@ -152,21 +143,11 @@ fn build_rows_no_open_prs_repos_get_separator() {
 
     let repos = vec![with_pr, no_pr];
     let rows = build_rows(&repos);
-    let sep_count = rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Separator(_)))
-        .count();
-    assert_eq!(
-        sep_count, 1,
-        "expected one separator between open-PR and no-PR groups"
-    );
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
+    assert_eq!(sep_count, 1, "expected one separator between open-PR and no-PR groups");
     // separator label should contain "no open PRs"
     let has_label = rows.iter().any(|r| {
-        if let RepoRow::Separator(label) = r {
-            label.contains("no open PRs")
-        } else {
-            false
-        }
+        if let RepoRow::Separator(label) = r { label.contains("no open PRs") } else { false }
     });
     assert!(has_label, "separator label should mention 'no open PRs'");
 }
@@ -180,15 +161,9 @@ fn build_rows_private_repos_get_separator() {
 
     let repos = vec![public_repo, private_repo];
     let rows = build_rows(&repos);
-    let sep_count = rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Separator(_)))
-        .count();
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
     // private group (3) gets a separator
-    assert!(
-        sep_count >= 1,
-        "expected at least one separator for private group"
-    );
+    assert!(sep_count >= 1, "expected at least one separator for private group");
 }
 
 #[test]
@@ -200,10 +175,7 @@ fn build_rows_not_found_repos_get_separator() {
 
     let repos = vec![found, not_found];
     let rows = build_rows(&repos);
-    let sep_count = rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Separator(_)))
-        .count();
+    let sep_count = rows.iter().filter(|r| matches!(r, RepoRow::Separator(_))).count();
     assert!(sep_count >= 1, "expected separator for NotFound group");
 }
 
@@ -211,15 +183,8 @@ fn build_rows_not_found_repos_get_separator() {
 fn build_rows_preserves_repo_indices() {
     let repos = vec![make_repo("a"), make_repo("b"), make_repo("c")];
     let rows = build_rows(&repos);
-    let indices: Vec<usize> = rows
-        .iter()
-        .filter_map(|r| {
-            if let RepoRow::Repo(i) = r {
-                Some(*i)
-            } else {
-                None
-            }
-        })
+    let indices: Vec<usize> = rows.iter()
+        .filter_map(|r| if let RepoRow::Repo(i) = r { Some(*i) } else { None })
         .collect();
     assert_eq!(indices.len(), 3);
     // indices must be valid indices into repos
@@ -233,10 +198,7 @@ fn build_rows_preserves_repo_indices() {
 #[test]
 fn build_detail_items_issue_only() {
     let mut repo = make_repo("a");
-    repo.issues = vec![
-        make_issue(1, "bug", "owner/a"),
-        make_issue(2, "feat", "owner/a"),
-    ];
+    repo.issues = vec![make_issue(1, "bug", "owner/a"), make_issue(2, "feat", "owner/a")];
     let items = build_detail_items(&repo);
     assert_eq!(items.len(), 2);
     assert!(!items[0].is_pr);
@@ -276,10 +238,7 @@ fn build_detail_items_pr_closes_nonexistent_issue_is_standalone() {
     let items = build_detail_items(&repo);
     assert_eq!(items.len(), 1);
     assert!(items[0].is_pr);
-    assert!(
-        !items[0].is_child,
-        "should be standalone since issue 99 is not open"
-    );
+    assert!(!items[0].is_child, "should be standalone since issue 99 is not open");
 }
 
 #[test]
@@ -360,14 +319,8 @@ fn window_color_keeps_color_when_window_is_focused() {
 
 #[test]
 fn window_color_converts_rgb_to_dim_grayscale_when_window_is_unfocused() {
-    assert_eq!(
-        window_color(false, MK_RED),
-        ratatui::style::Color::Rgb(65, 65, 65)
-    );
-    assert_eq!(
-        window_color(false, MK_BG_SEL),
-        ratatui::style::Color::Rgb(42, 42, 42)
-    );
+    assert_eq!(window_color(false, MK_RED), ratatui::style::Color::Rgb(65, 65, 65));
+    assert_eq!(window_color(false, MK_BG_SEL), ratatui::style::Color::Rgb(42, 42, 42));
 }
 
 #[test]
@@ -600,10 +553,7 @@ fn bottom_right_boxes_order_cargo_old_only() {
 #[test]
 fn bottom_right_boxes_order_both() {
     let boxes = bottom_right_boxes(true, true);
-    assert_eq!(
-        boxes,
-        vec![BottomRightBox::CargoOld, BottomRightBox::LocalChanges]
-    );
+    assert_eq!(boxes, vec![BottomRightBox::CargoOld, BottomRightBox::LocalChanges]);
 }
 
 #[test]

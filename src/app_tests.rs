@@ -78,10 +78,7 @@ fn make_active_repo(name: &str) -> RepoInfo {
 }
 
 fn repo_count(app: &App) -> usize {
-    app.filtered_rows
-        .iter()
-        .filter(|r| matches!(r, RepoRow::Repo(_)))
-        .count()
+    app.filtered_rows.iter().filter(|r| matches!(r, RepoRow::Repo(_))).count()
 }
 
 // ── num_prefix ───────────────────────────────────────────────────────────────
@@ -115,11 +112,7 @@ fn consume_prefix_returns_value_and_resets() {
 #[test]
 fn repo_move_down_advances_cursor() {
     let mut app = App::new(make_config());
-    app.repos = vec![
-        make_active_repo("a"),
-        make_active_repo("b"),
-        make_active_repo("c"),
-    ];
+    app.repos = vec![make_active_repo("a"), make_active_repo("b"), make_active_repo("c")];
     app.rebuild_rows();
     assert_eq!(app.row_cursor, 0);
     app.repo_move_down(1);
@@ -140,11 +133,7 @@ fn repo_move_down_stops_at_last() {
 #[test]
 fn repo_move_up_decrements_cursor() {
     let mut app = App::new(make_config());
-    app.repos = vec![
-        make_active_repo("a"),
-        make_active_repo("b"),
-        make_active_repo("c"),
-    ];
+    app.repos = vec![make_active_repo("a"), make_active_repo("b"), make_active_repo("c")];
     app.rebuild_rows();
     app.repo_move_down(2);
     assert_eq!(app.row_cursor, 2);
@@ -164,11 +153,7 @@ fn repo_move_up_stays_at_top() {
 #[test]
 fn selected_repo_idx_returns_correct_index() {
     let mut app = App::new(make_config());
-    app.repos = vec![
-        make_active_repo("a"),
-        make_active_repo("b"),
-        make_active_repo("c"),
-    ];
+    app.repos = vec![make_active_repo("a"), make_active_repo("b"), make_active_repo("c")];
     app.rebuild_rows();
     assert_eq!(app.selected_repo_idx(), Some(0));
     app.repo_move_down(1);
@@ -204,16 +189,8 @@ fn apply_filter_with_query_filters_by_name() {
     app.rebuild_rows();
     app.search_query = String::from("alpha");
     app.apply_filter();
-    let names: Vec<&str> = app
-        .filtered_rows
-        .iter()
-        .filter_map(|r| {
-            if let RepoRow::Repo(i) = r {
-                Some(app.repos[*i].name.as_str())
-            } else {
-                None
-            }
-        })
+    let names: Vec<&str> = app.filtered_rows.iter()
+        .filter_map(|r| if let RepoRow::Repo(i) = r { Some(app.repos[*i].name.as_str()) } else { None })
         .collect();
     assert!(names.contains(&"alpha"), "alpha expected");
     assert!(names.contains(&"alphabet"), "alphabet expected");
@@ -227,22 +204,11 @@ fn apply_filter_multi_term_and_logic() {
     app.rebuild_rows();
     app.search_query = String::from("foo bar");
     app.apply_filter();
-    let names: Vec<&str> = app
-        .filtered_rows
-        .iter()
-        .filter_map(|r| {
-            if let RepoRow::Repo(i) = r {
-                Some(app.repos[*i].name.as_str())
-            } else {
-                None
-            }
-        })
+    let names: Vec<&str> = app.filtered_rows.iter()
+        .filter_map(|r| if let RepoRow::Repo(i) = r { Some(app.repos[*i].name.as_str()) } else { None })
         .collect();
     assert!(names.contains(&"foo-bar"), "foo-bar expected");
-    assert!(
-        !names.contains(&"foo-baz"),
-        "foo-baz should not match 'bar'"
-    );
+    assert!(!names.contains(&"foo-baz"), "foo-baz should not match 'bar'");
     assert!(!names.contains(&"qux"), "qux should not match");
 }
 
@@ -263,9 +229,7 @@ fn search_pop_expands_filter() {
     app.repos = vec![make_repo("beta"), make_repo("beta2")];
     app.rebuild_rows();
     app.search_enter();
-    for c in "beta2".chars() {
-        app.search_push(c);
-    }
+    for c in "beta2".chars() { app.search_push(c); }
     assert_eq!(repo_count(&app), 1);
     app.search_pop();
     assert_eq!(repo_count(&app), 2);
@@ -282,11 +246,7 @@ fn search_confirm_clears_filter_and_preserves_selection() {
     app.search_confirm();
     assert!(app.search_query.is_empty(), "query should be cleared");
     assert_eq!(app.search_state, SearchState::Off);
-    assert_eq!(
-        app.selected_repo_idx(),
-        Some(1),
-        "selection should remain on beta"
-    );
+    assert_eq!(app.selected_repo_idx(), Some(1), "selection should remain on beta");
 }
 
 #[test]
@@ -301,28 +261,18 @@ fn search_cancel_restores_cursor_position() {
     assert_eq!(app.selected_repo_idx(), Some(1));
     app.search_cancel();
     assert_eq!(app.search_state, SearchState::Off);
-    assert_eq!(
-        app.selected_repo_idx(),
-        Some(2),
-        "cursor should be restored to gamma"
-    );
+    assert_eq!(app.selected_repo_idx(), Some(2), "cursor should be restored to gamma");
 }
 
 #[test]
 fn search_next_match_cycles_forward() {
     let mut app = App::new(make_config());
     // Use active repos (open_issues=1) so group 0, no separator before them
-    app.repos = vec![
-        make_active_repo("foo1"),
-        make_active_repo("bar"),
-        make_active_repo("foo2"),
-    ];
+    app.repos = vec![make_active_repo("foo1"), make_active_repo("bar"), make_active_repo("foo2")];
     app.rebuild_rows();
     // Use search_enter + search_push so cursor is reset to 0 (first match)
     app.search_enter();
-    for c in "foo".chars() {
-        app.search_push(c);
-    }
+    for c in "foo".chars() { app.search_push(c); }
     // filtered_rows: [Repo(0)=foo1, Repo(2)=foo2], cursor at 0 → selected = Some(0)
     let first = app.selected_repo_idx();
     app.search_next_match();
@@ -330,26 +280,16 @@ fn search_next_match_cycles_forward() {
     assert_ne!(first, second, "next match should move cursor");
     // next again wraps around
     app.search_next_match();
-    assert_eq!(
-        app.selected_repo_idx(),
-        first,
-        "should wrap around to first match"
-    );
+    assert_eq!(app.selected_repo_idx(), first, "should wrap around to first match");
 }
 
 #[test]
 fn search_prev_match_cycles_backward() {
     let mut app = App::new(make_config());
-    app.repos = vec![
-        make_active_repo("foo1"),
-        make_active_repo("bar"),
-        make_active_repo("foo2"),
-    ];
+    app.repos = vec![make_active_repo("foo1"), make_active_repo("bar"), make_active_repo("foo2")];
     app.rebuild_rows();
     app.search_enter();
-    for c in "foo".chars() {
-        app.search_push(c);
-    }
+    for c in "foo".chars() { app.search_push(c); }
     // cursor at 0 = foo1 (first match)
     let first = app.selected_repo_idx();
     // prev from first should wrap to last
