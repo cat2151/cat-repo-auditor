@@ -1,4 +1,7 @@
-use super::{cargo_install_source_hash, check_cargo_git_install_inner, get_cargo_bins_inner};
+use super::{
+    check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
+    get_cargo_bins_inner,
+};
 use std::process::Command as Cmd;
 use std::time::Duration;
 
@@ -52,24 +55,6 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos));
     std::fs::create_dir_all(&dir).unwrap();
     dir
-}
-
-#[test]
-fn cargo_install_source_hash_extracts_hash_and_trims_closing_paren() {
-    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#0123456789abcdef)";
-    assert_eq!(cargo_install_source_hash(entry), Some("0123456789abcdef"));
-}
-
-#[test]
-fn cargo_install_source_hash_returns_none_without_hash_separator() {
-    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo)";
-    assert_eq!(cargo_install_source_hash(entry), None);
-}
-
-#[test]
-fn cargo_install_source_hash_returns_none_when_hash_is_empty() {
-    let entry = "myrepo 0.1.0 (git+https://github.com/owner/myrepo#)";
-    assert_eq!(cargo_install_source_hash(entry), None);
 }
 
 #[test]
@@ -254,12 +239,14 @@ fn cargo_install_returns_some_true_when_hashes_match() {
 
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+    let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
-    let result = check_cargo_git_install_inner(
+    let result = check_cargo_git_install_inner_with_remote_hash(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
         cargo_home.to_str().unwrap(),
+        remote_hash,
         |_| {},
     );
     std::fs::remove_dir_all(&tmp).ok();
@@ -300,27 +287,29 @@ fn cargo_install_logs_hash_source_details() {
     let crates2_path = cargo_home.join(".crates2.json");
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(&crates2_path, &json).unwrap();
+    let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
     let mut logs = Vec::new();
-    let result = check_cargo_git_install_inner(
+    let result = check_cargo_git_install_inner_with_remote_hash(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
         cargo_home.to_str().unwrap(),
+        remote_hash,
         |msg| logs.push(msg.to_string()),
     );
     std::fs::remove_dir_all(&tmp).ok();
 
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
+    let expected_matched_crate_name = format!("matched crate name={:?}", "myrepo");
     let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
-    let metadata_hash = "0123456789abcdef0123456789abcdef01234567";
     assert!(result.is_some());
     assert!(logs.iter().any(|msg| {
         msg.contains("repo=owner/myrepo")
             && msg.contains(&crates2_path_display)
             && msg.contains("matched install entry=")
-            && msg.contains(&format!("metadata hash={metadata_hash}"))
+            && msg.contains(&expected_matched_crate_name)
     }));
     assert!(logs
         .iter()
@@ -338,12 +327,12 @@ fn cargo_install_logs_hash_source_details() {
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains("hash summary:")
-            && msg.contains(&format!("metadata={metadata_hash}"))
-            && msg.contains(&format!("installed={local_hash}"))
-            && msg.contains(&format!("local={local_hash}"))
-            && msg.contains("metadata_eq_installed=false")
-            && msg.contains("installed_eq_local=true")
-            && msg.contains("metadata_eq_local=false")
+            && msg.contains(&format!("remote hash={remote_hash}"))
+            && msg.contains(&format!("installed hash={local_hash}"))
+            && msg.contains(&format!("local hash={local_hash}"))
+            && msg.contains("remote_eq_installed=false (mismatch)")
+            && msg.contains("installed_eq_local=true (match)")
+            && msg.contains("remote_eq_local=false (mismatch)")
     }));
 }
 
@@ -365,12 +354,14 @@ fn cargo_install_returns_some_false_when_hashes_differ() {
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     let cargo_home = tmp.join("cargo_home");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+    let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
-    let result = check_cargo_git_install_inner(
+    let result = check_cargo_git_install_inner_with_remote_hash(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
         cargo_home.to_str().unwrap(),
+        remote_hash,
         |_| {},
     );
     std::fs::remove_dir_all(&tmp).ok();
@@ -403,12 +394,14 @@ fn cargo_install_picks_latest_mtime_subdir() {
 
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+    let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
-    let result = check_cargo_git_install_inner(
+    let result = check_cargo_git_install_inner_with_remote_hash(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
         cargo_home.to_str().unwrap(),
+        remote_hash,
         |_| {},
     );
     std::fs::remove_dir_all(&tmp).ok();
