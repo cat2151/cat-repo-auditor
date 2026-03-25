@@ -115,6 +115,8 @@ impl Drop for TempDirGuard {
 }
 
 fn env_lock() -> &'static Mutex<()> {
+    // Tests mutate process-wide environment variables to redirect Config::log_path(),
+    // so serialize them to avoid cross-test interference.
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
 }
