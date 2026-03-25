@@ -1,12 +1,7 @@
 use super::*;
 
 fn make_app_for_bottom_right() -> App {
-    crate::app::App::new(crate::config::Config {
-        owner: "owner".to_string(),
-        local_base_dir: ".".to_string(),
-        app_run_dir: None,
-        auto_pull: false,
-    })
+    App::new(make_config())
 }
 
 #[test]

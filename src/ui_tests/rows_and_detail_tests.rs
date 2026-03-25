@@ -62,7 +62,7 @@ fn build_rows_private_repos_get_separator() {
     let mut private_repo = make_repo("private");
     private_repo.is_private = true;
     let mut public_repo = make_repo("public");
-    public_repo.open_issues = 1; // group 0
+    public_repo.open_prs = 1; // group 0 (open PRs)
 
     let repos = vec![public_repo, private_repo];
     let rows = build_rows(&repos);
@@ -70,11 +70,19 @@ fn build_rows_private_repos_get_separator() {
         .iter()
         .filter(|r| matches!(r, RepoRow::Separator(_)))
         .count();
-    // private group (3) gets a separator
-    assert!(
-        sep_count >= 1,
-        "expected at least one separator for private group"
+    // private group (4) gets a separator
+    assert_eq!(
+        sep_count, 1,
+        "expected one separator between public and private groups"
     );
+    let has_label = rows.iter().any(|r| {
+        if let RepoRow::Separator(label) = r {
+            label.to_lowercase().contains("private")
+        } else {
+            false
+        }
+    });
+    assert!(has_label, "separator label should mention 'private'");
 }
 
 #[test]
@@ -82,7 +90,7 @@ fn build_rows_not_found_repos_get_separator() {
     let mut not_found = make_repo("missing");
     not_found.local_status = LocalStatus::NotFound;
     let mut found = make_repo("present");
-    found.open_issues = 1;
+    found.open_prs = 1;
 
     let repos = vec![found, not_found];
     let rows = build_rows(&repos);
@@ -90,7 +98,21 @@ fn build_rows_not_found_repos_get_separator() {
         .iter()
         .filter(|r| matches!(r, RepoRow::Separator(_)))
         .count();
-    assert!(sep_count >= 1, "expected separator for NotFound group");
+    assert_eq!(
+        sep_count, 1,
+        "expected exactly one separator for NotFound group"
+    );
+    let has_label = rows.iter().any(|r| {
+        if let RepoRow::Separator(label) = r {
+            label.contains("no local clone")
+        } else {
+            false
+        }
+    });
+    assert!(
+        has_label,
+        "separator label should mention 'no local clone' for NotFound repos"
+    );
 }
 
 #[test]
