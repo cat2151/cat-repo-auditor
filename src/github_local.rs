@@ -117,19 +117,8 @@ pub(crate) fn check_local_status_no_fetch(
         return (LocalStatus::Modified, true, local_changes.files);
     }
 
-    let local = Command::new("git")
-        .args(["-C", &path, "rev-parse", "HEAD"])
-        .output();
-    let remote = Command::new("git")
-        .args(["-C", &path, "rev-parse", "@{u}"])
-        .output();
-    let remote_ok = remote.as_ref().map(|r| r.status.success()).unwrap_or(false);
-
-    match (local, remote) {
-        (Ok(l), Ok(r)) if l.status.success() && remote_ok => {
-            let local_sha = String::from_utf8_lossy(&l.stdout).trim().to_string();
-            let remote_sha = String::from_utf8_lossy(&r.stdout).trim().to_string();
-
+    match local_and_upstream_heads(&path) {
+        Some((local_sha, remote_sha)) => {
             if local_sha == remote_sha {
                 return (LocalStatus::Clean, true, vec![]);
             }
@@ -148,9 +137,15 @@ pub(crate) fn check_local_status_no_fetch(
             }
             (LocalStatus::Other, true, vec![])
         }
-        (Ok(l), _) if l.status.success() => (LocalStatus::Other, true, vec![]),
-        _ => (LocalStatus::Other, true, vec![]),
+        None => (LocalStatus::Other, true, vec![]),
     }
+}
+
+pub(crate) fn local_head_matches_upstream(base_dir: &str, repo_name: &str) -> bool {
+    let path = build_repo_path(base_dir, repo_name);
+    local_and_upstream_heads(&path)
+        .map(|(local_sha, remote_sha)| local_sha == remote_sha)
+        .unwrap_or(false)
 }
 
 struct LocalChanges {
@@ -217,6 +212,29 @@ fn get_local_changes(repo_path: &str) -> LocalChanges {
             has_modified: false,
         },
     }
+}
+
+fn local_and_upstream_heads(repo_path: &str) -> Option<(String, String)> {
+    let local = Command::new("git")
+        .args(["-C", repo_path, "rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !local.status.success() {
+        return None;
+    }
+
+    let remote = Command::new("git")
+        .args(["-C", repo_path, "rev-parse", "@{u}"])
+        .output()
+        .ok()?;
+    if !remote.status.success() {
+        return None;
+    }
+
+    Some((
+        String::from_utf8_lossy(&local.stdout).trim().to_string(),
+        String::from_utf8_lossy(&remote.stdout).trim().to_string(),
+    ))
 }
 
 fn is_unmerged_status(x: char, y: char) -> bool {

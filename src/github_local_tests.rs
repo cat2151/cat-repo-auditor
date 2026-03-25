@@ -131,6 +131,63 @@ fn check_local_status_reports_staging_before_pullable() {
 }
 
 #[test]
+fn local_head_matches_upstream_returns_true_for_modified_repo_with_same_head() {
+    let (tmp, _seed, local) = setup_remote_with_clone("same_head_modified");
+
+    std::fs::write(local.join("local-only.txt"), "local change\n").unwrap();
+
+    let (status, _, _) = check_local_status_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+
+    assert_eq!(status, LocalStatus::Modified);
+    assert!(local_head_matches_upstream(
+        tmp.join("repos").to_str().unwrap(),
+        "myrepo"
+    ));
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn local_head_matches_upstream_returns_true_for_staging_repo_with_same_head() {
+    let (tmp, _seed, local) = setup_remote_with_clone("same_head_staging");
+
+    std::fs::write(local.join("staged.txt"), "local change\n").unwrap();
+    run_git_ok(&local, &["add", "staged.txt"]);
+
+    let (status, _, _) = check_local_status_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+
+    assert_eq!(status, LocalStatus::Staging);
+    assert!(local_head_matches_upstream(
+        tmp.join("repos").to_str().unwrap(),
+        "myrepo"
+    ));
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn local_head_matches_upstream_returns_false_after_remote_advances() {
+    let (tmp, seed, local) = setup_remote_with_clone("different_head_modified");
+
+    std::fs::write(local.join("local-only.txt"), "local change\n").unwrap();
+    std::fs::write(seed.join("remote-only.txt"), "remote change\n").unwrap();
+    run_git_ok(&seed, &["add", "remote-only.txt"]);
+    run_git_ok(&seed, &["commit", "-m", "remote update"]);
+    run_git_ok(&seed, &["push", "origin", "HEAD"]);
+    run_git_ok(&local, &["fetch", "origin"]);
+
+    let (status, _, _) = check_local_status_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+
+    assert_eq!(status, LocalStatus::Modified);
+    assert!(!local_head_matches_upstream(
+        tmp.join("repos").to_str().unwrap(),
+        "myrepo"
+    ));
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn check_local_status_reports_conflict() {
     let tmp = unique_temp_dir("status_conflict");
     let repo = tmp.join("myrepo");
