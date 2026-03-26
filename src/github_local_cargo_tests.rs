@@ -98,7 +98,7 @@ fn cargo_install_none_when_crates2_missing() {
 }
 
 #[test]
-fn cargo_install_returns_none_and_does_not_log_when_crates2_is_missing() {
+fn cargo_install_returns_none_and_logs_when_crates2_is_missing() {
     let tmp = unique_temp_dir("cargo_test_missing_log");
 
     let mut logs = Vec::new();
@@ -112,7 +112,11 @@ fn cargo_install_returns_none_and_does_not_log_when_crates2_is_missing() {
     std::fs::remove_dir_all(&tmp).ok();
 
     assert!(result.is_none());
-    assert!(logs.is_empty(), "unexpected logs: {logs:?}");
+    assert!(logs.iter().any(|msg| {
+        msg.contains("repo=owner/myrepo")
+            && msg.contains(".crates2.json")
+            && msg.contains("cargo install metadata file was not found")
+    }));
 }
 
 #[test]
@@ -134,7 +138,7 @@ fn cargo_install_none_when_repo_not_in_crates2() {
 }
 
 #[test]
-fn cargo_install_returns_none_and_does_not_log_when_repo_not_in_crates2() {
+fn cargo_install_returns_none_and_logs_when_repo_not_in_crates2() {
     let tmp = unique_temp_dir("cargo_test_notfound_log");
     let json = make_crates2_json("other", "other-repo", "other-repo");
     std::fs::write(tmp.join(".crates2.json"), &json).unwrap();
@@ -150,7 +154,11 @@ fn cargo_install_returns_none_and_does_not_log_when_repo_not_in_crates2() {
     std::fs::remove_dir_all(&tmp).ok();
 
     assert!(result.is_none());
-    assert!(logs.is_empty(), "unexpected logs: {logs:?}");
+    assert!(logs.iter().any(|msg| {
+        msg.contains("repo=owner/myrepo")
+            && msg.contains(".crates2.json")
+            && msg.contains("repository was not found in cargo install metadata")
+    }));
 }
 
 #[test]

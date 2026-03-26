@@ -2,8 +2,9 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_cargo_git_install, check_deepwiki_exists, check_file_exists, check_pages_exists,
-        check_readme_ja_badge, check_workflows, git_pull, local_head_matches_upstream,
+        append_cargo_check_result, check_cargo_git_install, check_deepwiki_exists,
+        check_file_exists, check_pages_exists, check_readme_ja_badge, check_workflows, git_pull,
+        local_head_matches_upstream,
     },
     history::History,
 };
@@ -185,6 +186,43 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
+fn format_cargo_skip_reason(needs_cargo_local: bool, needs_cargo_remote: bool) -> &'static str {
+    match (needs_cargo_local, needs_cargo_remote) {
+        (false, false) => {
+            "skip cargo check because local HEAD and remote hash cache are already up to date"
+        }
+        (false, true) => {
+            "run cargo check because remote hash cache is stale or empty while local HEAD cache is up to date"
+        }
+        (true, false) => {
+            "run cargo check because local HEAD cache is stale while remote hash cache is up to date"
+        }
+        (true, true) => {
+            "run cargo check because both local HEAD cache and remote hash cache are stale or empty"
+        }
+    }
+}
+
+fn format_cargo_check_decision_log(
+    repo: &RepoInfo,
+    local_head: &str,
+    needs_cargo_local: bool,
+    needs_cargo_remote: bool,
+) -> String {
+    format!(
+        "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
+        format_cargo_skip_reason(needs_cargo_local, needs_cargo_remote),
+        needs_cargo_local,
+        needs_cargo_remote,
+        local_head,
+        repo.cargo_checked_at,
+        repo.updated_at_raw,
+        repo.cargo_remote_hash_checked_at,
+        !repo.cargo_remote_hash.is_empty(),
+        repo.cargo_install,
+    )
+}
+
 // ──────────────────────────────────────────────
 // Fetch orchestration
 // ──────────────────────────────────────────────
@@ -288,6 +326,26 @@ pub fn fetch_repos_with_progress(
                 })
                 .map(|r| r.name.clone())
                 .collect();
+
+            for repo in &repos {
+                let local_head = local_heads
+                    .get(&repo.name)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let needs_cargo_local = repo.cargo_checked_at != local_head;
+                let needs_cargo_remote = repo.cargo_remote_hash_checked_at != repo.updated_at_raw
+                    || repo.cargo_remote_hash.is_empty();
+                append_cargo_check_result(
+                    &owner,
+                    &repo.name,
+                    &format_cargo_check_decision_log(
+                        repo,
+                        local_head,
+                        needs_cargo_local,
+                        needs_cargo_remote,
+                    ),
+                );
+            }
 
             if to_check.is_empty() {
                 return;

@@ -41,6 +41,12 @@ fn append_error_log(msg: &str) {
     }
 }
 
+pub(crate) fn append_cargo_check_result(owner: &str, repo_name: &str, result: &str) {
+    append_error_log(&format!(
+        "cargo check: repo={owner}/{repo_name} result={result}"
+    ));
+}
+
 fn log_cargo_check_path_result(
     log_fn: &mut impl FnMut(&str),
     owner: &str,

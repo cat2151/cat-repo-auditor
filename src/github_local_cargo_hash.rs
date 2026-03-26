@@ -136,6 +136,13 @@ where
         Ok(content) => content,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
+                super::log_cargo_check_path_result(
+                    log_fn,
+                    owner,
+                    repo_name,
+                    &crates2_path,
+                    "cargo install metadata file was not found; skip cargo install check",
+                );
                 return None;
             }
             super::log_cargo_check_path_result(
@@ -185,7 +192,16 @@ where
         .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
     {
         Some(entry) => entry.to_string(),
-        None => return None,
+        None => {
+            super::log_cargo_check_path_result(
+                log_fn,
+                owner,
+                repo_name,
+                &crates2_path,
+                "repository was not found in cargo install metadata; skip cargo install check",
+            );
+            return None;
+        }
     };
     let app_name = match matched_entry
         .split_whitespace()
