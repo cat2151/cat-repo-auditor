@@ -1,29 +1,41 @@
 use super::*;
-use crate::config::Config;
-use crate::github::{
-    FetchProgress, LocalStatus, RateLimit, RepoInfo, BACKGROUND_CHECKS_COMPLETED_MSG,
+use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
+use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_LOG_MSG;
+use std::{
+    fs,
+    path::PathBuf,
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
 };
-use std::{fs, path::PathBuf, sync::Mutex};
 
 static LOG_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
-struct LogFileRestore {
-    path: PathBuf,
-    original: Option<String>,
+struct TempLogDir {
+    root: PathBuf,
 }
 
-impl Drop for LogFileRestore {
+impl TempLogDir {
+    fn new() -> Self {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "catrepo-main-fetch-tests-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("should create temp log dir for test");
+        Self { root }
+    }
+
+    fn log_path(&self) -> PathBuf {
+        self.root.join("logs").join("log.txt")
+    }
+}
+
+impl Drop for TempLogDir {
     fn drop(&mut self) {
-        match &self.original {
-            Some(contents) => {
-                let _ = fs::write(&self.path, contents);
-            }
-            None => {
-                if self.path.exists() {
-                    let _ = fs::remove_file(&self.path);
-                }
-            }
-        }
+        let _ = fs::remove_dir_all(&self.root);
     }
 }
 
@@ -136,35 +148,23 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
 
 #[test]
 fn drain_fetch_channel_persists_background_checks_completed_log() {
-    let _guard = LOG_TEST_MUTEX.lock().unwrap();
+    let _guard = LOG_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut app = App::new(make_config());
-    let log_path = Config::log_path();
-    let _restore = LogFileRestore {
-        path: log_path.clone(),
-        original: fs::read_to_string(&log_path).ok(),
-    };
-
-    if let Some(parent) = log_path.parent() {
-        fs::create_dir_all(parent).expect("should create log directory for test");
-    }
-    if log_path.exists() {
-        fs::remove_file(&log_path).expect("should remove existing log file for test");
-    }
+    let temp_log_dir = TempLogDir::new();
+    let log_path = temp_log_dir.log_path();
+    fs::create_dir_all(log_path.parent().unwrap()).expect("should create log directory for test");
 
     let (tx, rx) = mpsc::channel();
-    tx.send(FetchProgress::Status(String::from(
-        BACKGROUND_CHECKS_COMPLETED_MSG,
-    )))
-    .unwrap();
+    tx.send(FetchProgress::BackgroundChecksCompleted).unwrap();
     drop(tx);
 
     let mut fetch_rx = Some(rx);
-    drain_fetch_channel(&mut app, &mut fetch_rx);
+    drain_fetch_channel_for_log_path(&mut app, &mut fetch_rx, log_path.as_path());
 
     let persisted = fs::read_to_string(&log_path).unwrap();
-    assert!(persisted.contains(BACKGROUND_CHECKS_COMPLETED_MSG));
+    assert!(persisted.contains(BACKGROUND_CHECKS_COMPLETED_LOG_MSG));
     assert!(app
         .log_lines
         .last()
-        .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_MSG)));
+        .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_LOG_MSG)));
 }
