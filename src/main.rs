@@ -35,7 +35,10 @@ use crate::{
     github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
     history::History,
     main_fetch::drain_fetch_channel,
-    main_helpers::{make_x_log_line, persist_log_line, refresh_log_lines_if_changed, start_fetch},
+    main_helpers::{
+        make_startup_log_line, make_x_log_line, persist_log_line, refresh_log_lines_if_changed,
+        start_fetch, STARTUP_LOG_SEPARATOR,
+    },
     main_launch::{
         cargo_status_to_launch_args, format_launch_command, x_not_run_feedback_no_cargo_install,
     },
@@ -90,6 +93,8 @@ fn main() -> Result<()> {
 
     let mut app = App::new(config.clone());
     refresh_log_lines_if_changed(&mut app);
+    persist_log_line(&mut app, String::from(STARTUP_LOG_SEPARATOR));
+    persist_log_line(&mut app, make_startup_log_line());
 
     {
         let h = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();

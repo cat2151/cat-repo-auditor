@@ -70,6 +70,14 @@ pub(crate) fn make_x_log_line(repo_full_name: &str, msg: &str) -> String {
     format!("[{now}] x {repo_full_name} {msg}")
 }
 
+pub(crate) const STARTUP_LOG_SEPARATOR: &str = "---";
+pub(crate) const STARTUP_LOG_MSG: &str = "catrepo started";
+
+pub(crate) fn make_startup_log_line() -> String {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S");
+    format!("[{now}] {STARTUP_LOG_MSG}")
+}
+
 pub(crate) fn persist_log_line(app: &mut App, line: String) {
     if let Err(e) = append_log_line(&line) {
         app.transient_msg = Some(format!("log write failed: {e}"));

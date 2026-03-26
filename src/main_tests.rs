@@ -1,9 +1,20 @@
 use super::*;
+use crate::main_helpers::{STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 
 #[test]
 fn make_x_log_line_contains_repo_and_message() {
     let line = make_x_log_line("owner/repo", "run: `bin` cwd=`.`");
     assert!(line.contains("x owner/repo run: `bin` cwd=`.`"));
+}
+
+#[test]
+fn make_startup_log_line_contains_message() {
+    assert!(make_startup_log_line().contains(STARTUP_LOG_MSG));
+}
+
+#[test]
+fn startup_log_separator_matches_expected() {
+    assert_eq!(STARTUP_LOG_SEPARATOR, "---");
 }
 
 #[test]
