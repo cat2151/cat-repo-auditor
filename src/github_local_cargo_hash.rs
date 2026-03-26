@@ -33,7 +33,7 @@ pub(crate) fn check_cargo_git_install(
         repo_name,
         base_dir,
         &super::get_cargo_home(),
-        |msg| super::append_error_log(msg),
+        |msg| super::append_log_message(msg),
     )
 }
 

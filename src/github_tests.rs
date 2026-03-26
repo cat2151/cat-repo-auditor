@@ -87,7 +87,14 @@ fn should_auto_pull_status_matches_issue_rules() {
 fn cargo_check_decision_log_explains_skip_when_cache_is_current() {
     let repo = make_repo_for_cargo_log();
 
-    let log = format_cargo_check_decision_log(&repo, "local123", false, false);
+    let log = format_cargo_check_decision_log(
+        &repo,
+        "local123",
+        CargoCheckDecision {
+            needs_local: false,
+            needs_remote: false,
+        },
+    );
 
     assert!(log.contains(
         "skip cargo check because local HEAD and remote hash cache are already up to date"
@@ -105,11 +112,29 @@ fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
     let mut repo = make_repo_for_cargo_log();
     repo.cargo_remote_hash.clear();
 
-    let log = format_cargo_check_decision_log(&repo, "local123", false, true);
+    let log = format_cargo_check_decision_log(
+        &repo,
+        "local123",
+        CargoCheckDecision {
+            needs_local: false,
+            needs_remote: true,
+        },
+    );
 
     assert!(log.contains("run cargo check because remote hash cache is stale or empty while local HEAD cache is up to date"));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=true"));
     assert!(log.contains("cargo_remote_hash_present=false"));
     assert!(log.contains("cargo_install=Some(true)"));
+}
+
+#[test]
+fn cargo_check_decision_matches_run_state() {
+    let repo = make_repo_for_cargo_log();
+
+    let skip = CargoCheckDecision::for_repo(&repo, "local123");
+    let run = CargoCheckDecision::for_repo(&repo, "different-local-head");
+
+    assert!(!skip.needs_check());
+    assert!(run.needs_check());
 }

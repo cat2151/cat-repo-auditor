@@ -25,8 +25,8 @@ fn get_cargo_home() -> String {
     })
 }
 
-/// Append a timestamped error message to the unified local log file.
-fn append_error_log(msg: &str) {
+/// Append timestamped log messages to the unified local log file.
+fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
     let log_path = crate::config::Config::log_path();
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -36,15 +36,21 @@ fn append_error_log(msg: &str) {
         .append(true)
         .open(&log_path)
     {
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-        let _ = writeln!(f, "[{now}] {msg}");
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        for msg in messages {
+            let _ = writeln!(f, "[{now}] {}", msg.as_ref());
+        }
     }
 }
 
-pub(crate) fn append_cargo_check_result(owner: &str, repo_name: &str, result: &str) {
-    append_error_log(&format!(
-        "cargo check: repo={owner}/{repo_name} result={result}"
-    ));
+fn append_log_message(msg: &str) {
+    append_log_messages(std::iter::once(msg));
+}
+
+pub(crate) fn append_cargo_check_results(owner: &str, results: &[(String, String)]) {
+    append_log_messages(results.iter().map(|(repo_name, result)| {
+        format!("cargo check: repo={owner}/{repo_name} result={result}")
+    }));
 }
 
 fn log_cargo_check_path_result(
