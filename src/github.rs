@@ -206,6 +206,20 @@ impl CargoCheckDecision {
     }
 }
 
+fn cargo_check_decision(
+    cargo_check_decisions: &std::collections::HashMap<String, CargoCheckDecision>,
+    repo_name: &str,
+) -> CargoCheckDecision {
+    cargo_check_decisions
+        .get(repo_name)
+        .copied()
+        .unwrap_or_else(|| {
+            panic!(
+                "repo '{repo_name}' のcargo判定が見つかりません。すべてのrepoに判定が存在する想定です"
+            )
+        })
+}
+
 fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
     match (decision.needs_local, decision.needs_remote) {
         (false, false) => {
@@ -349,10 +363,7 @@ pub fn fetch_repos_with_progress(
                 .filter(|r| {
                     let cat = &r.updated_at_raw;
                     let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
-                    let cargo_decision = cargo_check_decisions
-                        .get(&r.name)
-                        .copied()
-                        .expect("cargo decision should exist for every repo");
+                    let cargo_decision = cargo_check_decision(&cargo_check_decisions, &r.name);
                     r.readme_ja_checked_at != *cat
                         || r.readme_ja_badge_checked_at != local_head
                         || r.pages_checked_at != *cat
@@ -370,10 +381,7 @@ pub fn fetch_repos_with_progress(
                         .get(&repo.name)
                         .map(|s| s.as_str())
                         .unwrap_or("");
-                    let decision = cargo_check_decisions
-                        .get(&repo.name)
-                        .copied()
-                        .expect("cargo decision should exist for every repo");
+                    let decision = cargo_check_decision(&cargo_check_decisions, &repo.name);
                     (
                         repo.name.clone(),
                         format_cargo_check_decision_log(repo, local_head, decision),
@@ -396,10 +404,7 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let cargo_decision = cargo_check_decisions
-                    .get(name)
-                    .copied()
-                    .expect("cargo decision should exist for every repo");
+                let cargo_decision = cargo_check_decision(&cargo_check_decisions, name);
                 let needs_cargo = cargo_decision.needs_check();
                 let needs_wf = repo.wf_checked_at != local_head;
 

@@ -25,7 +25,7 @@ fn get_cargo_home() -> String {
     })
 }
 
-/// Append timestamped log messages to the unified local log file.
+/// Append one or more timestamped log messages to the unified local log file.
 fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
     let log_path = crate::config::Config::log_path();
     if let Some(parent) = log_path.parent() {
@@ -36,6 +36,7 @@ fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
         .append(true)
         .open(&log_path)
     {
+        // 同一 batch 内のログは同じタイムスタンプで記録し、一連の処理として識別しやすくする。
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         for msg in messages {
             let _ = writeln!(f, "[{now}] {}", msg.as_ref());
