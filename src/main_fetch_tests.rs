@@ -3,9 +3,29 @@ use crate::config::Config;
 use crate::github::{
     FetchProgress, LocalStatus, RateLimit, RepoInfo, BACKGROUND_CHECKS_COMPLETED_MSG,
 };
-use std::{fs, sync::Mutex};
+use std::{fs, path::PathBuf, sync::Mutex};
 
 static LOG_TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+struct LogFileRestore {
+    path: PathBuf,
+    original: Option<String>,
+}
+
+impl Drop for LogFileRestore {
+    fn drop(&mut self) {
+        match &self.original {
+            Some(contents) => {
+                let _ = fs::write(&self.path, contents);
+            }
+            None => {
+                if self.path.exists() {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+    }
+}
 
 fn make_repo(name: &str) -> RepoInfo {
     RepoInfo {
@@ -119,13 +139,16 @@ fn drain_fetch_channel_persists_background_checks_completed_log() {
     let _guard = LOG_TEST_MUTEX.lock().unwrap();
     let mut app = App::new(make_config());
     let log_path = Config::log_path();
-    let original = fs::read_to_string(&log_path).ok();
+    let _restore = LogFileRestore {
+        path: log_path.clone(),
+        original: fs::read_to_string(&log_path).ok(),
+    };
 
     if let Some(parent) = log_path.parent() {
-        fs::create_dir_all(parent).unwrap();
+        fs::create_dir_all(parent).expect("should create log directory for test");
     }
     if log_path.exists() {
-        fs::remove_file(&log_path).unwrap();
+        fs::remove_file(&log_path).expect("should remove existing log file for test");
     }
 
     let (tx, rx) = mpsc::channel();
@@ -144,10 +167,4 @@ fn drain_fetch_channel_persists_background_checks_completed_log() {
         .log_lines
         .last()
         .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_MSG)));
-
-    match original {
-        Some(contents) => fs::write(&log_path, contents).unwrap(),
-        None if log_path.exists() => fs::remove_file(&log_path).unwrap(),
-        None => {}
-    }
 }
