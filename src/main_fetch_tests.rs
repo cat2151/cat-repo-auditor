@@ -1,6 +1,11 @@
 use super::*;
 use crate::config::Config;
-use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
+use crate::github::{
+    FetchProgress, LocalStatus, RateLimit, RepoInfo, BACKGROUND_CHECKS_COMPLETED_MSG,
+};
+use std::{fs, sync::Mutex};
+
+static LOG_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 fn make_repo(name: &str) -> RepoInfo {
     RepoInfo {
@@ -107,4 +112,42 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     assert_eq!(repo.cargo_remote_hash, "remote456");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed789");
+}
+
+#[test]
+fn drain_fetch_channel_persists_background_checks_completed_log() {
+    let _guard = LOG_TEST_MUTEX.lock().unwrap();
+    let mut app = App::new(make_config());
+    let log_path = Config::log_path();
+    let original = fs::read_to_string(&log_path).ok();
+
+    if let Some(parent) = log_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    if log_path.exists() {
+        fs::remove_file(&log_path).unwrap();
+    }
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::Status(String::from(
+        BACKGROUND_CHECKS_COMPLETED_MSG,
+    )))
+    .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    let persisted = fs::read_to_string(&log_path).unwrap();
+    assert!(persisted.contains(BACKGROUND_CHECKS_COMPLETED_MSG));
+    assert!(app
+        .log_lines
+        .last()
+        .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_MSG)));
+
+    match original {
+        Some(contents) => fs::write(&log_path, contents).unwrap(),
+        None if log_path.exists() => fs::remove_file(&log_path).unwrap(),
+        None => {}
+    }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::main_helpers::{STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
+use crate::main_helpers::{make_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 
 #[test]
 fn make_x_log_line_contains_repo_and_message() {
@@ -10,6 +10,11 @@ fn make_x_log_line_contains_repo_and_message() {
 #[test]
 fn make_startup_log_line_contains_message() {
     assert!(make_startup_log_line().contains(STARTUP_LOG_MSG));
+}
+
+#[test]
+fn make_log_line_contains_message() {
+    assert!(make_log_line("background checks completed").contains("background checks completed"));
 }
 
 #[test]

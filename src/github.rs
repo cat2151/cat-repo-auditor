@@ -135,6 +135,8 @@ pub struct RateLimit {
 // Progress channel
 // ──────────────────────────────────────────────
 
+pub(crate) const BACKGROUND_CHECKS_COMPLETED_MSG: &str = "background checks completed";
+
 pub enum FetchProgress {
     Status(String),
     /// Structured progress for background task display: (tag, cur, total)
@@ -420,6 +422,9 @@ pub fn fetch_repos_with_progress(
                     wf_cat,
                 });
             }
+            let _ = tx.send(FetchProgress::Status(String::from(
+                BACKGROUND_CHECKS_COMPLETED_MSG,
+            )));
             // Clear progress indicators
             let _ = tx.send(FetchProgress::CheckingRepo(String::new()));
             let _ = tx.send(FetchProgress::PhaseProgress {

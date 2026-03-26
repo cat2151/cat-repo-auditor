@@ -2,7 +2,8 @@ use std::sync::mpsc;
 
 use crate::{
     app::{App, READY_MSG},
-    github::FetchProgress,
+    github::{FetchProgress, BACKGROUND_CHECKS_COMPLETED_MSG},
+    main_helpers::{make_log_line, persist_log_line},
 };
 
 pub(crate) fn drain_fetch_channel(
@@ -16,8 +17,10 @@ pub(crate) fn drain_fetch_channel(
         };
 
         match result {
-            Ok(FetchProgress::Status(_msg)) => {
-                // Background status messages are shown in the rate-limit bar via PhaseProgress.
+            Ok(FetchProgress::Status(msg)) => {
+                if msg == BACKGROUND_CHECKS_COMPLETED_MSG {
+                    persist_log_line(app, make_log_line(&msg));
+                }
                 // status_msg stays as operation help.
             }
             Ok(FetchProgress::PhaseProgress { tag, cur, total }) => {
