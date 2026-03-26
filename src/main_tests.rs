@@ -1,5 +1,5 @@
 use super::*;
-use crate::main_helpers::STARTUP_LOG_MSG;
+use crate::main_helpers::{STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 
 #[test]
 fn make_x_log_line_contains_repo_and_message() {
