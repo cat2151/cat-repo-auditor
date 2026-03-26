@@ -304,9 +304,10 @@ where
 
     checkout_candidates.sort_by(|(modified_at_a, path_a), (modified_at_b, path_b)| {
         // 最新の候補を先頭に配置し、選択される dir を単純に最初の要素にする。
+        // modified が同一のときは、従来の max_by と同じく辞書順で大きい path を優先する。
         modified_at_b
             .cmp(modified_at_a)
-            .then_with(|| path_a.cmp(path_b))
+            .then_with(|| path_b.cmp(path_a))
     });
 
     if !checkout_candidates.is_empty() {
@@ -347,7 +348,7 @@ where
         log_fn,
         owner,
         repo_name,
-        &checkouts_dir,
+        &sub_dir,
         &format!(
             "selected checkout dir={} modified={}",
             sub_dir.display(),

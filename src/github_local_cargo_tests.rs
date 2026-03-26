@@ -71,9 +71,11 @@ fn contains_unix_epoch_timestamp(log_line: &str) -> bool {
             return false;
         };
         parts.next().is_none()
-            && !seconds.is_empty()
+            && {
+                let seconds_digits = seconds.strip_prefix('-').unwrap_or(seconds);
+                !seconds_digits.is_empty() && seconds_digits.chars().all(|ch| ch.is_ascii_digit())
+            }
             && !nanos.is_empty()
-            && seconds.chars().all(|ch| ch.is_ascii_digit())
             && nanos.len() == 9
             && nanos.chars().all(|ch| ch.is_ascii_digit())
     })
