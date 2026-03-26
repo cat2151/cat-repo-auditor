@@ -1,5 +1,6 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Compare the commit hash of a `cargo install --git` entry against local HEAD.
 ///
@@ -71,6 +72,31 @@ fn fetch_remote_main_hash(
         _ => {
             super::log_cargo_check_result(log_fn, owner, repo_name, "remote main hash was empty");
             None
+        }
+    }
+}
+
+fn checkout_dir_modified_at(path: &Path) -> SystemTime {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .unwrap_or(UNIX_EPOCH)
+}
+
+fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
+    match timestamp.duration_since(UNIX_EPOCH) {
+        Ok(duration) => format!(
+            "{}.{:09}s_since_unix_epoch",
+            duration.as_secs(),
+            duration.subsec_nanos()
+        ),
+        Err(err) => {
+            let duration = err.duration();
+            format!(
+                "-{}.{:09}s_from_unix_epoch",
+                duration.as_secs(),
+                duration.subsec_nanos()
+            )
         }
     }
 }
@@ -267,21 +293,40 @@ where
             return None;
         }
     };
-    let sub_dir = match checkout_entries
+    let mut checkout_candidates: Vec<(SystemTime, PathBuf)> = checkout_entries
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
         .map(|e| {
-            let mtime = e
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .unwrap_or(std::time::UNIX_EPOCH);
-            (mtime, e.path())
+            let path = e.path();
+            (checkout_dir_modified_at(&path), path)
         })
-        .max_by(|(mt_a, pa), (mt_b, pb)| mt_a.cmp(mt_b).then_with(|| pa.cmp(pb)))
-        .map(|(_, path)| path)
-    {
-        Some(sub_dir) => sub_dir,
+        .collect();
+
+    checkout_candidates.sort_by(|(mt_a, pa), (mt_b, pb)| mt_b.cmp(mt_a).then_with(|| pb.cmp(pa)));
+
+    if !checkout_candidates.is_empty() {
+        let candidate_list = checkout_candidates
+            .iter()
+            .map(|(modified_at, path)| {
+                format!(
+                    "{} ({})",
+                    path.display(),
+                    format_checkout_dir_modified_at(*modified_at)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        super::log_cargo_check_path_result(
+            log_fn,
+            owner,
+            repo_name,
+            &checkout_base,
+            &format!("checkout subdir candidates by latest modified=[{candidate_list}]"),
+        );
+    }
+
+    let (sub_dir_modified_at, sub_dir) = match checkout_candidates.into_iter().next() {
+        Some(candidate) => candidate,
         None => {
             super::log_cargo_check_path_result(
                 log_fn,
@@ -298,7 +343,11 @@ where
         owner,
         repo_name,
         &checkouts_dir,
-        &format!("selected checkout dir={}", sub_dir.display()),
+        &format!(
+            "selected checkout dir={} modified={}",
+            sub_dir.display(),
+            format_checkout_dir_modified_at(sub_dir_modified_at)
+        ),
     );
 
     let installed_command = super::format_git_rev_parse_head_command(&sub_dir);

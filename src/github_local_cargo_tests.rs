@@ -412,6 +412,9 @@ fn cargo_install_picks_latest_mtime_subdir() {
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
     let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
+    let old_sub_display = old_sub.display().to_string();
+    let new_sub_display = new_sub.display().to_string();
+    let mut logs = Vec::new();
 
     let result = check_cargo_git_install_inner_with_remote_hash(
         "owner",
@@ -419,7 +422,7 @@ fn cargo_install_picks_latest_mtime_subdir() {
         tmp.join("repos").to_str().unwrap(),
         cargo_home.to_str().unwrap(),
         remote_hash,
-        |_| {},
+        |msg| logs.push(msg.to_string()),
     );
     std::fs::remove_dir_all(&tmp).ok();
 
@@ -427,6 +430,17 @@ fn cargo_install_picks_latest_mtime_subdir() {
     assert_eq!(inst, expected_installed_hash);
     assert_ne!(inst, local_hash);
     assert_eq!(remote, remote_hash);
+    assert!(logs.iter().any(|msg| {
+        msg.contains("checkout subdir candidates by latest modified=[")
+            && msg.contains(&old_sub_display)
+            && msg.contains(&new_sub_display)
+            && msg.contains("s_since_unix_epoch")
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("selected checkout dir=")
+            && msg.contains(&new_sub_display)
+            && msg.contains("modified=")
+    }));
 }
 
 #[test]
