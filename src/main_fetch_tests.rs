@@ -152,7 +152,12 @@ fn drain_fetch_channel_persists_background_checks_completed_log() {
     let mut app = App::new(make_config());
     let temp_log_dir = TempLogDir::new();
     let log_path = temp_log_dir.log_path();
-    fs::create_dir_all(log_path.parent().unwrap()).expect("should create log directory for test");
+    fs::create_dir_all(
+        log_path
+            .parent()
+            .expect("log path should have parent directory"),
+    )
+    .expect("should create log directory for test");
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::BackgroundChecksCompleted).unwrap();

@@ -39,10 +39,6 @@ pub(crate) fn log_last_modified_for_path(path: &Path) -> Option<SystemTime> {
         .and_then(|meta| meta.modified().ok())
 }
 
-pub(crate) fn log_last_modified() -> Option<SystemTime> {
-    log_last_modified_for_path(&Config::log_path())
-}
-
 pub(crate) fn refresh_log_lines_if_changed_for_path(app: &mut App, path: &Path) {
     let last_modified = log_last_modified_for_path(path);
     if app.log_last_modified != last_modified {
@@ -87,11 +83,7 @@ pub(crate) fn persist_log_line_for_path(app: &mut App, path: &Path, line: String
         app.transient_msg = Some(format!("log write failed: {e}"));
     } else {
         app.append_log_line(line);
-        app.log_last_modified = if path == Config::log_path().as_path() {
-            log_last_modified()
-        } else {
-            log_last_modified_for_path(path)
-        };
+        app.log_last_modified = log_last_modified_for_path(path);
     }
 }
 
