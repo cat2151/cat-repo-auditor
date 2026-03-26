@@ -57,6 +57,28 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     dir
 }
 
+fn contains_unix_epoch_timestamp(log_line: &str) -> bool {
+    log_line.split_whitespace().any(|token| {
+        let trimmed = token.trim_matches(|ch: char| matches!(ch, '[' | ']' | '(' | ')' | ','));
+        let Some(value) = trimmed.strip_suffix("s_since_unix_epoch") else {
+            return false;
+        };
+        let mut parts = value.split('.');
+        let Some(seconds) = parts.next() else {
+            return false;
+        };
+        let Some(nanos) = parts.next() else {
+            return false;
+        };
+        parts.next().is_none()
+            && !seconds.is_empty()
+            && !nanos.is_empty()
+            && seconds.chars().all(|ch| ch.is_ascii_digit())
+            && nanos.len() == 9
+            && nanos.chars().all(|ch| ch.is_ascii_digit())
+    })
+}
+
 #[test]
 fn cargo_install_none_when_crates2_missing() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_missing_{}", std::process::id()));
@@ -434,7 +456,7 @@ fn cargo_install_picks_latest_mtime_subdir() {
         msg.contains("checkout subdir candidates by latest modified=[")
             && msg.contains(&old_sub_display)
             && msg.contains(&new_sub_display)
-            && msg.contains("s_since_unix_epoch")
+            && contains_unix_epoch_timestamp(msg)
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains("selected checkout dir=")

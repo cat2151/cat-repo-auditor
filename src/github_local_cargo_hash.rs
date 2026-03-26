@@ -93,7 +93,7 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
         Err(err) => {
             let duration = err.duration();
             format!(
-                "-{}.{:09}s_from_unix_epoch",
+                "-{}.{:09}s_since_unix_epoch",
                 duration.as_secs(),
                 duration.subsec_nanos()
             )
@@ -302,7 +302,12 @@ where
         })
         .collect();
 
-    checkout_candidates.sort_by(|(mt_a, pa), (mt_b, pb)| mt_b.cmp(mt_a).then_with(|| pb.cmp(pa)));
+    checkout_candidates.sort_by(|(modified_at_a, path_a), (modified_at_b, path_b)| {
+        // 最新の候補を先頭に配置し、選択される dir を単純に最初の要素にする。
+        modified_at_b
+            .cmp(modified_at_a)
+            .then_with(|| path_a.cmp(path_b))
+    });
 
     if !checkout_candidates.is_empty() {
         let candidate_list = checkout_candidates
