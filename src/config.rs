@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 const TEMPLATE: &str = r#"# gh-tui configuration
 # GitHub owner (user or org) to list repositories for
@@ -61,11 +64,15 @@ impl Config {
         Self::config_path().with_file_name("history.json")
     }
 
+    pub(crate) fn log_path_from_config_dir(config_dir: &Path) -> PathBuf {
+        config_dir.join("logs").join("log.txt")
+    }
+
     /// Returns the unified log file path under logs/log.txt.
     pub fn log_path() -> PathBuf {
         Self::config_path()
             .parent()
-            .map(|p| p.join("logs").join("log.txt"))
+            .map(Self::log_path_from_config_dir)
             .unwrap_or_else(|| PathBuf::from("logs/log.txt"))
     }
 

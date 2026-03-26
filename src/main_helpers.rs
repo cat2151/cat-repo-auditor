@@ -39,10 +39,6 @@ pub(crate) fn log_last_modified_for_path(path: &Path) -> Option<SystemTime> {
         .and_then(|meta| meta.modified().ok())
 }
 
-pub(crate) fn log_last_modified() -> Option<SystemTime> {
-    log_last_modified_for_path(&Config::log_path())
-}
-
 pub(crate) fn refresh_log_lines_if_changed_for_path(app: &mut App, path: &Path) {
     let last_modified = log_last_modified_for_path(path);
     if app.log_last_modified != last_modified {
@@ -55,8 +51,7 @@ pub(crate) fn refresh_log_lines_if_changed(app: &mut App) {
     refresh_log_lines_if_changed_for_path(app, &Config::log_path());
 }
 
-fn append_log_line(line: &str) -> io::Result<()> {
-    let path = Config::log_path();
+fn append_log_line_for_path(path: &Path, line: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -70,19 +65,28 @@ pub(crate) fn make_x_log_line(repo_full_name: &str, msg: &str) -> String {
     format!("[{now}] x {repo_full_name} {msg}")
 }
 
+pub(crate) fn make_log_line(msg: &str) -> String {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S");
+    format!("[{now}] {msg}")
+}
+
+pub(crate) const BACKGROUND_CHECKS_COMPLETED_MSG: &str = "background checks completed";
 pub(crate) const STARTUP_LOG_SEPARATOR: &str = "---";
 pub(crate) const STARTUP_LOG_MSG: &str = "catrepo started";
 
 pub(crate) fn make_startup_log_line() -> String {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S");
-    format!("[{now}] {STARTUP_LOG_MSG}")
+    make_log_line(STARTUP_LOG_MSG)
 }
 
-pub(crate) fn persist_log_line(app: &mut App, line: String) {
-    if let Err(e) = append_log_line(&line) {
+pub(crate) fn persist_log_line_for_path(app: &mut App, path: &Path, line: String) {
+    if let Err(e) = append_log_line_for_path(path, &line) {
         app.transient_msg = Some(format!("log write failed: {e}"));
     } else {
         app.append_log_line(line);
-        app.log_last_modified = log_last_modified();
+        app.log_last_modified = log_last_modified_for_path(path);
     }
+}
+
+pub(crate) fn persist_log_line(app: &mut App, line: String) {
+    persist_log_line_for_path(app, &Config::log_path(), line);
 }

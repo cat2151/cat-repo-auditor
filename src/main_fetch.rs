@@ -2,12 +2,23 @@ use std::sync::mpsc;
 
 use crate::{
     app::{App, READY_MSG},
+    config::Config,
     github::FetchProgress,
+    main_helpers::{make_log_line, persist_log_line_for_path, BACKGROUND_CHECKS_COMPLETED_MSG},
 };
+use std::path::Path;
 
 pub(crate) fn drain_fetch_channel(
     app: &mut App,
     fetch_rx: &mut Option<mpsc::Receiver<FetchProgress>>,
+) {
+    drain_fetch_channel_for_log_path(app, fetch_rx, &Config::log_path());
+}
+
+pub(crate) fn drain_fetch_channel_for_log_path(
+    app: &mut App,
+    fetch_rx: &mut Option<mpsc::Receiver<FetchProgress>>,
+    log_path: &Path,
 ) {
     loop {
         let result = match fetch_rx.as_ref() {
@@ -17,9 +28,13 @@ pub(crate) fn drain_fetch_channel(
 
         match result {
             Ok(FetchProgress::Status(_msg)) => {
-                // Background status messages are shown in the rate-limit bar via PhaseProgress.
                 // status_msg stays as operation help.
             }
+            Ok(FetchProgress::BackgroundChecksCompleted) => persist_log_line_for_path(
+                app,
+                log_path,
+                make_log_line(BACKGROUND_CHECKS_COMPLETED_MSG),
+            ),
             Ok(FetchProgress::PhaseProgress { tag, cur, total }) => {
                 if cur == 0 && total == 0 {
                     // Clear signal

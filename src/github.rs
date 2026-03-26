@@ -137,6 +137,7 @@ pub struct RateLimit {
 
 pub enum FetchProgress {
     Status(String),
+    BackgroundChecksCompleted,
     /// Structured progress for background task display: (tag, cur, total)
     /// tag examples: "gh↓", "scan", "pull", "chk"
     PhaseProgress {
@@ -420,6 +421,7 @@ pub fn fetch_repos_with_progress(
                     wf_cat,
                 });
             }
+            let _ = tx.send(FetchProgress::BackgroundChecksCompleted);
             // Clear progress indicators
             let _ = tx.send(FetchProgress::CheckingRepo(String::new()));
             let _ = tx.send(FetchProgress::PhaseProgress {
