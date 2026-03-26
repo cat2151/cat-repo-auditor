@@ -70,7 +70,7 @@ pub(crate) fn make_log_line(msg: &str) -> String {
     format!("[{now}] {msg}")
 }
 
-pub(crate) const BACKGROUND_CHECKS_COMPLETED_LOG_MSG: &str = "background checks completed";
+pub(crate) const BACKGROUND_CHECKS_COMPLETED_MSG: &str = "background checks completed";
 pub(crate) const STARTUP_LOG_SEPARATOR: &str = "---";
 pub(crate) const STARTUP_LOG_MSG: &str = "catrepo started";
 

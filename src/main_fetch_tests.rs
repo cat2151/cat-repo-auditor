@@ -1,6 +1,7 @@
 use super::*;
+use crate::config::Config;
 use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
-use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_LOG_MSG;
+use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_MSG;
 use std::{
     fs,
     path::PathBuf,
@@ -29,7 +30,7 @@ impl TempLogDir {
     }
 
     fn log_path(&self) -> PathBuf {
-        self.root.join("logs").join("log.txt")
+        Config::log_path_from_config_dir(&self.root)
     }
 }
 
@@ -167,9 +168,9 @@ fn drain_fetch_channel_persists_background_checks_completed_log() {
     drain_fetch_channel_for_log_path(&mut app, &mut fetch_rx, log_path.as_path());
 
     let persisted = fs::read_to_string(&log_path).unwrap();
-    assert!(persisted.contains(BACKGROUND_CHECKS_COMPLETED_LOG_MSG));
+    assert!(persisted.contains(BACKGROUND_CHECKS_COMPLETED_MSG));
     assert!(app
         .log_lines
         .last()
-        .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_LOG_MSG)));
+        .is_some_and(|line| line.contains(BACKGROUND_CHECKS_COMPLETED_MSG)));
 }
