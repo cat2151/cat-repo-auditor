@@ -231,7 +231,7 @@ impl CargoCheckDecision {
     }
 
     fn needs_check(self) -> bool {
-        self.needs_local || self.needs_remote
+        true
     }
 }
 
@@ -251,7 +251,9 @@ fn cargo_check_decision(
 
 fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
     match (decision.needs_local, decision.needs_remote) {
-        (false, false) => "cargo check をスキップ: local HEAD と remote hash cache は最新です",
+        (false, false) => {
+            "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
+        }
         (false, true) => {
             "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
         }
@@ -343,8 +345,8 @@ pub fn fetch_repos_with_progress(
 
             // Phase 3: per-field independent checked_at.
             // Each field is rechecked only when its own checked_at is stale.
-            // cargo_checked_at stores the local HEAD hash → rechecks cargo local/installed on new commit.
-            // cargo_remote_hash_checked_at stores updated_at_raw → rechecks remote hash on repo updates.
+            // cargo_checked_at と cargo_remote_hash_checked_at はログ/表示用に保持するが、
+            // cargo install 状態の確認自体は毎回実行する。
             let owner = config.owner.clone();
 
             // Collect local HEAD hashes once (cheap, no network)
@@ -388,7 +390,8 @@ pub fn fetch_repos_with_progress(
                     })
                     .collect();
 
-            // Build per-repo check tasks: only repos that need at least one field updated
+            // Build per-repo check tasks: repos that need at least one stale field update
+            // plus repos that always run cargo install verification.
             let to_check: Vec<String> = repos
                 .iter()
                 .filter(|r| {
