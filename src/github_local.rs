@@ -296,10 +296,25 @@ fn local_and_upstream_heads_with_logger(
             &format!("ローカルのコミットハッシュ取得を開始します: コマンド={local_command}"),
         );
     }
-    let local = Command::new("git")
+    let local = match Command::new("git")
         .args(["-C", repo_path, "rev-parse", "HEAD"])
         .output()
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(err) => {
+            if !repo_name.is_empty() {
+                log_local_repo_check(
+                    log_fn,
+                    repo_name,
+                    repo_path,
+                    &format!(
+                        "ローカルのコミットハッシュ取得に失敗しました: コマンド={local_command}, エラー={err}"
+                    ),
+                );
+            }
+            return None;
+        }
+    };
     if !local.status.success() {
         if !repo_name.is_empty() {
             log_local_repo_check(
@@ -332,10 +347,25 @@ fn local_and_upstream_heads_with_logger(
             ),
         );
     }
-    let remote = Command::new("git")
+    let remote = match Command::new("git")
         .args(["-C", repo_path, "rev-parse", "@{u}"])
         .output()
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(err) => {
+            if !repo_name.is_empty() {
+                log_local_repo_check(
+                    log_fn,
+                    repo_name,
+                    repo_path,
+                    &format!(
+                        "リモートから取得したコミットハッシュの取得に失敗しました: コマンド={remote_command}, エラー={err}"
+                    ),
+                );
+            }
+            return None;
+        }
+    };
     if !remote.status.success() {
         if !repo_name.is_empty() {
             log_local_repo_check(
