@@ -113,9 +113,9 @@ fn cargo_install_returns_none_and_logs_when_crates2_is_missing() {
 
     assert!(result.is_none());
     assert!(logs.iter().any(|msg| {
-        msg.contains("repo=owner/myrepo")
+        msg.contains("リポジトリ=owner/myrepo")
             && msg.contains(".crates2.json")
-            && msg.contains("cargo install metadata file was not found")
+            && msg.contains("cargo install メタデータファイルが見つからない")
     }));
 }
 
@@ -155,9 +155,9 @@ fn cargo_install_returns_none_and_logs_when_repo_not_in_crates2() {
 
     assert!(result.is_none());
     assert!(logs.iter().any(|msg| {
-        msg.contains("repo=owner/myrepo")
+        msg.contains("リポジトリ=owner/myrepo")
             && msg.contains(".crates2.json")
-            && msg.contains("repository was not found in cargo install metadata")
+            && msg.contains("cargo install メタデータ内に対象リポジトリが見つからない")
     }));
 }
 
@@ -237,7 +237,7 @@ fn cargo_install_none_when_multiple_checkout_dirs_match() {
     );
     std::fs::remove_dir_all(&tmp).ok();
     assert!(result.is_none());
-    assert!(logged.contains("multiple checkouts"));
+    assert!(logged.contains("checkout ディレクトリが複数見つかりました"));
 }
 
 #[test]
@@ -351,37 +351,37 @@ fn cargo_install_logs_hash_source_details() {
 
     let crates2_path_display = crates2_path.display().to_string();
     let installed_checkout_display = installed_checkout_path.display().to_string();
-    let expected_matched_crate_name = format!("matched crate name={:?}", "myrepo");
+    let expected_matched_crate_name = format!("一致した crate 名={:?}", "myrepo");
     let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
     assert!(result.is_some());
     assert!(logs.iter().any(|msg| {
-        msg.contains("repo=owner/myrepo")
+        msg.contains("リポジトリ=owner/myrepo")
             && msg.contains(&crates2_path_display)
-            && msg.contains("matched install entry=")
+            && msg.contains("一致した cargo install エントリ=")
             && msg.contains(&expected_matched_crate_name)
     }));
     assert!(logs
         .iter()
         .any(|msg| msg.contains(&installed_checkout_display)));
     assert!(logs.iter().any(|msg| {
-        msg.contains("command=git -C")
+        msg.contains("コマンド=git -C")
             && msg.contains(&installed_checkout_display)
-            && msg.contains("stdout=")
+            && msg.contains("標準出力=")
             && msg.contains(&local_hash)
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains(&expected_local_command)
-            && msg.contains("stdout=")
+            && msg.contains("標準出力=")
             && msg.contains(&local_hash)
     }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("hash summary:")
-            && msg.contains(&format!("remote hash={remote_hash}"))
-            && msg.contains(&format!("installed hash={local_hash}"))
-            && msg.contains(&format!("local hash={local_hash}"))
-            && msg.contains("remote_eq_installed=false (mismatch)")
-            && msg.contains("installed_eq_local=true (match)")
-            && msg.contains("remote_eq_local=false (mismatch)")
+        msg.contains("ハッシュ要約:")
+            && msg.contains(&format!("リモートハッシュ={remote_hash},"))
+            && msg.contains(&format!("cargo install ハッシュ={local_hash},"))
+            && msg.contains(&format!("ローカルハッシュ={local_hash},"))
+            && msg.contains("リモートと cargo install の一致=false (不一致),")
+            && msg.contains("cargo install とローカルの一致=true (一致),")
+            && msg.contains("リモートとローカルの一致=false (不一致)")
     }));
 }
 
@@ -464,15 +464,15 @@ fn cargo_install_picks_latest_mtime_subdir() {
     assert_ne!(inst, local_hash);
     assert_eq!(remote, remote_hash);
     assert!(logs.iter().any(|msg| {
-        msg.contains("checkout subdir candidates by latest modified=[")
+        msg.contains("更新日時順の checkout subdir 候補=[")
             && msg.contains(&old_sub_display)
             && msg.contains(&new_sub_display)
             && contains_unix_epoch_timestamp(msg)
     }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("selected checkout dir=")
+        msg.contains("選択した checkout ディレクトリ=")
             && msg.contains(&new_sub_display)
-            && msg.contains("modified=")
+            && msg.contains("更新日時=")
     }));
 }
 

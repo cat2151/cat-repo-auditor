@@ -96,9 +96,7 @@ fn cargo_check_decision_log_explains_skip_when_cache_is_current() {
         },
     );
 
-    assert!(log.contains(
-        "skip cargo check because local HEAD and remote hash cache are already up to date"
-    ));
+    assert!(log.contains("cargo check をスキップ: local HEAD と remote hash cache は最新です"));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=false"));
     assert!(log.contains("local_head=\"local123\""));
@@ -121,7 +119,9 @@ fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
         },
     );
 
-    assert!(log.contains("run cargo check because remote hash cache is stale or empty while local HEAD cache is up to date"));
+    assert!(log.contains(
+        "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
+    ));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=true"));
     assert!(log.contains("cargo_remote_hash_present=false"));

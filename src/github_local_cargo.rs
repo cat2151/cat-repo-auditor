@@ -50,7 +50,7 @@ fn append_log_message(msg: &str) {
 
 pub(crate) fn append_cargo_check_results(owner: &str, results: &[(String, String)]) {
     append_log_messages(results.iter().map(|(repo_name, result)| {
-        format!("cargo check: repo={owner}/{repo_name} result={result}")
+        format!("cargo check: リポジトリ={owner}/{repo_name} 結果={result}")
     }));
 }
 
@@ -62,7 +62,7 @@ fn log_cargo_check_path_result(
     result: &str,
 ) {
     log_fn(&format!(
-        "cargo check: repo={owner}/{repo_name} path={} result={result}",
+        "cargo check: リポジトリ={owner}/{repo_name} パス={} 結果={result}",
         path.display()
     ));
 }
@@ -74,7 +74,7 @@ fn log_cargo_check_result(
     result: &str,
 ) {
     log_fn(&format!(
-        "cargo check: repo={owner}/{repo_name} result={result}"
+        "cargo check: リポジトリ={owner}/{repo_name} 結果={result}"
     ));
 }
 
@@ -97,9 +97,9 @@ fn format_git_ls_remote_main_command(owner: &str, repo_name: &str) -> String {
 fn format_cargo_hash_summary(remote_hash: &str, installed_hash: &str, local_hash: &str) -> String {
     fn match_status(matches: bool) -> &'static str {
         if matches {
-            "match"
+            "一致"
         } else {
-            "mismatch"
+            "不一致"
         }
     }
 
@@ -110,11 +110,13 @@ fn format_cargo_hash_summary(remote_hash: &str, installed_hash: &str, local_hash
     let remote_eq_installed = remote_hash == installed_hash;
     let installed_eq_local = installed_hash == local_hash;
     let remote_eq_local = remote_hash == local_hash;
-    let remote_vs_installed = format_match_status("remote_eq_installed", remote_eq_installed);
-    let installed_vs_local = format_match_status("installed_eq_local", installed_eq_local);
-    let remote_vs_local = format_match_status("remote_eq_local", remote_eq_local);
+    let remote_vs_installed =
+        format_match_status("リモートと cargo install の一致", remote_eq_installed);
+    let installed_vs_local =
+        format_match_status("cargo install とローカルの一致", installed_eq_local);
+    let remote_vs_local = format_match_status("リモートとローカルの一致", remote_eq_local);
     format!(
-        "hash summary: remote hash={remote_hash} installed hash={installed_hash} local hash={local_hash} {remote_vs_installed} {installed_vs_local} {remote_vs_local}",
+        "ハッシュ要約: リモートハッシュ={remote_hash}, cargo install ハッシュ={installed_hash}, ローカルハッシュ={local_hash}, {remote_vs_installed}, {installed_vs_local}, {remote_vs_local}",
     )
 }
 
@@ -128,7 +130,7 @@ fn log_cargo_check_command_result(
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     log_fn(&format!(
-        "cargo check: repo={owner}/{repo_name} command={command} result=status={} stdout={stdout:?} stderr={stderr:?}",
+        "cargo check: リポジトリ={owner}/{repo_name} コマンド={command} 結果=status={} 標準出力={stdout:?} 標準エラー={stderr:?}",
         output.status
     ));
 }

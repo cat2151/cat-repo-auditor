@@ -222,17 +222,15 @@ fn cargo_check_decision(
 
 fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
     match (decision.needs_local, decision.needs_remote) {
-        (false, false) => {
-            "skip cargo check because local HEAD and remote hash cache are already up to date"
-        }
+        (false, false) => "cargo check をスキップ: local HEAD と remote hash cache は最新です",
         (false, true) => {
-            "run cargo check because remote hash cache is stale or empty while local HEAD cache is up to date"
+            "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
         }
         (true, false) => {
-            "run cargo check because local HEAD cache is stale while remote hash cache is up to date"
+            "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
         }
         (true, true) => {
-            "run cargo check because both local HEAD cache and remote hash cache are stale or empty"
+            "cargo check を実行: local HEAD cache と remote hash cache の両方が古いか空です"
         }
     }
 }
