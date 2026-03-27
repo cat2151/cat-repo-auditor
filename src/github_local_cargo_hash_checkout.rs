@@ -26,6 +26,12 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
     }
 }
 
+/// Resolve the newest cargo git checkout sub-directory for the matched crate name.
+///
+/// Returns `Some(path)` only when exactly one checkout base directory matches `app_name`
+/// and that directory contains at least one checkout sub-directory to inspect. Any
+/// directory read failure, ambiguous match, or missing checkout candidate is logged via
+/// `log_fn` and results in `None`.
 pub(super) fn resolve_checkout_subdir(
     log_fn: &mut impl FnMut(&str),
     owner: &str,

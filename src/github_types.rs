@@ -15,8 +15,8 @@ impl IssueOrPr {
     pub fn url(&self) -> String {
         let kind = if self.is_pr { "pull" } else { "issues" };
         format!(
-            "https://github.com/{}/{kind}/{}",
-            self.repo_full, self.number
+            "https://github.com/{}/{}/{}",
+            self.repo_full, kind, self.number
         )
     }
 }
