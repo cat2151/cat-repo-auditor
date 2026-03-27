@@ -138,3 +138,26 @@ fn cargo_check_decision_matches_run_state() {
     assert!(!skip.needs_check());
     assert!(run.needs_check());
 }
+
+#[test]
+fn format_pull_log_includes_repo_and_compacts_success_output() {
+    let line = format_pull_log(
+        "owner/repo",
+        &Ok(String::from("Updating abc..def\nFast-forward\n")),
+    );
+
+    assert_eq!(line, "pull owner/repo: Updating abc..def | Fast-forward");
+}
+
+#[test]
+fn format_pull_log_includes_repo_and_compacts_error_output() {
+    let line = format_pull_log(
+        "owner/repo",
+        &Err(anyhow::anyhow!("git pull failed\nrepository has unresolved conflicts")),
+    );
+
+    assert_eq!(
+        line,
+        "pull owner/repo failed: git pull failed | repository has unresolved conflicts"
+    );
+}
