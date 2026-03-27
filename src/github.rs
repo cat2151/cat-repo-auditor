@@ -375,9 +375,7 @@ pub fn fetch_repos_with_progress(
                 .filter_map(|r| {
                     let path = format!(
                         "{}/{}",
-                        config
-                            .local_base_dir
-                            .trim_end_matches(|c| c == '/' || c == '\\'),
+                        config.local_base_dir.trim_end_matches(['/', '\\']),
                         r.name
                     );
                     let out = std::process::Command::new("git")

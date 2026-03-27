@@ -34,8 +34,8 @@ pub(crate) fn check_cargo_git_install(
         repo_name,
         base_dir,
         &cargo_home,
-        |msg| super::append_log_message(msg),
-        |log_fn, owner, repo_name| fetch_remote_main_hash(log_fn, owner, repo_name),
+        super::append_log_message,
+        fetch_remote_main_hash,
     )
 }
 

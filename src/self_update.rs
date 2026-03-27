@@ -71,7 +71,7 @@ pub fn run_self_update() -> anyhow::Result<bool> {
 
         println!("Launching update script: {}", bat_path.display());
         println!("The application will now exit so the file lock is released.");
-        return Ok(true);
+        Ok(true)
     }
 
     #[cfg(not(target_os = "windows"))]

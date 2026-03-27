@@ -20,12 +20,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
     fetch_rx: &mut Option<mpsc::Receiver<FetchProgress>>,
     log_path: &Path,
 ) {
-    loop {
-        let result = match fetch_rx.as_ref() {
-            Some(rx) => rx.try_recv(),
-            None => break,
-        };
-
+    while let Some(result) = fetch_rx.as_ref().map(mpsc::Receiver::try_recv) {
         match result {
             Ok(FetchProgress::Status(_msg)) => {
                 // status_msg stays as operation help.

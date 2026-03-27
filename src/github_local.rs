@@ -43,7 +43,7 @@ pub(crate) fn check_deepwiki_exists(base_dir: &str, repo_name: &str) -> bool {
     for filename in &["README.ja.md", "README.md"] {
         let path = format!(
             "{}/{}/{}",
-            base_dir.trim_end_matches(|c| c == '/' || c == '\\'),
+            base_dir.trim_end_matches(['/', '\\']),
             repo_name,
             filename
         );
@@ -58,7 +58,7 @@ pub(crate) fn check_deepwiki_exists(base_dir: &str, repo_name: &str) -> bool {
 
 /// Check if all 3 required workflow yml files are present in .github/workflows/
 pub(crate) fn check_workflows(base_dir: &str, repo_name: &str) -> bool {
-    let base = base_dir.trim_end_matches(|c| c == '/' || c == '\\');
+    let base = base_dir.trim_end_matches(['/', '\\']);
     let wf_dir = format!("{}/{}/.github/workflows", base, repo_name);
     let required = [
         "call-translate-readme.yml",
@@ -75,7 +75,7 @@ pub(crate) fn check_readme_ja_badge(base_dir: &str, repo_name: &str) -> bool {
     for filename in &["README.ja.md", "README.md"] {
         let path = format!(
             "{}/{}/{}",
-            base_dir.trim_end_matches(|c| c == '/' || c == '\\'),
+            base_dir.trim_end_matches(['/', '\\']),
             repo_name,
             filename
         );

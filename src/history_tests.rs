@@ -44,12 +44,14 @@ fn save_and_load_with_rate_limit() {
     ));
     let path_str = tmp.to_str().unwrap();
 
-    let mut history = History::default();
-    history.rate_limit = Some(RateLimit {
-        remaining: 4000,
-        limit: 5000,
-        reset_at: String::from("2024-01-01T01:00:00Z"),
-    });
+    let history = History {
+        rate_limit: Some(RateLimit {
+            remaining: 4000,
+            limit: 5000,
+            reset_at: String::from("2024-01-01T01:00:00Z"),
+        }),
+        ..History::default()
+    };
 
     history.save(path_str).unwrap();
     let loaded = History::load(path_str).unwrap();

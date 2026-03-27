@@ -282,11 +282,7 @@ impl App {
                 return;
             }
             // find first PR
-            let idx = items
-                .iter()
-                .position(|it| it.is_pr)
-                .or_else(|| Some(0))
-                .unwrap();
+            let idx = items.iter().position(|it| it.is_pr).unwrap_or(0);
             self.detail_selected = idx;
             self.detail_scroll = 0;
             self.focus = Focus::Detail;
