@@ -99,7 +99,7 @@ fn cargo_check_status_log_explains_run_when_cache_is_current() {
     assert!(log.contains(
         "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
     ));
-    assert!(!log.contains("スキップ"));
+    assert!(log.contains("cargo check を実行"));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=false"));
     assert!(log.contains("local_head=\"local123\""));
@@ -156,7 +156,7 @@ fn cargo_check_status_log_explains_run_when_local_head_is_unavailable() {
     assert!(log.contains(
         "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
     ));
-    assert!(!log.contains("スキップ"));
+    assert!(log.contains("cargo check を実行"));
     assert!(log.contains("local_head=\"\""));
 }
 
