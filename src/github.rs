@@ -442,7 +442,6 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let needs_cargo = true;
                 let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked
@@ -490,21 +489,11 @@ pub fn fetch_repos_with_progress(
                     cargo_remote_hash,
                     cargo_remote_hash_cat,
                     cargo_installed_hash,
-                ) = if needs_cargo {
-                    resolve_cargo_check_fields(
-                        repo,
-                        &cat,
-                        check_cargo_git_install(&owner, name, &config.local_base_dir),
-                    )
-                } else {
-                    (
-                        repo.cargo_install,
-                        repo.cargo_checked_at.clone(),
-                        repo.cargo_remote_hash.clone(),
-                        repo.cargo_remote_hash_checked_at.clone(),
-                        repo.cargo_installed_hash.clone(),
-                    )
-                };
+                ) = resolve_cargo_check_fields(
+                    repo,
+                    &cat,
+                    check_cargo_git_install(&owner, name, &config.local_base_dir),
+                );
 
                 let (wf_workflows, wf_cat) = if needs_wf {
                     let v = check_workflows(&config.local_base_dir, name);
