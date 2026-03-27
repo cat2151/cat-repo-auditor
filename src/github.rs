@@ -215,13 +215,19 @@ fn format_pull_log(repo_full_name: &str, pull_result: &anyhow::Result<String>) -
     }
 }
 
+/// Cargo check の状態とログ用の説明材料を保持する。
+///
+/// `needs_local` / `needs_remote` は実行判定には使わず、ログで
+/// 「何が最新か / 何が古いか」を説明するために保持している。
 #[derive(Clone, Copy)]
-struct CargoCheckDecision {
+struct CargoCheckStatus {
     needs_local: bool,
     needs_remote: bool,
 }
 
-impl CargoCheckDecision {
+const CARGO_CHECK_ALWAYS_RUNS: bool = true;
+
+impl CargoCheckStatus {
     fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
         Self {
             needs_local: repo.cargo_checked_at != local_head,
@@ -229,16 +235,12 @@ impl CargoCheckDecision {
                 || repo.cargo_remote_hash.is_empty(),
         }
     }
-
-    fn needs_check(self) -> bool {
-        true
-    }
 }
 
 fn cargo_check_decision(
-    cargo_check_decisions: &std::collections::HashMap<String, CargoCheckDecision>,
+    cargo_check_decisions: &std::collections::HashMap<String, CargoCheckStatus>,
     repo_name: &str,
-) -> CargoCheckDecision {
+) -> CargoCheckStatus {
     cargo_check_decisions
         .get(repo_name)
         .copied()
@@ -249,7 +251,7 @@ fn cargo_check_decision(
         })
 }
 
-fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
+fn format_cargo_check_decision_reason(decision: CargoCheckStatus) -> &'static str {
     match (decision.needs_local, decision.needs_remote) {
         (false, false) => {
             "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
@@ -269,7 +271,7 @@ fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static 
 fn format_cargo_check_decision_log(
     repo: &RepoInfo,
     local_head: &str,
-    decision: CargoCheckDecision,
+    decision: CargoCheckStatus,
 ) -> String {
     format!(
         "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
@@ -343,10 +345,10 @@ pub fn fetch_repos_with_progress(
                 let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl))));
             }
 
-            // Phase 3: per-field independent checked_at.
-            // Each field is rechecked only when its own checked_at is stale.
-            // cargo_checked_at と cargo_remote_hash_checked_at はログ/表示用に保持するが、
-            // cargo install 状態の確認自体は毎回実行する。
+            // Phase 3:
+            // - README / Pages / DeepWiki / workflows は各 checked_at が古いときだけ再確認する。
+            // - cargo install 状態の確認は毎回実行し、cargo_checked_at /
+            //   cargo_remote_hash_checked_at はその結果表示用の記録として更新する。
             let owner = config.owner.clone();
 
             // Collect local HEAD hashes once (cheap, no network)
@@ -375,20 +377,19 @@ pub fn fetch_repos_with_progress(
                 })
                 .collect();
 
-            let cargo_check_decisions: std::collections::HashMap<String, CargoCheckDecision> =
-                repos
-                    .iter()
-                    .map(|repo| {
-                        let local_head = local_heads
-                            .get(&repo.name)
-                            .map(|s| s.as_str())
-                            .unwrap_or("");
-                        (
-                            repo.name.clone(),
-                            CargoCheckDecision::for_repo(repo, local_head),
-                        )
-                    })
-                    .collect();
+            let cargo_check_decisions: std::collections::HashMap<String, CargoCheckStatus> = repos
+                .iter()
+                .map(|repo| {
+                    let local_head = local_heads
+                        .get(&repo.name)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    (
+                        repo.name.clone(),
+                        CargoCheckStatus::for_repo(repo, local_head),
+                    )
+                })
+                .collect();
 
             // Build per-repo check tasks: repos that need at least one stale field update
             // plus repos that always run cargo install verification.
@@ -397,12 +398,11 @@ pub fn fetch_repos_with_progress(
                 .filter(|r| {
                     let cat = &r.updated_at_raw;
                     let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
-                    let cargo_decision = cargo_check_decision(&cargo_check_decisions, &r.name);
                     r.readme_ja_checked_at != *cat
                         || r.readme_ja_badge_checked_at != local_head
                         || r.pages_checked_at != *cat
                         || r.deepwiki_checked_at != local_head
-                        || cargo_decision.needs_check()
+                        || CARGO_CHECK_ALWAYS_RUNS
                         || r.wf_checked_at != local_head
                 })
                 .map(|r| r.name.clone())
@@ -438,8 +438,7 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let cargo_decision = cargo_check_decision(&cargo_check_decisions, name);
-                let needs_cargo = cargo_decision.needs_check();
+                let needs_cargo = CARGO_CHECK_ALWAYS_RUNS;
                 let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked

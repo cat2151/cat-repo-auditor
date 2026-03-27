@@ -90,7 +90,7 @@ fn cargo_check_decision_log_explains_run_when_cache_is_current() {
     let log = format_cargo_check_decision_log(
         &repo,
         "local123",
-        CargoCheckDecision {
+        CargoCheckStatus {
             needs_local: false,
             needs_remote: false,
         },
@@ -115,7 +115,7 @@ fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
     let log = format_cargo_check_decision_log(
         &repo,
         "local123",
-        CargoCheckDecision {
+        CargoCheckStatus {
             needs_local: false,
             needs_remote: true,
         },
@@ -134,11 +134,14 @@ fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
 fn cargo_check_decision_matches_run_state() {
     let repo = make_repo_for_cargo_log();
 
-    let run_with_current_cache = CargoCheckDecision::for_repo(&repo, "local123");
-    let run = CargoCheckDecision::for_repo(&repo, "different-local-head");
+    let run_with_current_cache = CargoCheckStatus::for_repo(&repo, "local123");
+    let run = CargoCheckStatus::for_repo(&repo, "different-local-head");
 
-    assert!(run_with_current_cache.needs_check());
-    assert!(run.needs_check());
+    assert!(!run_with_current_cache.needs_local);
+    assert!(!run_with_current_cache.needs_remote);
+    assert!(CARGO_CHECK_ALWAYS_RUNS);
+    assert!(run.needs_local);
+    assert_eq!(run.needs_remote, run_with_current_cache.needs_remote);
 }
 
 #[test]
