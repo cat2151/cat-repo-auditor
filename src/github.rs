@@ -304,8 +304,8 @@ fn resolve_cargo_check_fields(
     cargo_result: Option<(bool, String, String, String)>,
 ) -> (Option<bool>, String, String, String, String) {
     match cargo_result {
-        // Use `loc` (the actual hash read from git) as cargo_cat so the stored
-        // value is always the precise hash used in the comparison.
+        // `loc`（git から実際に読んだ hash）を cargo_cat に使い、
+        // 保存値が常に比較に使った正確な hash になるようにする。
         Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, updated_at_raw.to_string(), inst),
         None => (
             repo.cargo_install,
