@@ -153,7 +153,9 @@ fn format_pull_log_includes_repo_and_compacts_success_output() {
 fn format_pull_log_includes_repo_and_compacts_error_output() {
     let line = format_pull_log(
         "owner/repo",
-        &Err(anyhow::anyhow!("git pull failed\nrepository has unresolved conflicts")),
+        &Err(anyhow::anyhow!(
+            "git pull failed\nrepository has unresolved conflicts"
+        )),
     );
 
     assert_eq!(
