@@ -2,8 +2,9 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_cargo_git_install, check_deepwiki_exists, check_file_exists, check_pages_exists,
-        check_readme_ja_badge, check_workflows, git_pull, local_head_matches_upstream,
+        append_cargo_check_results, check_cargo_git_install, check_deepwiki_exists,
+        check_file_exists, check_pages_exists, check_readme_ja_badge, check_workflows, git_pull,
+        local_head_matches_upstream,
     },
     history::History,
 };
@@ -185,6 +186,74 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
+#[derive(Clone, Copy)]
+struct CargoCheckDecision {
+    needs_local: bool,
+    needs_remote: bool,
+}
+
+impl CargoCheckDecision {
+    fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
+        Self {
+            needs_local: repo.cargo_checked_at != local_head,
+            needs_remote: repo.cargo_remote_hash_checked_at != repo.updated_at_raw
+                || repo.cargo_remote_hash.is_empty(),
+        }
+    }
+
+    fn needs_check(self) -> bool {
+        self.needs_local || self.needs_remote
+    }
+}
+
+fn cargo_check_decision(
+    cargo_check_decisions: &std::collections::HashMap<String, CargoCheckDecision>,
+    repo_name: &str,
+) -> CargoCheckDecision {
+    cargo_check_decisions
+        .get(repo_name)
+        .copied()
+        .unwrap_or_else(|| {
+            panic!(
+                "repo '{repo_name}' のcargo判定が見つかりません。すべてのrepoに判定が存在する想定です"
+            )
+        })
+}
+
+fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
+    match (decision.needs_local, decision.needs_remote) {
+        (false, false) => "cargo check をスキップ: local HEAD と remote hash cache は最新です",
+        (false, true) => {
+            "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
+        }
+        (true, false) => {
+            "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
+        }
+        (true, true) => {
+            "cargo check を実行: local HEAD cache と remote hash cache の両方が古いか空です"
+        }
+    }
+}
+
+fn format_cargo_check_decision_log(
+    repo: &RepoInfo,
+    local_head: &str,
+    decision: CargoCheckDecision,
+) -> String {
+    format!(
+        "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
+        format_cargo_check_decision_reason(decision),
+        decision.needs_local,
+        decision.needs_remote,
+        local_head,
+        repo.cargo_checked_at,
+        repo.updated_at_raw,
+        repo.cargo_remote_hash_checked_at,
+        !repo.cargo_remote_hash.is_empty(),
+        repo.cargo_install,
+    )
+}
+
 // ──────────────────────────────────────────────
 // Fetch orchestration
 // ──────────────────────────────────────────────
@@ -271,23 +340,53 @@ pub fn fetch_repos_with_progress(
                 })
                 .collect();
 
+            let cargo_check_decisions: std::collections::HashMap<String, CargoCheckDecision> =
+                repos
+                    .iter()
+                    .map(|repo| {
+                        let local_head = local_heads
+                            .get(&repo.name)
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        (
+                            repo.name.clone(),
+                            CargoCheckDecision::for_repo(repo, local_head),
+                        )
+                    })
+                    .collect();
+
             // Build per-repo check tasks: only repos that need at least one field updated
             let to_check: Vec<String> = repos
                 .iter()
                 .filter(|r| {
                     let cat = &r.updated_at_raw;
                     let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
+                    let cargo_decision = cargo_check_decision(&cargo_check_decisions, &r.name);
                     r.readme_ja_checked_at != *cat
                         || r.readme_ja_badge_checked_at != local_head
                         || r.pages_checked_at != *cat
                         || r.deepwiki_checked_at != local_head
-                        || r.cargo_checked_at != local_head
-                        || r.cargo_remote_hash_checked_at != *cat
-                        || r.cargo_remote_hash.is_empty()
+                        || cargo_decision.needs_check()
                         || r.wf_checked_at != local_head
                 })
                 .map(|r| r.name.clone())
                 .collect();
+
+            let cargo_check_logs: Vec<(String, String)> = repos
+                .iter()
+                .map(|repo| {
+                    let local_head = local_heads
+                        .get(&repo.name)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    let decision = cargo_check_decision(&cargo_check_decisions, &repo.name);
+                    (
+                        repo.name.clone(),
+                        format_cargo_check_decision_log(repo, local_head, decision),
+                    )
+                })
+                .collect();
+            append_cargo_check_results(&owner, &cargo_check_logs);
 
             if to_check.is_empty() {
                 return;
@@ -303,10 +402,8 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let needs_cargo_local = repo.cargo_checked_at != local_head;
-                let needs_cargo_remote =
-                    repo.cargo_remote_hash_checked_at != cat || repo.cargo_remote_hash.is_empty();
-                let needs_cargo = needs_cargo_local || needs_cargo_remote;
+                let cargo_decision = cargo_check_decision(&cargo_check_decisions, name);
+                let needs_cargo = cargo_decision.needs_check();
                 let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked

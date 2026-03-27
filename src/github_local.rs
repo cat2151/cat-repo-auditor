@@ -5,7 +5,7 @@ use std::process::Command;
 #[path = "github_local_cargo.rs"]
 mod cargo;
 
-pub(crate) use cargo::{check_cargo_git_install, get_cargo_bins};
+pub(crate) use cargo::{append_cargo_check_results, check_cargo_git_install, get_cargo_bins};
 
 // ──────────────────────────────────────────────
 // Existence checks via gh REST API

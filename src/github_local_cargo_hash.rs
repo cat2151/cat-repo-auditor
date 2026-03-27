@@ -33,7 +33,7 @@ pub(crate) fn check_cargo_git_install(
         repo_name,
         base_dir,
         &super::get_cargo_home(),
-        |msg| super::append_error_log(msg),
+        |msg| super::append_log_message(msg),
     )
 }
 
@@ -57,7 +57,7 @@ fn fetch_remote_main_hash(
                 log_fn,
                 owner,
                 repo_name,
-                &format!("failed to spawn command={remote_command}: {err}"),
+                &format!("コマンドの起動に失敗しました: コマンド={remote_command}: {err}"),
             );
             return None;
         }
@@ -70,7 +70,12 @@ fn fetch_remote_main_hash(
     match stdout.split_whitespace().next() {
         Some(hash) => Some(hash.to_string()),
         _ => {
-            super::log_cargo_check_result(log_fn, owner, repo_name, "remote main hash was empty");
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                "remote main ブランチのハッシュが空です",
+            );
             None
         }
     }
@@ -136,6 +141,13 @@ where
         Ok(content) => content,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
+                super::log_cargo_check_path_result(
+                    log_fn,
+                    owner,
+                    repo_name,
+                    &crates2_path,
+                    "cargo install メタデータファイルが見つからないため、cargo install の確認をスキップします",
+                );
                 return None;
             }
             super::log_cargo_check_path_result(
@@ -143,7 +155,7 @@ where
                 owner,
                 repo_name,
                 &crates2_path,
-                &format!("failed to read cargo install metadata file: {err}"),
+                &format!("cargo install メタデータファイルの読み取りに失敗しました: {err}"),
             );
             return None;
         }
@@ -156,7 +168,7 @@ where
                 owner,
                 repo_name,
                 &crates2_path,
-                &format!("failed to parse cargo install metadata file: {err}"),
+                &format!("cargo install メタデータファイルの解析に失敗しました: {err}"),
             );
             return None;
         }
@@ -172,7 +184,7 @@ where
                 owner,
                 repo_name,
                 &crates2_path,
-                "cargo install metadata file does not contain installs object",
+                "cargo install メタデータファイルに installs オブジェクトがありません",
             );
             return None;
         }
@@ -185,7 +197,16 @@ where
         .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
     {
         Some(entry) => entry.to_string(),
-        None => return None,
+        None => {
+            super::log_cargo_check_path_result(
+                log_fn,
+                owner,
+                repo_name,
+                &crates2_path,
+                "cargo install メタデータ内に対象リポジトリが見つからないため、cargo install の確認をスキップします",
+            );
+            return None;
+        }
     };
     let app_name = match matched_entry
         .split_whitespace()
@@ -198,7 +219,7 @@ where
                 log_fn,
                 owner,
                 repo_name,
-                "matched cargo install entry did not contain crate name",
+                "一致した cargo install エントリに crate 名が含まれていません",
             );
             return None;
         }
@@ -208,7 +229,9 @@ where
         owner,
         repo_name,
         &crates2_path,
-        &format!("matched install entry={matched_entry:?}, matched crate name={app_name:?}"),
+        &format!(
+            "一致した cargo install エントリ={matched_entry:?}、一致した crate 名={app_name:?}"
+        ),
     );
 
     let checkouts_dir = Path::new(cargo_home).join("git").join("checkouts");
@@ -230,7 +253,7 @@ where
                 owner,
                 repo_name,
                 &checkouts_dir,
-                &format!("failed to read cargo checkouts dir: {err}"),
+                &format!("cargo checkouts ディレクトリの読み取りに失敗しました: {err}"),
             );
             return None;
         }
@@ -242,7 +265,7 @@ where
             owner,
             repo_name,
             &checkouts_dir,
-            &format!("no checkout dir found for {app_name:?}"),
+            &format!("{app_name:?} に対応する checkout ディレクトリが見つかりません"),
         );
         return None;
     }
@@ -254,7 +277,7 @@ where
             repo_name,
             &checkouts_dir,
             &format!(
-                "multiple checkouts found for {app_name:?}: {:?}",
+                "{app_name:?} に対応する checkout ディレクトリが複数見つかりました: {:?}",
                 matches
                     .iter()
                     .map(|p| p.display().to_string())
@@ -273,7 +296,7 @@ where
                 repo_name,
                 &checkouts_dir,
                 &format!(
-                    "no checkout dir found for {app_name:?} after filtering (internal inconsistency)"
+                    "絞り込み後に {app_name:?} の checkout ディレクトリが見つかりません (内部不整合)"
                 ),
             );
             return None;
@@ -288,7 +311,7 @@ where
                 owner,
                 repo_name,
                 &checkout_base,
-                &format!("failed to read checkout directory: {err}"),
+                &format!("checkout ディレクトリの読み取りに失敗しました: {err}"),
             );
             return None;
         }
@@ -327,7 +350,7 @@ where
             owner,
             repo_name,
             &checkout_base,
-            &format!("checkout subdir candidates by latest modified=[{candidate_list}]"),
+            &format!("更新日時順の checkout subdir 候補=[{candidate_list}]"),
         );
     }
 
@@ -339,7 +362,7 @@ where
                 owner,
                 repo_name,
                 &checkout_base,
-                "checkout directory did not contain any candidate subdirectories",
+                "checkout ディレクトリに候補となる subdir がありません",
             );
             return None;
         }
@@ -350,7 +373,7 @@ where
         repo_name,
         &sub_dir,
         &format!(
-            "selected checkout dir={} modified={}",
+            "選択した checkout ディレクトリ={} 更新日時={}",
             sub_dir.display(),
             format_checkout_dir_modified_at(sub_dir_modified_at)
         ),
@@ -369,7 +392,7 @@ where
                 log_fn,
                 owner,
                 repo_name,
-                &format!("failed to spawn command={installed_command}: {err}"),
+                &format!("コマンドの起動に失敗しました: コマンド={installed_command}: {err}"),
             );
             return None;
         }
@@ -384,7 +407,7 @@ where
             log_fn,
             owner,
             repo_name,
-            "installed checkout HEAD hash was empty",
+            "インストール済み checkout の HEAD ハッシュが空です",
         );
         return None;
     }
@@ -404,7 +427,7 @@ where
                 log_fn,
                 owner,
                 repo_name,
-                &format!("failed to spawn command={local_command}: {err}"),
+                &format!("コマンドの起動に失敗しました: コマンド={local_command}: {err}"),
             );
             return None;
         }
@@ -419,7 +442,7 @@ where
             log_fn,
             owner,
             repo_name,
-            "local repository HEAD hash was empty",
+            "ローカルリポジトリの HEAD ハッシュが空です",
         );
         return None;
     }
