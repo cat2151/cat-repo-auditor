@@ -1,0 +1,154 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IssueOrPr {
+    pub title: String,
+    pub updated_at: String,
+    pub updated_at_raw: String,
+    pub number: u64,
+    pub repo_full: String,
+    pub is_pr: bool,
+    pub closes_issue: Option<u64>,
+}
+
+impl IssueOrPr {
+    pub fn url(&self) -> String {
+        let kind = if self.is_pr { "pull" } else { "issues" };
+        format!(
+            "https://github.com/{}/{kind}/{}",
+            self.repo_full, self.number
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoInfo {
+    pub name: String,
+    pub full_name: String,
+    pub updated_at: String,
+    pub updated_at_raw: String,
+    pub open_issues: u64,
+    pub open_prs: u64,
+    pub is_private: bool,
+    pub local_status: LocalStatus,
+    pub has_local_git: bool,
+    pub staging_files: Vec<String>,
+    pub issues: Vec<IssueOrPr>,
+    pub prs: Vec<IssueOrPr>,
+    /// README.ja.md existence. None = unchecked.
+    #[serde(default)]
+    pub readme_ja: Option<bool>,
+    /// updated_at_raw when readme_ja was last checked
+    #[serde(default)]
+    pub readme_ja_checked_at: String,
+
+    /// README.ja.md contains a self-referencing badge/link ("README.ja.md" text in the file)
+    #[serde(default)]
+    pub readme_ja_badge: Option<bool>,
+    /// local HEAD hash when readme_ja_badge was last checked
+    #[serde(default)]
+    pub readme_ja_badge_checked_at: String,
+
+    #[serde(default)]
+    pub pages: Option<bool>,
+    #[serde(default)]
+    pub pages_checked_at: String,
+
+    #[serde(default)]
+    pub deepwiki: Option<bool>,
+    #[serde(default)]
+    pub deepwiki_checked_at: String,
+
+    /// None = repo not found in .crates2.json (not installed via cargo install --git)
+    /// Some(true) = installed hash == local HEAD, Some(false) = stale
+    #[serde(default)]
+    pub cargo_install: Option<bool>,
+    /// local git HEAD hash when cargo_install was last checked (doubles as display value for local hash)
+    #[serde(default)]
+    pub cargo_checked_at: String,
+    /// remote main branch HEAD hash from GitHub (used for cargo hash display/comparison)
+    #[serde(default)]
+    pub cargo_remote_hash: String,
+    /// updated_at_raw when cargo_remote_hash was last checked
+    #[serde(default)]
+    pub cargo_remote_hash_checked_at: String,
+    /// installed commit hash from .crates2.json
+    #[serde(default)]
+    pub cargo_installed_hash: String,
+
+    /// All 3 required workflow yml files present in .github/workflows/
+    #[serde(default)]
+    pub wf_workflows: Option<bool>,
+    /// local HEAD hash when wf_workflows was last checked
+    #[serde(default)]
+    pub wf_checked_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum LocalStatus {
+    Conflict,
+    Modified,
+    Pullable,
+    Clean,
+    Staging,
+    Other,
+    NotFound,
+    NoGit,
+}
+
+impl std::fmt::Display for LocalStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LocalStatus::Conflict => write!(f, "conflict"),
+            LocalStatus::Modified => write!(f, "modified"),
+            LocalStatus::Pullable => write!(f, "pullable"),
+            LocalStatus::Clean => write!(f, "clean"),
+            LocalStatus::Staging => write!(f, "staging"),
+            LocalStatus::Other => write!(f, "other"),
+            LocalStatus::NotFound => write!(f, "-"),
+            LocalStatus::NoGit => write!(f, "no-git"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimit {
+    pub remaining: u64,
+    pub limit: u64,
+    pub reset_at: String,
+}
+
+pub enum FetchProgress {
+    Status(String),
+    Log(String),
+    BackgroundChecksCompleted,
+    /// Structured progress for background task display: (tag, cur, total)
+    /// tag examples: "gh↓", "scan", "pull", "chk"
+    PhaseProgress {
+        tag: &'static str,
+        cur: usize,
+        total: usize,
+    },
+    /// Signal that a specific repo is currently being checked (for UI feedback)
+    CheckingRepo(String),
+    /// Incremental update per repo after phase-3 checks
+    ExistenceUpdate {
+        name: String,
+        readme_ja: Option<bool>,
+        readme_ja_cat: String,
+        readme_ja_badge: Option<bool>,
+        readme_ja_badge_cat: String,
+        pages: Option<bool>,
+        pages_cat: String,
+        deepwiki: Option<bool>,
+        deepwiki_cat: String,
+        cargo_install: Option<bool>,
+        cargo_cat: String,
+        cargo_remote_hash: String,
+        cargo_remote_hash_cat: String,
+        cargo_installed_hash: String,
+        wf_workflows: Option<bool>,
+        wf_cat: String,
+    },
+    Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
+}
