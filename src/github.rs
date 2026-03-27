@@ -171,6 +171,8 @@ pub enum FetchProgress {
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }
 
+type PullTarget = (String, String);
+
 fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bool) -> bool {
     match local_status {
         LocalStatus::Pullable => true,
@@ -299,7 +301,7 @@ pub fn fetch_repos_with_progress(
         Ok((mut repos, rl)) => {
             // Phase 2: auto-pull repos that can be safely fast-forwarded.
             // Dirty repos are handled by stashing before pull and restoring after.
-            let pullable: Vec<(String, String)> = if config.auto_pull {
+            let pullable: Vec<PullTarget> = if config.auto_pull {
                 repos
                     .iter()
                     .filter(|r| should_auto_pull_repo(&config.local_base_dir, r))
