@@ -249,18 +249,7 @@ fn cargo_check_status(
         })
 }
 
-fn should_run_cargo_check(
-    repo_name: &str,
-    local_heads: &std::collections::HashMap<String, String>,
-) -> bool {
-    local_heads.contains_key(repo_name)
-}
-
-fn format_cargo_check_status_reason(should_run: bool, status: CargoCheckStatus) -> &'static str {
-    if !should_run {
-        return "cargo check をスキップ: local HEAD を解決できないため実行しません";
-    }
-
+fn format_cargo_check_status_reason(status: CargoCheckStatus) -> &'static str {
     match (status.needs_local, status.needs_remote) {
         (false, false) => {
             "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
@@ -281,12 +270,10 @@ fn format_cargo_check_status_log(
     repo: &RepoInfo,
     local_head: &str,
     status: CargoCheckStatus,
-    should_run: bool,
 ) -> String {
     format!(
-        "{}: runs_cargo_check={} needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
-        format_cargo_check_status_reason(should_run, status),
-        should_run,
+        "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
+        format_cargo_check_status_reason(status),
         status.needs_local,
         status.needs_remote,
         local_head,
@@ -421,28 +408,9 @@ pub fn fetch_repos_with_progress(
                 })
                 .collect();
 
-            // Build per-repo check tasks: repos that need at least one stale field update
-            // plus repos that can run cargo install verification.
-            let to_check: Vec<String> = repos
-                .iter()
-                .filter(|r| {
-                    let cat = &r.updated_at_raw;
-                    let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
-                    let needs_readme = r.readme_ja_checked_at != *cat;
-                    let needs_ja_badge = r.readme_ja_badge_checked_at != local_head;
-                    let needs_pages = r.pages_checked_at != *cat;
-                    let needs_deepwiki = r.deepwiki_checked_at != local_head;
-                    let needs_cargo = should_run_cargo_check(&r.name, &local_heads);
-                    let needs_wf = r.wf_checked_at != local_head;
-                    needs_readme
-                        || needs_ja_badge
-                        || needs_pages
-                        || needs_deepwiki
-                        || needs_cargo
-                        || needs_wf
-                })
-                .map(|r| r.name.clone())
-                .collect();
+            // Build per-repo check tasks.
+            // cargo install 状態の確認は毎回実行するため、Phase 3 は全 repo を対象にする。
+            let to_check: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
 
             let cargo_check_logs: Vec<(String, String)> = repos
                 .iter()
@@ -452,10 +420,9 @@ pub fn fetch_repos_with_progress(
                         .map(|s| s.as_str())
                         .unwrap_or("");
                     let status = cargo_check_status(&cargo_check_statuses, &repo.name);
-                    let should_run = should_run_cargo_check(&repo.name, &local_heads);
                     (
                         repo.name.clone(),
-                        format_cargo_check_status_log(repo, local_head, status, should_run),
+                        format_cargo_check_status_log(repo, local_head, status),
                     )
                 })
                 .collect();
@@ -475,7 +442,7 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let needs_cargo = should_run_cargo_check(name, &local_heads);
+                let needs_cargo = true;
                 let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked

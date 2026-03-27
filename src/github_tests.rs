@@ -94,13 +94,11 @@ fn cargo_check_status_log_explains_run_when_cache_is_current() {
             needs_local: false,
             needs_remote: false,
         },
-        true,
     );
 
     assert!(log.contains(
         "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
     ));
-    assert!(log.contains("runs_cargo_check=true"));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=false"));
     assert!(log.contains("local_head=\"local123\""));
@@ -121,13 +119,11 @@ fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
             needs_local: false,
             needs_remote: true,
         },
-        true,
     );
 
     assert!(log.contains(
         "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
     ));
-    assert!(log.contains("runs_cargo_check=true"));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=true"));
     assert!(log.contains("cargo_remote_hash_present=false"));
@@ -137,34 +133,29 @@ fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
 #[test]
 fn cargo_check_status_matches_run_state() {
     let repo = make_repo_for_cargo_log();
-    let mut local_heads = std::collections::HashMap::new();
-    local_heads.insert(repo.name.clone(), String::from("local123"));
 
     let run_with_current_cache = CargoCheckStatus::for_repo(&repo, "local123");
     let run = CargoCheckStatus::for_repo(&repo, "different-local-head");
 
     assert!(!run_with_current_cache.needs_local);
     assert!(!run_with_current_cache.needs_remote);
-    assert!(should_run_cargo_check(&repo.name, &local_heads));
     assert!(run.needs_local);
     assert_eq!(run.needs_remote, run_with_current_cache.needs_remote);
 }
 
 #[test]
-fn cargo_check_status_log_explains_skip_when_local_head_is_unavailable() {
+fn cargo_check_status_log_explains_run_when_local_head_is_unavailable() {
     let repo = make_repo_for_cargo_log();
-    let local_heads = std::collections::HashMap::new();
+    let status = CargoCheckStatus::for_repo(&repo, "");
 
-    let log = format_cargo_check_status_log(
-        &repo,
-        "",
-        CargoCheckStatus::for_repo(&repo, ""),
-        should_run_cargo_check(&repo.name, &local_heads),
-    );
+    let log = format_cargo_check_status_log(&repo, "", status);
 
-    assert!(!should_run_cargo_check(&repo.name, &local_heads));
-    assert!(log.contains("cargo check をスキップ: local HEAD を解決できないため実行しません"));
-    assert!(log.contains("runs_cargo_check=false"));
+    assert!(status.needs_local);
+    assert!(!status.needs_remote);
+    assert!(log.contains(
+        "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
+    ));
+    assert!(log.contains("local_head=\"\""));
 }
 
 #[test]
