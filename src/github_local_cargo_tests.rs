@@ -1,6 +1,6 @@
 use super::{
     check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
-    get_cargo_bins_inner,
+    check_cargo_git_install_with_remote_hash_and_logger, get_cargo_bins_inner,
 };
 use std::process::Command as Cmd;
 use std::time::Duration;
@@ -289,7 +289,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
     let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
-    let result = check_cargo_git_install_inner_with_remote_hash(
+    let result = check_cargo_git_install_with_remote_hash_and_logger(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
@@ -339,7 +339,7 @@ fn cargo_install_logs_hash_source_details() {
     let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
 
     let mut logs = Vec::new();
-    let result = check_cargo_git_install_inner_with_remote_hash(
+    let result = check_cargo_git_install_with_remote_hash_and_logger(
         "owner",
         "myrepo",
         tmp.join("repos").to_str().unwrap(),
@@ -354,15 +354,30 @@ fn cargo_install_logs_hash_source_details() {
     let expected_matched_crate_name = format!("一致した crate 名={:?}", "myrepo");
     let expected_local_command = format!("git -C {} rev-parse HEAD", local_repo_path.display());
     assert!(result.is_some());
+    assert!(logs
+        .iter()
+        .any(|msg| { msg.contains("開始: cargo check を開始します") }));
     assert!(logs.iter().any(|msg| {
         msg.contains("リポジトリ=owner/myrepo")
             && msg.contains(&crates2_path_display)
             && msg.contains("一致した cargo install エントリ=")
             && msg.contains(&expected_matched_crate_name)
     }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains(
+            "cargo install メタデータに対象リポジトリの情報があるため、cargo check の対象です",
+        )
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"myrepo-xyz99999\"]")
+    }));
     assert!(logs
         .iter()
         .any(|msg| msg.contains(&installed_checkout_display)));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("インストール済み checkout のコミットハッシュ取得を開始します")
+            && msg.contains("rev-parse HEAD")
+    }));
     assert!(logs.iter().any(|msg| {
         msg.contains("コマンド=git -C")
             && msg.contains(&installed_checkout_display)
@@ -370,9 +385,31 @@ fn cargo_install_logs_hash_source_details() {
             && msg.contains(&local_hash)
     }));
     assert!(logs.iter().any(|msg| {
+        msg.contains(&format!(
+            "インストール済み checkout のコミットハッシュを取得しました: {local_hash}"
+        ))
+    }));
+    assert!(logs
+        .iter()
+        .any(|msg| { msg.contains("remote のコミットハッシュ取得を開始します") }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains(&format!(
+            "remote のコミットハッシュを取得しました: {remote_hash}"
+        ))
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("ローカルリポジトリのコミットハッシュ取得を開始します")
+            && msg.contains(&expected_local_command)
+    }));
+    assert!(logs.iter().any(|msg| {
         msg.contains(&expected_local_command)
             && msg.contains("標準出力=")
             && msg.contains(&local_hash)
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains(&format!(
+            "ローカルリポジトリのコミットハッシュを取得しました: {local_hash}"
+        ))
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains("ハッシュ要約:")
@@ -382,6 +419,13 @@ fn cargo_install_logs_hash_source_details() {
             && msg.contains("リモートと cargo install の一致=false (不一致),")
             && msg.contains("cargo install とローカルの一致=true (一致),")
             && msg.contains("リモートとローカルの一致=false (不一致)")
+    }));
+    assert!(logs
+        .iter()
+        .any(|msg| { msg.contains("cargo install と remote の比較結果=不一致") }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("終了: cargo check を完了しました")
+            && msg.contains("cargo install と remote の比較結果=不一致")
     }));
 }
 
@@ -473,6 +517,39 @@ fn cargo_install_picks_latest_mtime_subdir() {
         msg.contains("選択した checkout ディレクトリ=")
             && msg.contains(&new_sub_display)
             && msg.contains("更新日時=")
+    }));
+}
+
+#[test]
+fn cargo_install_wrapper_logs_skip_reason_and_end_when_repo_is_not_target() {
+    let tmp = unique_temp_dir("cargo_test_skip_log");
+    let json = make_crates2_json("owner", "other-repo", "other-repo");
+    let cargo_home = tmp.join("cargo_home");
+    std::fs::create_dir_all(&cargo_home).unwrap();
+    std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_with_remote_hash_and_logger(
+        "owner",
+        "myrepo",
+        "/nonexistent",
+        cargo_home.to_str().unwrap(),
+        "fedcba9876543210fedcba9876543210fedcba98",
+        |msg| logs.push(msg.to_string()),
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert!(result.is_none());
+    assert!(logs
+        .iter()
+        .any(|msg| msg.contains("開始: cargo check を開始します")));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("cargo install メタデータ内に対象リポジトリが見つからないため、cargo install の確認をスキップします")
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("終了: cargo check を完了しました")
+            && msg.contains("チェック対象外または判定不能")
     }));
 }
 

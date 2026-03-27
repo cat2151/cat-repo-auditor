@@ -142,10 +142,72 @@ pub(crate) fn check_local_status_no_fetch(
 }
 
 pub(crate) fn local_head_matches_upstream(base_dir: &str, repo_name: &str) -> bool {
+    local_head_matches_upstream_with_logger(base_dir, repo_name, |msg| {
+        cargo::append_log_message(msg)
+    })
+}
+
+fn log_local_repo_check(
+    log_fn: &mut impl FnMut(&str),
+    repo_name: &str,
+    repo_path: &str,
+    result: &str,
+) {
+    log_fn(&format!(
+        "local repo check: リポジトリ={repo_name} パス={repo_path} 結果={result}"
+    ));
+}
+
+fn local_head_matches_upstream_with_logger(
+    base_dir: &str,
+    repo_name: &str,
+    mut log_fn: impl FnMut(&str),
+) -> bool {
     let path = build_repo_path(base_dir, repo_name);
-    local_and_upstream_heads(&path)
-        .map(|(local_sha, remote_sha)| local_sha == remote_sha)
-        .unwrap_or(false)
+    log_local_repo_check(
+        &mut log_fn,
+        repo_name,
+        &path,
+        "開始: ローカルとリモートのコミットハッシュ比較を開始します",
+    );
+    let result = match local_and_upstream_heads_with_logger(repo_name, &path, &mut log_fn) {
+        Some((local_sha, remote_sha)) => {
+            let matches = local_sha == remote_sha;
+            log_local_repo_check(
+                &mut log_fn,
+                repo_name,
+                &path,
+                &format!(
+                    "ローカルとリモートのコミットハッシュ比較結果={}",
+                    if matches { "一致" } else { "不一致" }
+                ),
+            );
+            matches
+        }
+        None => {
+            log_local_repo_check(
+                &mut log_fn,
+                repo_name,
+                &path,
+                "ローカルまたはリモートのコミットハッシュを取得できなかったため、比較結果を判定できません",
+            );
+            false
+        }
+    };
+    log_local_repo_check(
+        &mut log_fn,
+        repo_name,
+        &path,
+        &format!(
+            "終了: ローカル repo check を完了しました (比較結果={})",
+            if result {
+                "一致"
+            } else {
+                "不一致または判定不能"
+            }
+        ),
+    );
+    result
 }
 
 struct LocalChanges {
@@ -215,26 +277,119 @@ fn get_local_changes(repo_path: &str) -> LocalChanges {
 }
 
 fn local_and_upstream_heads(repo_path: &str) -> Option<(String, String)> {
-    let local = Command::new("git")
+    fn empty_logger(_: &str) {}
+    let mut empty_logger = empty_logger;
+    local_and_upstream_heads_with_logger("", repo_path, &mut empty_logger)
+}
+
+fn local_and_upstream_heads_with_logger(
+    repo_name: &str,
+    repo_path: &str,
+    log_fn: &mut impl FnMut(&str),
+) -> Option<(String, String)> {
+    let local_command = format!("git -C {repo_path} rev-parse HEAD");
+    if !repo_name.is_empty() {
+        log_local_repo_check(
+            log_fn,
+            repo_name,
+            repo_path,
+            &format!("ローカルのコミットハッシュ取得を開始します: コマンド={local_command}"),
+        );
+    }
+    let local = match Command::new("git")
         .args(["-C", repo_path, "rev-parse", "HEAD"])
         .output()
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(err) => {
+            if !repo_name.is_empty() {
+                log_local_repo_check(
+                    log_fn,
+                    repo_name,
+                    repo_path,
+                    &format!(
+                        "ローカルのコミットハッシュ取得に失敗しました: コマンド={local_command}, エラー={err}"
+                    ),
+                );
+            }
+            return None;
+        }
+    };
     if !local.status.success() {
+        if !repo_name.is_empty() {
+            log_local_repo_check(
+                log_fn,
+                repo_name,
+                repo_path,
+                &format!("ローカルのコミットハッシュ取得に失敗しました: コマンド={local_command}"),
+            );
+        }
         return None;
     }
+    let local_sha = String::from_utf8_lossy(&local.stdout).trim().to_string();
+    if !repo_name.is_empty() {
+        log_local_repo_check(
+            log_fn,
+            repo_name,
+            repo_path,
+            &format!("ローカルのコミットハッシュを取得しました: {local_sha}"),
+        );
+    }
 
-    let remote = Command::new("git")
+    let remote_command = format!("git -C {repo_path} rev-parse @{{u}}");
+    if !repo_name.is_empty() {
+        log_local_repo_check(
+            log_fn,
+            repo_name,
+            repo_path,
+            &format!(
+                "リモートから取得したコミットハッシュの取得を開始します: コマンド={remote_command}"
+            ),
+        );
+    }
+    let remote = match Command::new("git")
         .args(["-C", repo_path, "rev-parse", "@{u}"])
         .output()
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(err) => {
+            if !repo_name.is_empty() {
+                log_local_repo_check(
+                    log_fn,
+                    repo_name,
+                    repo_path,
+                    &format!(
+                        "リモートから取得したコミットハッシュの取得に失敗しました: コマンド={remote_command}, エラー={err}"
+                    ),
+                );
+            }
+            return None;
+        }
+    };
     if !remote.status.success() {
+        if !repo_name.is_empty() {
+            log_local_repo_check(
+                log_fn,
+                repo_name,
+                repo_path,
+                &format!(
+                    "リモートから取得したコミットハッシュの取得に失敗しました: コマンド={remote_command}"
+                ),
+            );
+        }
         return None;
     }
+    let remote_sha = String::from_utf8_lossy(&remote.stdout).trim().to_string();
+    if !repo_name.is_empty() {
+        log_local_repo_check(
+            log_fn,
+            repo_name,
+            repo_path,
+            &format!("リモートから取得したコミットハッシュを取得しました: {remote_sha}"),
+        );
+    }
 
-    Some((
-        String::from_utf8_lossy(&local.stdout).trim().to_string(),
-        String::from_utf8_lossy(&remote.stdout).trim().to_string(),
-    ))
+    Some((local_sha, remote_sha))
 }
 
 fn is_unmerged_status(x: char, y: char) -> bool {

@@ -188,6 +188,48 @@ fn local_head_matches_upstream_returns_false_after_remote_advances() {
 }
 
 #[test]
+fn local_head_matches_upstream_logs_start_hashes_and_result() {
+    let (tmp, _seed, _local) = setup_remote_with_clone("same_head_logged");
+    let mut logs = Vec::new();
+
+    let matches = local_head_matches_upstream_with_logger(
+        tmp.join("repos").to_str().unwrap(),
+        "myrepo",
+        |msg| logs.push(msg.to_string()),
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert!(matches);
+    assert!(logs.iter().any(|msg| {
+        msg.contains("local repo check:")
+            && msg.contains("リポジトリ=myrepo")
+            && msg.contains("開始: ローカルとリモートのコミットハッシュ比較を開始します")
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("ローカルのコミットハッシュ取得を開始します")
+            && msg.contains("git -C")
+            && msg.contains("rev-parse HEAD")
+    }));
+    assert!(logs
+        .iter()
+        .any(|msg| msg.contains("ローカルのコミットハッシュを取得しました:")));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("リモートから取得したコミットハッシュの取得を開始します")
+            && msg.contains("rev-parse @{u}")
+    }));
+    assert!(logs
+        .iter()
+        .any(|msg| msg.contains("リモートから取得したコミットハッシュを取得しました:")));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("ローカルとリモートのコミットハッシュ比較結果=一致")
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("終了: ローカル repo check を完了しました") && msg.contains("比較結果=一致")
+    }));
+}
+
+#[test]
 fn check_local_status_reports_conflict() {
     let tmp = unique_temp_dir("status_conflict");
     let repo = tmp.join("myrepo");
