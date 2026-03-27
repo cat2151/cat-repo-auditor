@@ -13,7 +13,10 @@ pub(crate) use hash::check_cargo_git_install;
 #[cfg(test)]
 use bins::get_cargo_bins_inner;
 #[cfg(test)]
-use hash::{check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash};
+use hash::{
+    check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
+    check_cargo_git_install_with_remote_hash_and_logger,
+};
 
 /// Returns the effective CARGO_HOME path.
 fn get_cargo_home() -> String {
@@ -26,7 +29,7 @@ fn get_cargo_home() -> String {
 }
 
 /// Append one or more timestamped log messages to the unified local log file.
-fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
+pub(super) fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
     let log_path = crate::config::Config::log_path();
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -44,7 +47,7 @@ fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
     }
 }
 
-fn append_log_message(msg: &str) {
+pub(super) fn append_log_message(msg: &str) {
     append_log_messages(std::iter::once(msg));
 }
 

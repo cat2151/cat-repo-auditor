@@ -28,13 +28,56 @@ pub(crate) fn check_cargo_git_install(
     repo_name: &str,
     base_dir: &str,
 ) -> Option<(bool, String, String, String)> {
-    check_cargo_git_install_inner(
+    let cargo_home = super::get_cargo_home();
+    check_cargo_git_install_with_resolver_and_logger(
         owner,
         repo_name,
         base_dir,
-        &super::get_cargo_home(),
+        &cargo_home,
         |msg| super::append_log_message(msg),
+        |log_fn, owner, repo_name| fetch_remote_main_hash(log_fn, owner, repo_name),
     )
+}
+
+fn check_cargo_git_install_with_resolver_and_logger<L, R>(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_home: &str,
+    mut log_fn: L,
+    mut resolve_remote_hash: R,
+) -> Option<(bool, String, String, String)>
+where
+    L: FnMut(&str),
+    R: FnMut(&mut L, &str, &str) -> Option<String>,
+{
+    super::log_cargo_check_result(
+        &mut log_fn,
+        owner,
+        repo_name,
+        "開始: cargo check を開始します",
+    );
+    let result = check_cargo_git_install_inner_with_resolver(
+        owner,
+        repo_name,
+        base_dir,
+        cargo_home,
+        &mut log_fn,
+        &mut resolve_remote_hash,
+    );
+    let completion_message = match &result {
+        Some((_matches_local, installed_hash, _local_hash, remote_hash)) => format!(
+            "終了: cargo check を完了しました (cargo install と remote の比較結果={})",
+            if installed_hash == remote_hash {
+                "一致"
+            } else {
+                "不一致"
+            }
+        ),
+        None => String::from("終了: cargo check を完了しました (チェック対象外または判定不能)"),
+    };
+    super::log_cargo_check_result(&mut log_fn, owner, repo_name, &completion_message);
+    result
 }
 
 fn fetch_remote_main_hash(
@@ -43,6 +86,12 @@ fn fetch_remote_main_hash(
     repo_name: &str,
 ) -> Option<String> {
     let remote_command = super::format_git_ls_remote_main_command(owner, repo_name);
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!("remote のコミットハッシュ取得を開始します: コマンド={remote_command}"),
+    );
     let out = Command::new("git")
         .args([
             "ls-remote",
@@ -68,7 +117,15 @@ fn fetch_remote_main_hash(
     }
     let stdout = String::from_utf8_lossy(&out.stdout);
     match stdout.split_whitespace().next() {
-        Some(hash) => Some(hash.to_string()),
+        Some(hash) => {
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                &format!("remote のコミットハッシュを取得しました: {hash}"),
+            );
+            Some(hash.to_string())
+        }
         _ => {
             super::log_cargo_check_result(
                 log_fn,
@@ -107,6 +164,7 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
 }
 
 /// Internal function exposed for testing.
+#[cfg(test)]
 pub(super) fn check_cargo_git_install_inner(
     owner: &str,
     repo_name: &str,
@@ -136,6 +194,12 @@ where
     L: FnMut(&str),
     R: FnMut(&mut L, &str, &str) -> Option<String>,
 {
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        "cargo install メタデータ内の対象リポジトリ情報の確認を開始します",
+    );
     let crates2_path = Path::new(cargo_home).join(".crates2.json");
     let content = match std::fs::read_to_string(&crates2_path) {
         Ok(content) => content,
@@ -233,6 +297,12 @@ where
             "一致した cargo install エントリ={matched_entry:?}、一致した crate 名={app_name:?}"
         ),
     );
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        "cargo install メタデータに対象リポジトリの情報があるため、cargo check の対象です",
+    );
 
     let checkouts_dir = Path::new(cargo_home).join("git").join("checkouts");
     let prefix_with_dash = format!("{app_name}-");
@@ -258,6 +328,20 @@ where
             return None;
         }
     };
+    let checkout_candidate_names = matches
+        .iter()
+        .filter_map(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
+        .collect::<Vec<_>>();
+    super::log_cargo_check_path_result(
+        log_fn,
+        owner,
+        repo_name,
+        &checkouts_dir,
+        &format!("checkouts 配下の hash 取得候補 dir 名一覧={checkout_candidate_names:?}"),
+    );
 
     if matches.is_empty() {
         super::log_cargo_check_path_result(
@@ -380,6 +464,14 @@ where
     );
 
     let installed_command = super::format_git_rev_parse_head_command(&sub_dir);
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!(
+            "インストール済み checkout のコミットハッシュ取得を開始します: コマンド={installed_command}"
+        ),
+    );
     let out = Command::new("git")
         .arg("-C")
         .arg(&sub_dir)
@@ -411,10 +503,22 @@ where
         );
         return None;
     }
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!("インストール済み checkout のコミットハッシュを取得しました: {installed_hash}"),
+    );
     let remote_hash = resolve_remote_hash(log_fn, owner, repo_name)?;
 
     let repo_path = Path::new(base_dir).join(repo_name);
     let local_command = super::format_git_rev_parse_head_command(&repo_path);
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!("ローカルリポジトリのコミットハッシュ取得を開始します: コマンド={local_command}"),
+    );
     let out = Command::new("git")
         .arg("-C")
         .arg(&repo_path)
@@ -446,12 +550,31 @@ where
         );
         return None;
     }
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!("ローカルリポジトリのコミットハッシュを取得しました: {local_hash}"),
+    );
 
     super::log_cargo_check_result(
         log_fn,
         owner,
         repo_name,
         &super::format_cargo_hash_summary(&remote_hash, &installed_hash, &local_hash),
+    );
+    super::log_cargo_check_result(
+        log_fn,
+        owner,
+        repo_name,
+        &format!(
+            "cargo install と remote の比較結果={}",
+            if installed_hash == remote_hash {
+                "一致"
+            } else {
+                "不一致"
+            }
+        ),
     );
 
     Some((
@@ -477,6 +600,53 @@ pub(super) fn check_cargo_git_install_inner_with_remote_hash(
         base_dir,
         cargo_home,
         &mut log_fn,
-        |_, _, _| Some(remote_hash.to_string()),
+        |log_fn, owner, repo_name| {
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                "remote のコミットハッシュ取得を開始します",
+            );
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                &format!("remote のコミットハッシュを取得しました: {remote_hash}"),
+            );
+            Some(remote_hash.to_string())
+        },
+    )
+}
+
+#[cfg(test)]
+pub(super) fn check_cargo_git_install_with_remote_hash_and_logger(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_home: &str,
+    remote_hash: &str,
+    log_fn: impl FnMut(&str),
+) -> Option<(bool, String, String, String)> {
+    check_cargo_git_install_with_resolver_and_logger(
+        owner,
+        repo_name,
+        base_dir,
+        cargo_home,
+        log_fn,
+        |log_fn, owner, repo_name| {
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                "remote のコミットハッシュ取得を開始します",
+            );
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                &format!("remote のコミットハッシュを取得しました: {remote_hash}"),
+            );
+            Some(remote_hash.to_string())
+        },
     )
 }
