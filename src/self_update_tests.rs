@@ -1,6 +1,11 @@
 use super::*;
 
 #[test]
+fn build_commit_hash_is_not_empty() {
+    assert!(!build_commit_hash().is_empty());
+}
+
+#[test]
 fn update_available_when_hashes_differ() {
     assert!(is_update_available("aabbcc", "ddeeff"));
 }

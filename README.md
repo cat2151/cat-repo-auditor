@@ -20,6 +20,12 @@ cargo install --force --git https://github.com/cat2151/cat-repo-auditor
 catrepo
 ```
 
+Print the commit hash embedded at build time:
+
+```
+catrepo hash
+```
+
 ### How to Use
 
 - Since this is for personal use, it's not intended for others. The following are also my personal notes.

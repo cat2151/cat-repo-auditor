@@ -42,7 +42,7 @@ use crate::{
     main_launch::{
         cargo_status_to_launch_args, format_launch_command, x_not_run_feedback_no_cargo_install,
     },
-    self_update::{check_self_update, run_self_update},
+    self_update::{build_commit_hash, check_self_update, run_self_update},
     ui::{draw_ui, Focus, SearchState},
 };
 
@@ -57,15 +57,36 @@ mod tests;
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Subcommand {
+    Hash,
+    Update,
+}
+
+fn parse_subcommand(args: &[String]) -> Option<Subcommand> {
+    match args.get(1).map(String::as_str) {
+        Some("hash") => Some(Subcommand::Hash),
+        Some("update") => Some(Subcommand::Update),
+        _ => None,
+    }
+}
+
 fn main() -> Result<()> {
     // ── subcommand dispatch ───────────────────────────────────────────────
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("update") {
-        let should_exit = run_self_update()?;
-        if should_exit {
-            std::process::exit(0);
+    match parse_subcommand(&args) {
+        Some(Subcommand::Hash) => {
+            println!("{}", build_commit_hash());
+            return Ok(());
         }
-        return Ok(());
+        Some(Subcommand::Update) => {
+            let should_exit = run_self_update()?;
+            if should_exit {
+                std::process::exit(0);
+            }
+            return Ok(());
+        }
+        None => {}
     }
 
     let config = Config::load()?;
