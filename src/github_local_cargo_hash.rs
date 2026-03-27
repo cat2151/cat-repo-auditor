@@ -332,7 +332,7 @@ where
         .iter()
         .filter_map(|path| {
             path.file_name()
-                .map(|name| name.to_string_lossy().to_string())
+                .map(|name| name.to_string_lossy().into_owned())
         })
         .collect::<Vec<_>>();
     super::log_cargo_check_path_result(

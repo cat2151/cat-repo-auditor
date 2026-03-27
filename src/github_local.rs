@@ -277,9 +277,9 @@ fn get_local_changes(repo_path: &str) -> LocalChanges {
 }
 
 fn local_and_upstream_heads(repo_path: &str) -> Option<(String, String)> {
-    fn noop(_: &str) {}
-    let mut noop = noop;
-    local_and_upstream_heads_with_logger("", repo_path, &mut noop)
+    fn empty_logger(_: &str) {}
+    let mut empty_logger = empty_logger;
+    local_and_upstream_heads_with_logger("", repo_path, &mut empty_logger)
 }
 
 fn local_and_upstream_heads_with_logger(
