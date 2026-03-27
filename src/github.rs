@@ -215,13 +215,17 @@ fn format_pull_log(repo_full_name: &str, pull_result: &anyhow::Result<String>) -
     }
 }
 
+/// Cargo check の状態とログ用の説明材料を保持する。
+///
+/// `needs_local` / `needs_remote` は実行判定には使わず、ログで
+/// 「何が最新か / 何が古いか」を説明するために保持している。
 #[derive(Clone, Copy)]
-struct CargoCheckDecision {
+struct CargoCheckStatus {
     needs_local: bool,
     needs_remote: bool,
 }
 
-impl CargoCheckDecision {
+impl CargoCheckStatus {
     fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
         Self {
             needs_local: repo.cargo_checked_at != local_head,
@@ -229,29 +233,27 @@ impl CargoCheckDecision {
                 || repo.cargo_remote_hash.is_empty(),
         }
     }
-
-    fn needs_check(self) -> bool {
-        self.needs_local || self.needs_remote
-    }
 }
 
-fn cargo_check_decision(
-    cargo_check_decisions: &std::collections::HashMap<String, CargoCheckDecision>,
+fn cargo_check_status(
+    cargo_check_statuses: &std::collections::HashMap<String, CargoCheckStatus>,
     repo_name: &str,
-) -> CargoCheckDecision {
-    cargo_check_decisions
+) -> CargoCheckStatus {
+    cargo_check_statuses
         .get(repo_name)
         .copied()
         .unwrap_or_else(|| {
             panic!(
-                "repo '{repo_name}' のcargo判定が見つかりません。すべてのrepoに判定が存在する想定です"
+                "repo '{repo_name}' のcargo状態が見つかりません。すべてのrepoに状態が存在する想定です"
             )
         })
 }
 
-fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static str {
-    match (decision.needs_local, decision.needs_remote) {
-        (false, false) => "cargo check をスキップ: local HEAD と remote hash cache は最新です",
+fn format_cargo_check_status_reason(status: CargoCheckStatus) -> &'static str {
+    match (status.needs_local, status.needs_remote) {
+        (false, false) => {
+            "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
+        }
         (false, true) => {
             "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
         }
@@ -264,16 +266,16 @@ fn format_cargo_check_decision_reason(decision: CargoCheckDecision) -> &'static 
     }
 }
 
-fn format_cargo_check_decision_log(
+fn format_cargo_check_status_log(
     repo: &RepoInfo,
     local_head: &str,
-    decision: CargoCheckDecision,
+    status: CargoCheckStatus,
 ) -> String {
     format!(
         "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
-        format_cargo_check_decision_reason(decision),
-        decision.needs_local,
-        decision.needs_remote,
+        format_cargo_check_status_reason(status),
+        status.needs_local,
+        status.needs_remote,
         local_head,
         repo.cargo_checked_at,
         repo.updated_at_raw,
@@ -281,6 +283,25 @@ fn format_cargo_check_decision_log(
         !repo.cargo_remote_hash.is_empty(),
         repo.cargo_install,
     )
+}
+
+fn resolve_cargo_check_fields(
+    repo: &RepoInfo,
+    updated_at_raw: &str,
+    cargo_result: Option<(bool, String, String, String)>,
+) -> (Option<bool>, String, String, String, String) {
+    match cargo_result {
+        // `loc`（git から実際に読んだ hash）を cargo_cat に使い、
+        // 保存値が常に比較に使った正確な hash になるようにする。
+        Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, updated_at_raw.to_string(), inst),
+        None => (
+            repo.cargo_install,
+            repo.cargo_checked_at.clone(),
+            repo.cargo_remote_hash.clone(),
+            repo.cargo_remote_hash_checked_at.clone(),
+            repo.cargo_installed_hash.clone(),
+        ),
+    }
 }
 
 // ──────────────────────────────────────────────
@@ -341,10 +362,10 @@ pub fn fetch_repos_with_progress(
                 let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl))));
             }
 
-            // Phase 3: per-field independent checked_at.
-            // Each field is rechecked only when its own checked_at is stale.
-            // cargo_checked_at stores the local HEAD hash → rechecks cargo local/installed on new commit.
-            // cargo_remote_hash_checked_at stores updated_at_raw → rechecks remote hash on repo updates.
+            // Phase 3:
+            // - README / Pages / DeepWiki / workflows は各 checked_at が古いときだけ再確認する。
+            // - cargo install 状態の確認は毎回実行し、cargo_checked_at /
+            //   cargo_remote_hash_checked_at はその結果表示用の記録として更新する。
             let owner = config.owner.clone();
 
             // Collect local HEAD hashes once (cheap, no network)
@@ -373,37 +394,23 @@ pub fn fetch_repos_with_progress(
                 })
                 .collect();
 
-            let cargo_check_decisions: std::collections::HashMap<String, CargoCheckDecision> =
-                repos
-                    .iter()
-                    .map(|repo| {
-                        let local_head = local_heads
-                            .get(&repo.name)
-                            .map(|s| s.as_str())
-                            .unwrap_or("");
-                        (
-                            repo.name.clone(),
-                            CargoCheckDecision::for_repo(repo, local_head),
-                        )
-                    })
-                    .collect();
-
-            // Build per-repo check tasks: only repos that need at least one field updated
-            let to_check: Vec<String> = repos
+            let cargo_check_statuses: std::collections::HashMap<String, CargoCheckStatus> = repos
                 .iter()
-                .filter(|r| {
-                    let cat = &r.updated_at_raw;
-                    let local_head = local_heads.get(&r.name).map(|s| s.as_str()).unwrap_or("");
-                    let cargo_decision = cargo_check_decision(&cargo_check_decisions, &r.name);
-                    r.readme_ja_checked_at != *cat
-                        || r.readme_ja_badge_checked_at != local_head
-                        || r.pages_checked_at != *cat
-                        || r.deepwiki_checked_at != local_head
-                        || cargo_decision.needs_check()
-                        || r.wf_checked_at != local_head
+                .map(|repo| {
+                    let local_head = local_heads
+                        .get(&repo.name)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    (
+                        repo.name.clone(),
+                        CargoCheckStatus::for_repo(repo, local_head),
+                    )
                 })
-                .map(|r| r.name.clone())
                 .collect();
+
+            // Build per-repo check tasks.
+            // cargo install 状態の確認は毎回実行するため、Phase 3 は全 repo を対象にする。
+            let to_check: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
 
             let cargo_check_logs: Vec<(String, String)> = repos
                 .iter()
@@ -412,10 +419,10 @@ pub fn fetch_repos_with_progress(
                         .get(&repo.name)
                         .map(|s| s.as_str())
                         .unwrap_or("");
-                    let decision = cargo_check_decision(&cargo_check_decisions, &repo.name);
+                    let status = cargo_check_status(&cargo_check_statuses, &repo.name);
                     (
                         repo.name.clone(),
-                        format_cargo_check_decision_log(repo, local_head, decision),
+                        format_cargo_check_status_log(repo, local_head, status),
                     )
                 })
                 .collect();
@@ -435,8 +442,6 @@ pub fn fetch_repos_with_progress(
                 let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
                 let needs_pages = repo.pages_checked_at != cat;
                 let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-                let cargo_decision = cargo_check_decision(&cargo_check_decisions, name);
-                let needs_cargo = cargo_decision.needs_check();
                 let needs_wf = repo.wf_checked_at != local_head;
 
                 // Signal UI that this repo is being checked
@@ -484,28 +489,11 @@ pub fn fetch_repos_with_progress(
                     cargo_remote_hash,
                     cargo_remote_hash_cat,
                     cargo_installed_hash,
-                ) = if needs_cargo {
-                    match check_cargo_git_install(&owner, name, &config.local_base_dir) {
-                        // Use `loc` (the actual hash read from git) as cargo_cat so the stored
-                        // value is always the precise hash used in the comparison.
-                        Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, cat.clone(), inst),
-                        None => (
-                            None,
-                            local_head.clone(),
-                            String::new(),
-                            cat.clone(),
-                            String::new(),
-                        ),
-                    }
-                } else {
-                    (
-                        repo.cargo_install,
-                        repo.cargo_checked_at.clone(),
-                        repo.cargo_remote_hash.clone(),
-                        repo.cargo_remote_hash_checked_at.clone(),
-                        repo.cargo_installed_hash.clone(),
-                    )
-                };
+                ) = resolve_cargo_check_fields(
+                    repo,
+                    &cat,
+                    check_cargo_git_install(&owner, name, &config.local_base_dir),
+                );
 
                 let (wf_workflows, wf_cat) = if needs_wf {
                     let v = check_workflows(&config.local_base_dir, name);

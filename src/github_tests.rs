@@ -84,19 +84,21 @@ fn should_auto_pull_status_matches_issue_rules() {
 }
 
 #[test]
-fn cargo_check_decision_log_explains_skip_when_cache_is_current() {
+fn cargo_check_status_log_explains_run_when_cache_is_current() {
     let repo = make_repo_for_cargo_log();
 
-    let log = format_cargo_check_decision_log(
+    let log = format_cargo_check_status_log(
         &repo,
         "local123",
-        CargoCheckDecision {
+        CargoCheckStatus {
             needs_local: false,
             needs_remote: false,
         },
     );
 
-    assert!(log.contains("cargo check をスキップ: local HEAD と remote hash cache は最新です"));
+    assert!(log.contains(
+        "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
+    ));
     assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=false"));
     assert!(log.contains("local_head=\"local123\""));
@@ -106,14 +108,14 @@ fn cargo_check_decision_log_explains_skip_when_cache_is_current() {
 }
 
 #[test]
-fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
+fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
     let mut repo = make_repo_for_cargo_log();
     repo.cargo_remote_hash.clear();
 
-    let log = format_cargo_check_decision_log(
+    let log = format_cargo_check_status_log(
         &repo,
         "local123",
-        CargoCheckDecision {
+        CargoCheckStatus {
             needs_local: false,
             needs_remote: true,
         },
@@ -129,14 +131,49 @@ fn cargo_check_decision_log_explains_run_when_remote_hash_is_missing() {
 }
 
 #[test]
-fn cargo_check_decision_matches_run_state() {
+fn cargo_check_status_matches_run_state() {
     let repo = make_repo_for_cargo_log();
 
-    let skip = CargoCheckDecision::for_repo(&repo, "local123");
-    let run = CargoCheckDecision::for_repo(&repo, "different-local-head");
+    let run_with_current_cache = CargoCheckStatus::for_repo(&repo, "local123");
+    let run = CargoCheckStatus::for_repo(&repo, "different-local-head");
 
-    assert!(!skip.needs_check());
-    assert!(run.needs_check());
+    assert!(!run_with_current_cache.needs_local);
+    assert!(!run_with_current_cache.needs_remote);
+    assert!(run.needs_local);
+    assert_eq!(run.needs_remote, run_with_current_cache.needs_remote);
+}
+
+#[test]
+fn cargo_check_status_log_explains_run_when_local_head_is_unavailable() {
+    let repo = make_repo_for_cargo_log();
+    let status = CargoCheckStatus::for_repo(&repo, "");
+
+    let log = format_cargo_check_status_log(&repo, "", status);
+
+    assert!(status.needs_local);
+    assert!(!status.needs_remote);
+    assert!(log.contains(
+        "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
+    ));
+    assert!(log.contains("local_head=\"\""));
+}
+
+#[test]
+fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
+    let repo = make_repo_for_cargo_log();
+
+    let resolved = resolve_cargo_check_fields(&repo, &repo.updated_at_raw, None);
+
+    assert_eq!(
+        resolved,
+        (
+            repo.cargo_install,
+            repo.cargo_checked_at.clone(),
+            repo.cargo_remote_hash.clone(),
+            repo.cargo_remote_hash_checked_at.clone(),
+            repo.cargo_installed_hash.clone(),
+        )
+    );
 }
 
 #[test]
