@@ -4,6 +4,7 @@ mod github;
 mod github_fetch;
 mod github_local;
 mod history;
+mod main_cli;
 mod main_fetch;
 mod main_helpers;
 mod main_launch;
@@ -34,6 +35,7 @@ use crate::{
     github::FetchProgress,
     github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
     history::History,
+    main_cli::{parse_subcommand, print_update_notice, Subcommand},
     main_fetch::drain_fetch_channel,
     main_helpers::{
         make_startup_log_line, make_x_log_line, persist_log_line, refresh_log_lines_if_changed,
@@ -56,20 +58,6 @@ use crate::main_launch::{
 mod tests;
 
 // ── main ─────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Subcommand {
-    Hash,
-    Update,
-}
-
-fn parse_subcommand(args: &[String]) -> Option<Subcommand> {
-    match args.get(1).map(String::as_str) {
-        Some("hash") => Some(Subcommand::Hash),
-        Some("update") => Some(Subcommand::Update),
-        _ => None,
-    }
-}
 
 fn main() -> Result<()> {
     // ── subcommand dispatch ───────────────────────────────────────────────
@@ -502,13 +490,5 @@ fn main() -> Result<()> {
     terminal.show_cursor()?;
 
     // Print update notice after terminal restore (visible in shell)
-    if let Some(ref repo) = app.update_available {
-        println!();
-        println!("gh-tui update available!");
-        println!("Run:");
-        println!("cargo install --force --git https://github.com/{repo}");
-        println!();
-    }
-
-    Ok(())
+    print_update_notice(app.update_available.as_deref())
 }
