@@ -30,6 +30,9 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::Status(_msg)) => {
                 // status_msg stays as operation help.
             }
+            Ok(FetchProgress::Log(msg)) => {
+                persist_log_line_for_path(app, log_path, make_log_line(&msg))
+            }
             Ok(FetchProgress::BackgroundChecksCompleted) => persist_log_line_for_path(
                 app,
                 log_path,

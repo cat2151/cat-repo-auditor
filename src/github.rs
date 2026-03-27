@@ -138,6 +138,7 @@ pub struct RateLimit {
 
 pub enum FetchProgress {
     Status(String),
+    Log(String),
     BackgroundChecksCompleted,
     /// Structured progress for background task display: (tag, cur, total)
     /// tag examples: "gh↓", "scan", "pull", "chk"
@@ -184,6 +185,32 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
         LocalStatus::Modified | LocalStatus::Staging
     ) && local_head_matches_upstream(base_dir, &repo.name);
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
+}
+
+fn compact_log_detail(detail: &str) -> String {
+    detail
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+fn format_pull_log(repo_full_name: &str, pull_result: &anyhow::Result<String>) -> String {
+    match pull_result {
+        Ok(output) => {
+            let detail = compact_log_detail(output);
+            if detail.is_empty() {
+                format!("pull {repo_full_name}: ok")
+            } else {
+                format!("pull {repo_full_name}: {detail}")
+            }
+        }
+        Err(err) => format!(
+            "pull {repo_full_name} failed: {}",
+            compact_log_detail(&format!("{err:#}"))
+        ),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -272,24 +299,28 @@ pub fn fetch_repos_with_progress(
         Ok((mut repos, rl)) => {
             // Phase 2: auto-pull repos that can be safely fast-forwarded.
             // Dirty repos are handled by stashing before pull and restoring after.
-            let pullable: Vec<String> = if config.auto_pull {
+            let pullable: Vec<(String, String)> = if config.auto_pull {
                 repos
                     .iter()
                     .filter(|r| should_auto_pull_repo(&config.local_base_dir, r))
-                    .map(|r| r.name.clone())
+                    .map(|r| (r.name.clone(), r.full_name.clone()))
                     .collect()
             } else {
                 vec![]
             };
             if !pullable.is_empty() {
                 let total = pullable.len();
-                for (i, name) in pullable.iter().enumerate() {
+                for (i, (name, repo_full_name)) in pullable.iter().enumerate() {
                     let _ = tx.send(FetchProgress::PhaseProgress {
                         tag: "pull",
                         cur: i + 1,
                         total,
                     });
-                    let _ = git_pull(&config.local_base_dir, name);
+                    let pull_result = git_pull(&config.local_base_dir, name);
+                    let _ = tx.send(FetchProgress::Log(format_pull_log(
+                        repo_full_name,
+                        &pull_result,
+                    )));
                 }
                 let _ = tx.send(FetchProgress::Status(String::from(
                     "Refreshing after auto-pull…",
