@@ -2,6 +2,24 @@ use super::*;
 use crate::main_helpers::{make_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 
 #[test]
+fn parse_subcommand_recognizes_hash() {
+    let args = vec!["catrepo".to_string(), "hash".to_string()];
+    assert_eq!(parse_subcommand(&args), Some(Subcommand::Hash));
+}
+
+#[test]
+fn parse_subcommand_recognizes_update() {
+    let args = vec!["catrepo".to_string(), "update".to_string()];
+    assert_eq!(parse_subcommand(&args), Some(Subcommand::Update));
+}
+
+#[test]
+fn parse_subcommand_ignores_unknown_command() {
+    let args = vec!["catrepo".to_string(), "unknown".to_string()];
+    assert_eq!(parse_subcommand(&args), None);
+}
+
+#[test]
 fn make_x_log_line_contains_repo_and_message() {
     let line = make_x_log_line("owner/repo", "run: `bin` cwd=`.`");
     assert!(line.contains("x owner/repo run: `bin` cwd=`.`"));

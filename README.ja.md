@@ -20,6 +20,12 @@ cargo install --force --git https://github.com/cat2151/cat-repo-auditor
 catrepo
 ```
 
+ビルド時に埋め込まれた commit hash を表示する:
+
+```
+catrepo hash
+```
+
 ### 使い方
 
 - 自分用なので他人が使うことを想定していません。以下も自分用のメモです。

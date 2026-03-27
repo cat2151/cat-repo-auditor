@@ -3,6 +3,10 @@ use std::process::Command;
 const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
 const GIT_URL: &str = "https://github.com/cat2151/cat-repo-auditor";
 
+pub(crate) fn build_commit_hash() -> &'static str {
+    env!("BUILD_COMMIT_HASH")
+}
+
 /// Full `cargo install` command string (used in bat content and printed output).
 fn install_cmd() -> String {
     format!("cargo install --force --git {GIT_URL}")
@@ -90,7 +94,7 @@ pub fn run_self_update() -> anyhow::Result<bool> {
 /// Returns Some("owner/repo") if an update is available, None if up-to-date
 /// or if the check cannot be performed.
 pub fn check_self_update() -> Option<String> {
-    let build_hash = env!("BUILD_COMMIT_HASH");
+    let build_hash = build_commit_hash();
 
     // Get remote main branch HEAD commit hash via gh api
     let endpoint = format!("/repos/{OWNER_REPO}/commits/main");
