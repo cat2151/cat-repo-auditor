@@ -50,18 +50,30 @@ pub(crate) fn check_deepwiki_exists(base_dir: &str, repo_name: &str) -> bool {
     false
 }
 
-/// Check if all 3 required workflow yml files are present in .github/workflows/
-pub(crate) fn check_workflows(base_dir: &str, repo_name: &str) -> bool {
+const REQUIRED_WORKFLOWS: [&str; 3] = [
+    "call-translate-readme.yml",
+    "call-issue-note.yml",
+    "call-check-large-files.yml",
+];
+const RUST_CARGO_CHECK_WORKFLOW: &str = "call-rust-windows-cargo-check.yml";
+
+/// Check if required workflow yml files are present in .github/workflows/
+///
+/// `cargo_install` is `Some(_)` when the repo is a cargo-check target app.
+/// Both `Some(true)` (up to date) and `Some(false)` (stale) require
+/// `call-rust-windows-cargo-check.yml`.
+pub(crate) fn check_workflows(
+    base_dir: &str,
+    repo_name: &str,
+    cargo_install: Option<bool>,
+) -> bool {
     let base = base_dir.trim_end_matches(['/', '\\']);
     let wf_dir = format!("{}/{}/.github/workflows", base, repo_name);
-    let required = [
-        "call-translate-readme.yml",
-        "call-issue-note.yml",
-        "call-check-large-files.yml",
-    ];
-    required
+    REQUIRED_WORKFLOWS
         .iter()
         .all(|f| std::path::Path::new(&format!("{}/{}", wf_dir, f)).exists())
+        && (cargo_install.is_none()
+            || std::path::Path::new(&format!("{}/{}", wf_dir, RUST_CARGO_CHECK_WORKFLOW)).exists())
 }
 
 pub(crate) fn collect_workflow_repo_exist_checks(
