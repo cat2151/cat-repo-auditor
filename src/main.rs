@@ -251,226 +251,234 @@ fn main() -> Result<()> {
                             || (matches!(key.code, KeyCode::Char('w'))
                                 && key.modifiers.contains(KeyModifiers::SHIFT));
                         match key.code {
-                        KeyCode::Char('q') => break,
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            let n = app.consume_prefix();
-                            app.repo_move_down(n);
-                        }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            let n = app.consume_prefix();
-                            app.repo_move_up(n);
-                        }
-                        KeyCode::PageDown => {
-                            app.num_prefix = 0;
-                            app.repo_page_down();
-                        }
-                        KeyCode::PageUp => {
-                            app.num_prefix = 0;
-                            app.repo_page_up();
-                        }
-                        KeyCode::Char('l') | KeyCode::Right => {
-                            app.num_prefix = 0;
-                            app.focus_detail_first_pr_or_issue();
-                        }
-                        KeyCode::Char('g') => {
-                            app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                if repo.has_local_git {
-                                    let name = repo.name.clone();
-                                    let base = app.config.local_base_dir.clone();
-                                    // Drop terminal before handing control to lazygit
-                                    if let Err(e) = launch_lazygit(&base, &name) {
-                                        app.transient_msg = Some(format!("lazygit: {e}"));
-                                    } else {
-                                        // Force full redraw after lazygit exits
-                                        terminal.clear()?;
+                            KeyCode::Char('q') => break,
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                let n = app.consume_prefix();
+                                app.repo_move_down(n);
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                let n = app.consume_prefix();
+                                app.repo_move_up(n);
+                            }
+                            KeyCode::PageDown => {
+                                app.num_prefix = 0;
+                                app.repo_page_down();
+                            }
+                            KeyCode::PageUp => {
+                                app.num_prefix = 0;
+                                app.repo_page_up();
+                            }
+                            KeyCode::Char('l') | KeyCode::Right => {
+                                app.num_prefix = 0;
+                                app.focus_detail_first_pr_or_issue();
+                            }
+                            KeyCode::Char('g') => {
+                                app.num_prefix = 0;
+                                if let Some(repo) = app.selected_repo() {
+                                    if repo.has_local_git {
+                                        let name = repo.name.clone();
+                                        let base = app.config.local_base_dir.clone();
+                                        // Drop terminal before handing control to lazygit
+                                        if let Err(e) = launch_lazygit(&base, &name) {
+                                            app.transient_msg = Some(format!("lazygit: {e}"));
+                                        } else {
+                                            // Force full redraw after lazygit exits
+                                            terminal.clear()?;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        KeyCode::Char('i') => {
-                            app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                let url = match repo.pages {
-                                    Some(true) => format!(
-                                        "https://{}.github.io/{}",
-                                        app.config.owner, repo.name
-                                    ),
-                                    _ => format!("https://github.com/{}", repo.full_name),
-                                };
-                                if let Err(e) = open_url(&url) {
-                                    app.transient_msg = Some(format!("open failed: {e}"));
+                            KeyCode::Char('i') => {
+                                app.num_prefix = 0;
+                                if let Some(repo) = app.selected_repo() {
+                                    let url = match repo.pages {
+                                        Some(true) => format!(
+                                            "https://{}.github.io/{}",
+                                            app.config.owner, repo.name
+                                        ),
+                                        _ => format!("https://github.com/{}", repo.full_name),
+                                    };
+                                    if let Err(e) = open_url(&url) {
+                                        app.transient_msg = Some(format!("open failed: {e}"));
+                                    }
                                 }
                             }
-                        }
-                        _ if shift_w => {
-                            app.num_prefix = 0;
-                            let local_repo_names = app
-                                .repos
-                                .iter()
-                                .filter(|repo| repo.has_local_git)
-                                .map(|repo| repo.name.clone())
-                                .collect::<Vec<_>>();
-                            match collect_workflow_repo_exist_checks(
-                                &app.config.local_base_dir,
-                                &local_repo_names,
-                            ) {
-                                Ok(items) => {
-                                    app.open_workflow_repo_exist(items);
-                                }
-                                Err(e) => {
-                                    app.transient_msg = Some(format!("Shift+W failed: {e}"));
-                                }
-                            }
-                        }
-                        KeyCode::Char('w') => {
-                            app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                let url = format!(
-                                    "https://deepwiki.com/{}/{}",
-                                    app.config.owner, repo.name
-                                );
-                                if let Err(e) = open_url(&url) {
-                                    app.transient_msg = Some(format!("open failed: {e}"));
-                                }
-                            }
-                        }
-                        KeyCode::Enter => {
-                            app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                let url = match repo.readme_ja {
-                                    Some(true) => format!(
-                                        "https://github.com/{}/blob/main/README.ja.md",
-                                        repo.full_name
-                                    ),
-                                    _ => format!("https://github.com/{}", repo.full_name),
-                                };
-                                if let Err(e) = open_url(&url) {
-                                    app.transient_msg = Some(format!("open failed: {e}"));
-                                }
-                            }
-                        }
-                        KeyCode::Char('c') => {
-                            app.num_prefix = 0;
-                            if let Some(repo) = app.selected_repo() {
-                                let base = app.config.local_base_dir.trim_end_matches(['/', '\\']);
-                                // Always end with backslash (Windows path)
-                                let path = format!("{}\\{}", base, repo.name);
-                                let clip_path = format!("{}\\", path);
-                                let result = std::process::Command::new("cmd")
-                                    .args(["/C", &format!("echo {}| clip", clip_path.trim())])
-                                    .status();
-                                match result {
-                                    Ok(_) => {
-                                        app.transient_msg = Some(format!("copied: {clip_path}"));
+                            _ if shift_w => {
+                                app.num_prefix = 0;
+                                let local_repo_names = app
+                                    .repos
+                                    .iter()
+                                    .filter(|repo| repo.has_local_git)
+                                    .map(|repo| repo.name.clone())
+                                    .collect::<Vec<_>>();
+                                match collect_workflow_repo_exist_checks(
+                                    &app.config.local_base_dir,
+                                    &local_repo_names,
+                                ) {
+                                    Ok(items) => {
+                                        app.open_workflow_repo_exist(items);
                                     }
                                     Err(e) => {
-                                        app.transient_msg = Some(format!("clip failed: {e}"));
+                                        app.transient_msg = Some(format!("Shift+W failed: {e}"));
                                     }
                                 }
                             }
-                        }
-                        KeyCode::Char('d') => {
-                            app.num_prefix = 0;
-                            app.show_columns = !app.show_columns;
-                        }
-                        KeyCode::Char('?') => {
-                            app.num_prefix = 0;
-                            app.show_help = !app.show_help;
-                        }
-                        KeyCode::Char('x') => {
-                            app.num_prefix = 0;
-                            if let Some((repo_full_name, repo_name, cargo_install)) =
-                                app.selected_repo().map(|repo| {
-                                    (
-                                        repo.full_name.clone(),
-                                        repo.name.clone(),
-                                        repo.cargo_install,
-                                    )
-                                })
-                            {
-                                if let Some(args) = cargo_status_to_launch_args(cargo_install) {
-                                    let owner = app.config.owner.clone();
-                                    let run_dir = app.config.resolved_app_run_dir();
-                                    if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
-                                        if let Some(bin) = bins.first() {
-                                            // Keep .exe suffix – avoids Windows explorer folder collision
-                                            let bin = bin.clone();
-                                            let cmd = format_launch_command(&bin, args);
-                                            let cmd_desc = format!("run: `{cmd}` cwd=`{run_dir}`");
-                                            match launch_app_with_args(&bin, args, &run_dir) {
-                                                Ok(()) => {
-                                                    terminal.clear().ok();
-                                                    app.transient_msg =
-                                                        Some(format!("launched: {cmd}"));
-                                                    let line =
-                                                        make_x_log_line(&repo_full_name, &cmd_desc);
-                                                    persist_log_line(&mut app, line);
+                            KeyCode::Char('w') => {
+                                app.num_prefix = 0;
+                                if let Some(repo) = app.selected_repo() {
+                                    let url = format!(
+                                        "https://deepwiki.com/{}/{}",
+                                        app.config.owner, repo.name
+                                    );
+                                    if let Err(e) = open_url(&url) {
+                                        app.transient_msg = Some(format!("open failed: {e}"));
+                                    }
+                                }
+                            }
+                            KeyCode::Enter => {
+                                app.num_prefix = 0;
+                                if let Some(repo) = app.selected_repo() {
+                                    let url = match repo.readme_ja {
+                                        Some(true) => format!(
+                                            "https://github.com/{}/blob/main/README.ja.md",
+                                            repo.full_name
+                                        ),
+                                        _ => format!("https://github.com/{}", repo.full_name),
+                                    };
+                                    if let Err(e) = open_url(&url) {
+                                        app.transient_msg = Some(format!("open failed: {e}"));
+                                    }
+                                }
+                            }
+                            KeyCode::Char('c') => {
+                                app.num_prefix = 0;
+                                if let Some(repo) = app.selected_repo() {
+                                    let base =
+                                        app.config.local_base_dir.trim_end_matches(['/', '\\']);
+                                    // Always end with backslash (Windows path)
+                                    let path = format!("{}\\{}", base, repo.name);
+                                    let clip_path = format!("{}\\", path);
+                                    let result = std::process::Command::new("cmd")
+                                        .args(["/C", &format!("echo {}| clip", clip_path.trim())])
+                                        .status();
+                                    match result {
+                                        Ok(_) => {
+                                            app.transient_msg =
+                                                Some(format!("copied: {clip_path}"));
+                                        }
+                                        Err(e) => {
+                                            app.transient_msg = Some(format!("clip failed: {e}"));
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Char('d') => {
+                                app.num_prefix = 0;
+                                app.show_columns = !app.show_columns;
+                            }
+                            KeyCode::Char('?') => {
+                                app.num_prefix = 0;
+                                app.show_help = !app.show_help;
+                            }
+                            KeyCode::Char('x') => {
+                                app.num_prefix = 0;
+                                if let Some((repo_full_name, repo_name, cargo_install)) =
+                                    app.selected_repo().map(|repo| {
+                                        (
+                                            repo.full_name.clone(),
+                                            repo.name.clone(),
+                                            repo.cargo_install,
+                                        )
+                                    })
+                                {
+                                    if let Some(args) = cargo_status_to_launch_args(cargo_install) {
+                                        let owner = app.config.owner.clone();
+                                        let run_dir = app.config.resolved_app_run_dir();
+                                        if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
+                                            if let Some(bin) = bins.first() {
+                                                // Keep .exe suffix – avoids Windows explorer folder collision
+                                                let bin = bin.clone();
+                                                let cmd = format_launch_command(&bin, args);
+                                                let cmd_desc =
+                                                    format!("run: `{cmd}` cwd=`{run_dir}`");
+                                                match launch_app_with_args(&bin, args, &run_dir) {
+                                                    Ok(()) => {
+                                                        terminal.clear().ok();
+                                                        app.transient_msg =
+                                                            Some(format!("launched: {cmd}"));
+                                                        let line = make_x_log_line(
+                                                            &repo_full_name,
+                                                            &cmd_desc,
+                                                        );
+                                                        persist_log_line(&mut app, line);
+                                                    }
+                                                    Err(e) => {
+                                                        app.transient_msg =
+                                                            Some(format!("run failed: {e}"));
+                                                        let line = make_x_log_line(
+                                                            &repo_full_name,
+                                                            &format!("{cmd_desc} => failed: {e}"),
+                                                        );
+                                                        persist_log_line(&mut app, line);
+                                                    }
                                                 }
-                                                Err(e) => {
-                                                    app.transient_msg =
-                                                        Some(format!("run failed: {e}"));
-                                                    let line = make_x_log_line(
-                                                        &repo_full_name,
-                                                        &format!("{cmd_desc} => failed: {e}"),
-                                                    );
-                                                    persist_log_line(&mut app, line);
-                                                }
+                                            } else {
+                                                let line = make_x_log_line(
+                                                    &repo_full_name,
+                                                    "not run: no installed cargo bin found",
+                                                );
+                                                app.transient_msg = Some(String::from(
+                                                    "x: no installed cargo bin found",
+                                                ));
+                                                persist_log_line(&mut app, line);
                                             }
                                         } else {
                                             let line = make_x_log_line(
-                                                &repo_full_name,
-                                                "not run: no installed cargo bin found",
-                                            );
+                                            &repo_full_name,
+                                            "not run: .crates2.json has no matching install entry",
+                                        );
                                             app.transient_msg = Some(String::from(
-                                                "x: no installed cargo bin found",
+                                                "x: no matching cargo install entry",
                                             ));
                                             persist_log_line(&mut app, line);
                                         }
                                     } else {
-                                        let line = make_x_log_line(
-                                            &repo_full_name,
-                                            "not run: .crates2.json has no matching install entry",
-                                        );
-                                        app.transient_msg = Some(String::from(
-                                            "x: no matching cargo install entry",
-                                        ));
-                                        persist_log_line(&mut app, line);
+                                        let (log_line, transient_msg) =
+                                            x_not_run_feedback_no_cargo_install(&repo_full_name);
+                                        app.transient_msg = Some(transient_msg);
+                                        persist_log_line(&mut app, log_line);
                                     }
                                 } else {
-                                    let (log_line, transient_msg) =
-                                        x_not_run_feedback_no_cargo_install(&repo_full_name);
-                                    app.transient_msg = Some(transient_msg);
-                                    persist_log_line(&mut app, log_line);
+                                    let line =
+                                        make_x_log_line("-", "not run: no repository selected");
+                                    app.transient_msg =
+                                        Some(String::from("x: no repository selected"));
+                                    persist_log_line(&mut app, line);
                                 }
-                            } else {
-                                let line = make_x_log_line("-", "not run: no repository selected");
-                                app.transient_msg = Some(String::from("x: no repository selected"));
-                                persist_log_line(&mut app, line);
+                            }
+                            KeyCode::Char('/') => {
+                                app.num_prefix = 0;
+                                app.search_enter();
+                            }
+                            KeyCode::F(5) => {
+                                app.num_prefix = 0;
+                                if fetch_rx.is_none() {
+                                    // clear filter before refresh
+                                    app.search_query.clear();
+                                    app.apply_filter();
+                                    app.bg_tasks.clear();
+                                    app.loading = true;
+                                    app.status_msg = String::from(READY_MSG);
+                                    let h =
+                                        History::load(&Config::history_path().to_string_lossy())
+                                            .unwrap_or_default();
+                                    fetch_rx = Some(start_fetch(config.clone(), h));
+                                }
+                            }
+                            _ => {
+                                app.num_prefix = 0;
                             }
                         }
-                        KeyCode::Char('/') => {
-                            app.num_prefix = 0;
-                            app.search_enter();
-                        }
-                        KeyCode::F(5) => {
-                            app.num_prefix = 0;
-                            if fetch_rx.is_none() {
-                                // clear filter before refresh
-                                app.search_query.clear();
-                                app.apply_filter();
-                                app.bg_tasks.clear();
-                                app.loading = true;
-                                app.status_msg = String::from(READY_MSG);
-                                let h = History::load(&Config::history_path().to_string_lossy())
-                                    .unwrap_or_default();
-                                fetch_rx = Some(start_fetch(config.clone(), h));
-                            }
-                        }
-                        _ => {
-                            app.num_prefix = 0;
-                        }
-                    }
                     }
                     Focus::Detail => match key.code {
                         KeyCode::Char('q') => break,
