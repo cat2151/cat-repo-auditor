@@ -1,14 +1,18 @@
-use std::process::Command;
+use cat_self_update_lib::{check_remote_commit, self_update as launch_self_update};
 
+const REPO_OWNER: &str = "cat2151";
+const REPO_NAME: &str = "cat-repo-auditor";
+const MAIN_BRANCH: &str = "main";
 const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
 const GIT_URL: &str = "https://github.com/cat2151/cat-repo-auditor";
+const BIN_NAMES: &[&str] = &["catrepo"];
 
 pub(crate) fn build_commit_hash() -> &'static str {
     env!("BUILD_COMMIT_HASH")
 }
 
-/// Full `cargo install` command string (used in bat content and printed output).
-fn install_cmd() -> String {
+/// Full `cargo install` command string used in printed output.
+pub(crate) fn install_cmd() -> String {
     format!("cargo install --force --git {GIT_URL}")
 }
 
@@ -21,71 +25,13 @@ pub(crate) fn is_update_available(build_hash: &str, remote_hash: &str) -> bool {
         && remote_hash != build_hash
 }
 
-/// Returns the content of the Windows bat file used to run self-update.
-/// The bat waits a few seconds for the launching process to release the file
-/// lock, runs `cargo install`, then deletes itself.
-#[cfg(any(target_os = "windows", test))]
-pub(crate) fn update_bat_content() -> String {
-    format!(
-        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\n{cmd}\r\ndel \"%~f0\"\r\n",
-        cmd = install_cmd()
-    )
-}
-
 /// Perform a self-update.
-///
-/// * **Windows** – writes a temporary `.bat` file, launches it detached (so
-///   the OS file-lock on the running `.exe` is released before `cargo install`
-///   overwrites it), then returns `Ok(true)` to signal that the caller should
-///   exit immediately.
-/// * **Other platforms** – runs `cargo install` in the foreground and returns
-///   `Ok(false)`.
 pub fn run_self_update() -> anyhow::Result<bool> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::io::Write;
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Use PID + timestamp to avoid collisions and TOCTOU/hijack in shared temp.
-        let pid = std::process::id();
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        let bat_path = std::env::temp_dir().join(format!("catrepo_update_{pid}_{ts}.bat"));
-        {
-            let mut f = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&bat_path)?;
-            f.write_all(update_bat_content().as_bytes())?;
-        }
-
-        // Launch the bat file detached so it outlives this process.
-        let bat_str = bat_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("temp bat path is not valid UTF-8"))?;
-        Command::new("cmd")
-            .args(["/C", "start", "", bat_str])
-            .spawn()?;
-
-        println!("Launching update script: {}", bat_path.display());
-        println!("The application will now exit so the file lock is released.");
-        Ok(true)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let cmd = install_cmd();
-        println!("Running: {cmd}");
-        let status = Command::new("cargo")
-            .args(["install", "--force", "--git", GIT_URL])
-            .status()?;
-        if !status.success() {
-            anyhow::bail!("cargo install failed with status: {status}");
-        }
-        Ok(false)
-    }
+    launch_self_update(REPO_OWNER, REPO_NAME, BIN_NAMES)
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    println!("Running: {}", install_cmd());
+    println!("The application will now exit so the updater can replace the binary.");
+    Ok(true)
 }
 
 /// Check if a newer version of cat-repo-auditor is available by comparing
@@ -95,19 +41,9 @@ pub fn run_self_update() -> anyhow::Result<bool> {
 /// or if the check cannot be performed.
 pub fn check_self_update() -> Option<String> {
     let build_hash = build_commit_hash();
+    let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_hash).ok()?;
 
-    // Get remote main branch HEAD commit hash via gh api
-    let endpoint = format!("/repos/{OWNER_REPO}/commits/main");
-    let out = Command::new("gh")
-        .args(["api", &endpoint, "--jq", ".sha"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let remote_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
-
-    if is_update_available(build_hash, &remote_hash) {
+    if is_update_available(&result.embedded_hash, &result.remote_hash) {
         Some(OWNER_REPO.to_string())
     } else {
         None

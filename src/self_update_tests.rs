@@ -31,21 +31,16 @@ fn no_update_when_remote_hash_empty() {
 }
 
 #[test]
-fn bat_content_contains_install_command() {
-    let bat = update_bat_content();
-    assert!(bat.contains("cargo install --force --git"));
-    assert!(bat.contains("cat-repo-auditor"));
+fn install_command_contains_install_git_url() {
+    let cmd = install_cmd();
+    assert!(cmd.contains("cargo install --force --git"));
+    assert!(cmd.contains("cat-repo-auditor"));
 }
 
 #[test]
-fn bat_content_has_delay() {
-    let bat = update_bat_content();
-    assert!(bat.contains("timeout"));
-}
-
-#[test]
-fn bat_content_self_deletes() {
-    let bat = update_bat_content();
-    assert!(bat.contains("del"));
-    assert!(bat.contains("%~f0"));
+fn install_command_targets_repository_url() {
+    assert_eq!(
+        install_cmd(),
+        "cargo install --force --git https://github.com/cat2151/cat-repo-auditor"
+    );
 }
