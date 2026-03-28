@@ -23,11 +23,13 @@ use crate::{
     ui::{Focus, SearchState},
 };
 
+/// Tracks keyboard input state to implement 50ms key debouncing.
 #[derive(Default)]
 pub(crate) struct InputState {
     last_key: Option<(KeyCode, Instant)>,
 }
 
+/// Handles terminal input and returns `Ok(true)` to continue or `Ok(false)` to exit.
 pub(crate) fn handle_terminal_input(
     app: &mut App,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,

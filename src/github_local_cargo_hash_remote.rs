@@ -1,3 +1,4 @@
+/// Fetches the latest commit hash of the main branch from the GitHub remote.
 pub(super) fn fetch_remote_main_hash(
     log_fn: &mut impl FnMut(&str),
     owner: &str,

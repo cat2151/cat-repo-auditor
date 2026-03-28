@@ -3,6 +3,7 @@ use std::process::Command;
 
 use crate::github::LocalStatus;
 
+/// The repository name that contains reusable workflow definitions.
 pub(crate) const WORKFLOW_SOURCE_REPO: &str = "github-actions";
 
 pub(crate) fn check_local_status_no_fetch(

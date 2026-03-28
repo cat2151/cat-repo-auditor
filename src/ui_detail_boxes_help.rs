@@ -12,6 +12,7 @@ use ratatui::{
 
 use super::{c, centered_rect};
 
+/// Draws the help dialog overlay with keybindings and column legend.
 pub(crate) fn draw_help_dialog(f: &mut Frame, app: &App, area: Rect) {
     let dw: u16 = 62;
     let dh: u16 = 30;
