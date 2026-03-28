@@ -412,6 +412,7 @@ fn copy_to_clipboard(text: &str) -> io::Result<()> {
 
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(text.as_bytes())?;
+        drop(stdin);
     }
 
     let status = child.wait()?;
