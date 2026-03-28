@@ -26,6 +26,7 @@ fn resolved_app_run_dir_returns_config_value_when_set() {
         local_base_dir: String::from("/base"),
         app_run_dir: Some(String::from("/custom/dir")),
         auto_pull: false,
+        auto_update: false,
     };
     assert_eq!(config.resolved_app_run_dir(), "/custom/dir");
 }
@@ -37,6 +38,7 @@ fn resolved_app_run_dir_falls_back_when_not_set() {
         local_base_dir: String::from("/base"),
         app_run_dir: None,
         auto_pull: false,
+        auto_update: false,
     };
     let result = config.resolved_app_run_dir();
     assert!(!result.is_empty());
@@ -49,7 +51,23 @@ fn resolved_app_run_dir_empty_string_falls_back() {
         local_base_dir: String::from("/base"),
         app_run_dir: Some(String::new()),
         auto_pull: false,
+        auto_update: false,
     };
     let result = config.resolved_app_run_dir();
     assert!(!result.is_empty());
+}
+
+#[test]
+fn config_deserializes_auto_update_with_default_and_explicit_true() {
+    let config: Config = toml::from_str(
+        r#"
+owner = "owner"
+local_base_dir = "/base"
+auto_update = true
+"#,
+    )
+    .expect("config should deserialize");
+
+    assert!(config.auto_update);
+    assert!(!config.auto_pull);
 }

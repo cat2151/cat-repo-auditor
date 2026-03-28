@@ -2,7 +2,8 @@ use super::*;
 use crate::main_cli::UPDATE_NOTICE_HEADER;
 use crate::main_helpers::{make_log_line, make_x_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 use crate::main_launch::{
-    cargo_status_to_launch_args, format_launch_command, x_not_run_feedback_no_cargo_install,
+    cargo_status_to_launch_args, format_launch_command, launch_cargo_app_for_repo_with,
+    x_not_run_feedback_no_cargo_install,
 };
 
 #[test]
@@ -83,4 +84,45 @@ fn test_x_not_run_messages_match_expected_wording() {
 #[test]
 fn update_notice_header_uses_catrepo_name() {
     assert_eq!(UPDATE_NOTICE_HEADER, "catrepo update available!");
+}
+
+#[test]
+fn launch_cargo_app_for_repo_with_runs_update_for_cargo_old() {
+    let feedback = launch_cargo_app_for_repo_with(
+        "owner",
+        "repo",
+        Some(false),
+        "/run",
+        |owner, repo_name| {
+            assert_eq!(owner, "owner");
+            assert_eq!(repo_name, "repo");
+            Some(vec![String::from("repo-bin")])
+        },
+        |bin, args, run_dir| {
+            assert_eq!(bin, "repo-bin");
+            assert_eq!(args, &["update"]);
+            assert_eq!(run_dir, "/run");
+            Ok(())
+        },
+    );
+
+    assert_eq!(feedback.transient_msg, "launched: repo-bin update");
+    assert_eq!(feedback.log_msg, "run: `repo-bin update` cwd=`/run`");
+    assert!(feedback.launched);
+}
+
+#[test]
+fn launch_cargo_app_for_repo_with_skips_when_repo_has_no_cargo_install() {
+    let feedback = launch_cargo_app_for_repo_with(
+        "owner",
+        "repo",
+        None,
+        "/run",
+        |_owner, _repo_name| panic!("bins lookup should not be called"),
+        |_bin, _args, _run_dir| panic!("launcher should not be called"),
+    );
+
+    assert_eq!(feedback.transient_msg, X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP);
+    assert_eq!(feedback.log_msg, X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP);
+    assert!(!feedback.launched);
 }
