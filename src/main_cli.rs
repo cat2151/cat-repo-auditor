@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use crate::self_update::{install_cmd, owner_repo};
+
 pub(crate) const UPDATE_NOTICE_HEADER: &str = "catrepo update available!";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,7 +23,11 @@ pub(crate) fn print_update_notice(repo: Option<&str>) -> Result<()> {
         println!();
         println!("{UPDATE_NOTICE_HEADER}");
         println!("Run:");
-        println!("cargo install --force --git https://github.com/{repo}");
+        if repo == owner_repo() {
+            println!("{}", install_cmd());
+        } else {
+            println!("cargo install --force --git https://github.com/{repo}");
+        }
         println!();
     }
     Ok(())

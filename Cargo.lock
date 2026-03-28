@@ -61,6 +61,7 @@ name = "cat-repo-auditor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cat-self-update-lib",
  "chrono",
  "crossterm",
  "ratatui",
@@ -69,6 +70,11 @@ dependencies = [
  "toml",
  "unicode-width 0.2.0",
 ]
+
+[[package]]
+name = "cat-self-update-lib"
+version = "0.1.0"
+source = "git+https://github.com/cat2151/cat-self-update#91927b751875a85692a01b98182127c99b33b311"
 
 [[package]]
 name = "cc"
