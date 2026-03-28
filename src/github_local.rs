@@ -1,6 +1,6 @@
 use crate::github::LocalStatus;
-use anyhow::{bail, Context, Result};
-use std::process::Command;
+use anyhow::{anyhow, bail, Context, Result};
+use std::{fs, process::Command};
 
 #[path = "github_local_cargo.rs"]
 mod cargo;
@@ -9,6 +9,16 @@ mod launch;
 
 pub(crate) use cargo::{append_cargo_check_results, check_cargo_git_install, get_cargo_bins};
 pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url};
+
+pub(crate) const WORKFLOW_SOURCE_REPO: &str = "github-actions";
+const CALL_WORKFLOW_PREFIX: &str = "call";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowRepoExistCheck {
+    pub workflow_file: String,
+    pub installed_repos: Vec<String>,
+    pub missing_repos: Vec<String>,
+}
 
 // ──────────────────────────────────────────────
 // Existence checks via gh REST API
@@ -71,6 +81,70 @@ pub(crate) fn check_workflows(base_dir: &str, repo_name: &str) -> bool {
     required
         .iter()
         .all(|f| std::path::Path::new(&format!("{}/{}", wf_dir, f)).exists())
+}
+
+pub(crate) fn collect_workflow_repo_exist_checks(
+    base_dir: &str,
+    repo_names: &[String],
+) -> Result<Vec<WorkflowRepoExistCheck>> {
+    let base = base_dir.trim_end_matches(['/', '\\']);
+    let workflow_dir = format!("{base}/{WORKFLOW_SOURCE_REPO}/.github/workflows");
+    let workflow_dir_path = std::path::Path::new(&workflow_dir);
+    if !workflow_dir_path.exists() {
+        return Err(anyhow!(
+            "{WORKFLOW_SOURCE_REPO}/.github/workflows が見つかりません: {workflow_dir}"
+        ));
+    }
+
+    let mut workflow_files = fs::read_dir(workflow_dir_path)
+        .with_context(|| format!("Failed to read workflow dir: {workflow_dir}"))?
+        .map(|entry| -> Result<Option<String>> {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                return Ok(None);
+            }
+            let file_name = entry.file_name();
+            let Some(file_name) = file_name.to_str() else {
+                return Ok(None);
+            };
+            let is_call_workflow = file_name.starts_with(CALL_WORKFLOW_PREFIX)
+                && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"));
+            Ok(is_call_workflow.then(|| file_name.to_string()))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    workflow_files.sort();
+
+    let mut local_repo_names = repo_names
+        .iter()
+        .filter(|name| name.as_str() != WORKFLOW_SOURCE_REPO)
+        .cloned()
+        .collect::<Vec<_>>();
+    local_repo_names.sort();
+
+    Ok(workflow_files
+        .into_iter()
+        .map(|workflow_file| {
+            let mut installed_repos = Vec::new();
+            let mut missing_repos = Vec::new();
+            for repo_name in &local_repo_names {
+                let path = format!("{base}/{repo_name}/.github/workflows/{workflow_file}");
+                if std::path::Path::new(&path).exists() {
+                    installed_repos.push(repo_name.clone());
+                } else {
+                    missing_repos.push(repo_name.clone());
+                }
+            }
+            WorkflowRepoExistCheck {
+                workflow_file,
+                installed_repos,
+                missing_repos,
+            }
+        })
+        .collect())
 }
 
 /// Scan local README.ja.md for a self-referencing badge/link ("README.ja.md" text).

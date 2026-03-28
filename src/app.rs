@@ -1,12 +1,13 @@
 use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
+use crate::github_local::WorkflowRepoExistCheck;
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
 use std::time::SystemTime;
 
 const MAX_LOG_LINES: usize = 2_000;
 
 pub const READY_MSG: &str =
-    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  g:lazygit  Shift+L:log  /:search";
+    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:workflow  g:lazygit  Shift+L:log  /:search";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,10 @@ pub struct App {
     /// Active background tasks: (tag, cur, total)
     pub bg_tasks: Vec<(&'static str, usize, usize)>,
     pub show_help: bool,
+    pub show_workflow_repo_exist: bool,
+    pub workflow_repo_exist_items: Vec<WorkflowRepoExistCheck>,
+    pub workflow_repo_exist_selected: usize,
+    pub workflow_repo_exist_scroll: usize,
     pub show_columns: bool,
     pub show_log: bool,
     pub log_lines: Vec<String>,
@@ -71,6 +76,10 @@ impl App {
             checking_repo: String::new(),
             bg_tasks: vec![],
             show_help: false,
+            show_workflow_repo_exist: false,
+            workflow_repo_exist_items: vec![],
+            workflow_repo_exist_selected: 0,
+            workflow_repo_exist_scroll: 0,
             show_columns: true,
             show_log: false,
             log_lines: vec![],
@@ -263,6 +272,42 @@ impl App {
             self.detail_scroll = self.detail_selected;
         } else if self.detail_selected >= self.detail_scroll + visible {
             self.detail_scroll = self.detail_selected + 1 - visible;
+        }
+    }
+
+    pub fn open_workflow_repo_exist(&mut self, items: Vec<WorkflowRepoExistCheck>) {
+        self.show_workflow_repo_exist = true;
+        self.workflow_repo_exist_items = items;
+        self.workflow_repo_exist_selected = 0;
+        self.workflow_repo_exist_scroll = 0;
+    }
+
+    pub fn close_workflow_repo_exist(&mut self) {
+        self.show_workflow_repo_exist = false;
+    }
+
+    pub fn selected_workflow_repo_exist(&self) -> Option<&WorkflowRepoExistCheck> {
+        self.workflow_repo_exist_items
+            .get(self.workflow_repo_exist_selected)
+    }
+
+    pub fn workflow_repo_exist_move_down(&mut self, n: usize) {
+        let max = self.workflow_repo_exist_items.len().saturating_sub(1);
+        self.workflow_repo_exist_selected = (self.workflow_repo_exist_selected + n).min(max);
+    }
+
+    pub fn workflow_repo_exist_move_up(&mut self, n: usize) {
+        self.workflow_repo_exist_selected = self.workflow_repo_exist_selected.saturating_sub(n);
+    }
+
+    pub fn adjust_workflow_repo_exist_scroll(&mut self, visible: usize) {
+        if visible == 0 {
+            return;
+        }
+        if self.workflow_repo_exist_selected < self.workflow_repo_exist_scroll {
+            self.workflow_repo_exist_scroll = self.workflow_repo_exist_selected;
+        } else if self.workflow_repo_exist_selected >= self.workflow_repo_exist_scroll + visible {
+            self.workflow_repo_exist_scroll = self.workflow_repo_exist_selected + 1 - visible;
         }
     }
 

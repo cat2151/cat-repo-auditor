@@ -33,7 +33,10 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::FetchProgress,
-    github_local::{get_cargo_bins, launch_app_with_args, launch_lazygit, open_url},
+    github_local::{
+        collect_workflow_repo_exist_checks, get_cargo_bins, launch_app_with_args, launch_lazygit,
+        open_url,
+    },
     history::History,
     main_cli::{parse_subcommand, print_update_notice, Subcommand},
     main_fetch::drain_fetch_channel,
@@ -177,6 +180,22 @@ fn main() -> Result<()> {
                     continue;
                 }
 
+                if app.show_workflow_repo_exist {
+                    let shift_w = matches!(key.code, KeyCode::Char('W'))
+                        || (matches!(key.code, KeyCode::Char('w'))
+                            && key.modifiers.contains(KeyModifiers::SHIFT));
+                    match key.code {
+                        KeyCode::Esc => app.close_workflow_repo_exist(),
+                        KeyCode::Char('j') | KeyCode::Down => app.workflow_repo_exist_move_down(1),
+                        KeyCode::Char('k') | KeyCode::Up => app.workflow_repo_exist_move_up(1),
+                        _ if shift_w => {
+                            app.close_workflow_repo_exist();
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
                 // ── search mode ──────────────────────────────────────────
                 if app.search_state == SearchState::Active {
                     match key.code {
@@ -227,7 +246,11 @@ fn main() -> Result<()> {
                 }
 
                 match app.focus {
-                    Focus::Repos => match key.code {
+                    Focus::Repos => {
+                        let shift_w = matches!(key.code, KeyCode::Char('W'))
+                            || (matches!(key.code, KeyCode::Char('w'))
+                                && key.modifiers.contains(KeyModifiers::SHIFT));
+                        match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
                             let n = app.consume_prefix();
@@ -277,6 +300,26 @@ fn main() -> Result<()> {
                                 };
                                 if let Err(e) = open_url(&url) {
                                     app.transient_msg = Some(format!("open failed: {e}"));
+                                }
+                            }
+                        }
+                        _ if shift_w => {
+                            app.num_prefix = 0;
+                            let local_repo_names = app
+                                .repos
+                                .iter()
+                                .filter(|repo| repo.has_local_git)
+                                .map(|repo| repo.name.clone())
+                                .collect::<Vec<_>>();
+                            match collect_workflow_repo_exist_checks(
+                                &app.config.local_base_dir,
+                                &local_repo_names,
+                            ) {
+                                Ok(items) => {
+                                    app.open_workflow_repo_exist(items);
+                                }
+                                Err(e) => {
+                                    app.transient_msg = Some(format!("Shift+W failed: {e}"));
                                 }
                             }
                         }
@@ -427,7 +470,8 @@ fn main() -> Result<()> {
                         _ => {
                             app.num_prefix = 0;
                         }
-                    },
+                    }
+                    }
                     Focus::Detail => match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
