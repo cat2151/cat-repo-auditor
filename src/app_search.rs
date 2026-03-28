@@ -6,25 +6,26 @@ impl App {
 
     pub fn apply_filter(&mut self) {
         if self.search_query.is_empty() {
-            self.filtered_rows = self.rows.clone();
+            self.filtered_rows.clone_from(&self.rows);
         } else {
             let terms: Vec<String> = self
                 .search_query
                 .split_whitespace()
                 .map(|t| t.to_lowercase())
                 .collect();
-            self.filtered_rows = self
-                .rows
-                .iter()
-                .filter(|row| match row {
-                    RepoRow::Separator(_) => false, // hide separators in search results
-                    RepoRow::Repo(idx) => {
-                        let name = self.repos[*idx].name.to_lowercase();
-                        terms.iter().all(|t| name.contains(t.as_str()))
-                    }
-                })
-                .cloned()
-                .collect();
+            self.filtered_rows.clear();
+            self.filtered_rows.extend(
+                self.rows
+                    .iter()
+                    .filter(|row| match row {
+                        RepoRow::Separator(_) => false, // hide separators in search results
+                        RepoRow::Repo(idx) => {
+                            let name = self.repos[*idx].name.to_lowercase();
+                            terms.iter().all(|t| name.contains(t.as_str()))
+                        }
+                    })
+                    .cloned(),
+            );
         }
         // clamp cursor
         if self.filtered_rows.is_empty() {
@@ -142,7 +143,7 @@ impl App {
         });
         // Clear filter – filtered_rows becomes full rows again
         self.search_query.clear();
-        self.filtered_rows = self.rows.clone();
+        self.filtered_rows.clone_from(&self.rows);
         // Restore cursor to the same repo in the full list
         if let Some(target) = target_repo_idx {
             if let Some(pos) = self
