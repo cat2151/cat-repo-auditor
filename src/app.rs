@@ -5,7 +5,7 @@ use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
 use std::time::SystemTime;
 
 #[path = "app_search.rs"]
-mod search;
+mod app_search;
 
 const MAX_LOG_LINES: usize = 2_000;
 
