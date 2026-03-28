@@ -213,3 +213,28 @@ fn draw_ui_shows_workflow_repo_exist_overlay() {
     assert!(rendered.contains("repo-b"));
     assert!(rendered.contains("repo-c"));
 }
+
+#[test]
+fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.open_workflow_repo_exist(vec![]);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let area = terminal.backend().buffer().area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    let rendered = rendered.join("\n");
+
+    assert!(rendered.contains("workflow repo exist check"));
+    assert!(rendered.contains("call* workflow"));
+    assert!(rendered.contains("(none)"));
+}

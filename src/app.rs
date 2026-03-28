@@ -7,7 +7,7 @@ use std::time::SystemTime;
 const MAX_LOG_LINES: usize = 2_000;
 
 pub const READY_MSG: &str =
-    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:wf  g:lazygit  Shift+L:log  /:search";
+    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:workflow  g:lazygit  Shift+L:log  /:search";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 

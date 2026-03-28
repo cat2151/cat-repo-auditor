@@ -11,6 +11,7 @@ pub(crate) use cargo::{append_cargo_check_results, check_cargo_git_install, get_
 pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url};
 
 pub(crate) const WORKFLOW_SOURCE_REPO: &str = "github-actions";
+const CALL_WORKFLOW_PREFIX: &str = "call";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowRepoExistCheck {
@@ -105,7 +106,7 @@ pub(crate) fn collect_workflow_repo_exist_checks(
             }
             let file_name = entry.file_name();
             let file_name = file_name.to_str()?;
-            let is_call_workflow = file_name.starts_with("call")
+            let is_call_workflow = file_name.starts_with(CALL_WORKFLOW_PREFIX)
                 && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"));
             is_call_workflow.then(|| file_name.to_string())
         })
