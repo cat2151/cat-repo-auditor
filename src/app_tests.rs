@@ -451,13 +451,29 @@ fn workflow_repo_exist_open_and_select() {
     let items = vec![
         crate::github_local::WorkflowRepoExistCheck {
             workflow_file: String::from("call-a.yml"),
-            installed_repos: vec![String::from("repo-a")],
-            missing_repos: vec![String::from("repo-b")],
+            installed_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-a"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            }],
+            missing_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-b"),
+                updated_at: String::from("2d"),
+                updated_at_raw: String::from("2026-03-26T00:00:00Z"),
+            }],
         },
         crate::github_local::WorkflowRepoExistCheck {
             workflow_file: String::from("call-b.yml"),
-            installed_repos: vec![String::from("repo-b")],
-            missing_repos: vec![String::from("repo-a")],
+            installed_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-b"),
+                updated_at: String::from("2d"),
+                updated_at_raw: String::from("2026-03-26T00:00:00Z"),
+            }],
+            missing_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-a"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            }],
         },
     ];
 

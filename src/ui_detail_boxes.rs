@@ -12,6 +12,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub(crate) const CARGO_OLD_BOX_H: u16 = 5;
 pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
@@ -306,7 +307,7 @@ fn draw_workflow_repo_list_box(
     app: &App,
     area: Rect,
     title: String,
-    repos: &[String],
+    repos: &[crate::github_local::WorkflowRepoExistRepo],
     border_color: ratatui::style::Color,
 ) {
     let block = Block::default()
@@ -324,17 +325,44 @@ fn draw_workflow_repo_list_box(
             Style::default().fg(c(app, MK_COMMENT)),
         ))]
     } else {
+        let width = inner.width as usize;
+        let date_width = repos
+            .iter()
+            .map(|repo| UnicodeWidthStr::width(repo.updated_at.as_str()))
+            .max()
+            .unwrap_or(0)
+            .min(width.saturating_sub(2));
         repos
             .iter()
             .take(inner.height as usize)
             .map(|repo| {
-                Line::from(Span::styled(
-                    format!(
-                        " {}",
-                        truncate(repo, inner.width.saturating_sub(1) as usize)
+                let updated_at = if date_width == 0 {
+                    String::new()
+                } else {
+                    truncate_display_width(&repo.updated_at, date_width)
+                };
+                let name_width = width.saturating_sub(1 + date_width);
+                let name = truncate_display_width(&repo.name, name_width);
+                let pad_width = width.saturating_sub(
+                    1 + UnicodeWidthStr::width(name.as_str())
+                        + UnicodeWidthStr::width(updated_at.as_str()),
+                );
+                Line::from(vec![
+                    Span::styled(
+                        format!(" {name}"),
+                        Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG_DIM)),
                     ),
-                    Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG_DIM)),
-                ))
+                    Span::styled(
+                        " ".repeat(pad_width),
+                        Style::default().bg(c(app, MK_BG_DIM)),
+                    ),
+                    Span::styled(
+                        updated_at,
+                        Style::default()
+                            .fg(c(app, MK_COMMENT))
+                            .bg(c(app, MK_BG_DIM)),
+                    ),
+                ])
             })
             .collect()
     };
@@ -343,6 +371,35 @@ fn draw_workflow_repo_list_box(
         Paragraph::new(lines).style(Style::default().bg(c(app, MK_BG_DIM))),
         inner,
     );
+}
+
+fn truncate_display_width(s: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    if UnicodeWidthStr::width(s) <= max_width {
+        return s.to_string();
+    }
+
+    let ellipsis = '…';
+    let ellipsis_width = UnicodeWidthChar::width(ellipsis).unwrap_or(1);
+    if max_width <= ellipsis_width {
+        return ellipsis.to_string();
+    }
+
+    let mut result = String::new();
+    let mut width = 0;
+    for ch in s.chars() {
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + ch_width + ellipsis_width > max_width {
+            break;
+        }
+        result.push(ch);
+        width += ch_width;
+    }
+    result.push(ellipsis);
+    result
 }
 
 pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, area: Rect) {
@@ -381,7 +438,7 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
         .split(panes[1]);
 
     let list_block = Block::default()
-        .title(" github-actions/.github/workflows/call* ")
+        .title(" github-actions/.github/workflows/call-* ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(c(app, MK_CYAN)))
         .style(Style::default().bg(c(app, MK_BG_DIM)));
@@ -391,7 +448,7 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
 
     let list_lines: Vec<Line> = if app.workflow_repo_exist_items.is_empty() {
         vec![Line::from(Span::styled(
-            " (github-actions: no call* workflows)",
+            " (github-actions: no call-* workflows)",
             Style::default().fg(c(app, MK_COMMENT)),
         ))]
     } else {
@@ -446,7 +503,7 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
             MK_ORANGE,
         );
     } else {
-        let empty_repo_list: Vec<String> = vec![];
+        let empty_repo_list: Vec<crate::github_local::WorkflowRepoExistRepo> = vec![];
         draw_workflow_repo_list_box(
             f,
             app,

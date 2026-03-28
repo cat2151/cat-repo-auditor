@@ -1,4 +1,5 @@
 use super::*;
+use crate::github::{LocalStatus, RepoInfo};
 use std::process::Command as Cmd;
 
 /// Create a minimal git repo at `path` with one commit using `content`; return the HEAD hash.
@@ -111,6 +112,38 @@ fn setup_remote_with_clone(
     run_git_ok(&local, &["config", "user.name", "T"]);
 
     (tmp, seed, local)
+}
+
+fn make_repo(name: &str, updated_at: &str, updated_at_raw: &str) -> RepoInfo {
+    RepoInfo {
+        name: name.to_string(),
+        full_name: format!("owner/{name}"),
+        updated_at: updated_at.to_string(),
+        updated_at_raw: updated_at_raw.to_string(),
+        open_issues: 0,
+        open_prs: 0,
+        is_private: false,
+        local_status: LocalStatus::Clean,
+        has_local_git: true,
+        staging_files: vec![],
+        issues: vec![],
+        prs: vec![],
+        readme_ja: None,
+        readme_ja_checked_at: String::new(),
+        readme_ja_badge: None,
+        readme_ja_badge_checked_at: String::new(),
+        pages: None,
+        pages_checked_at: String::new(),
+        deepwiki: None,
+        deepwiki_checked_at: String::new(),
+        cargo_install: None,
+        cargo_checked_at: String::new(),
+        cargo_remote_hash: String::new(),
+        cargo_remote_hash_checked_at: String::new(),
+        cargo_installed_hash: String::new(),
+        wf_workflows: None,
+        wf_checked_at: String::new(),
+    }
 }
 
 #[test]
@@ -456,6 +489,7 @@ fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
     std::fs::create_dir_all(&source_wf_dir).unwrap();
     std::fs::write(source_wf_dir.join("call-a.yml"), "name: a\n").unwrap();
     std::fs::write(source_wf_dir.join("call-b.yml"), "name: b\n").unwrap();
+    std::fs::write(source_wf_dir.join("callg-bad.yml"), "ignore\n").unwrap();
     std::fs::write(source_wf_dir.join("note.txt"), "ignore\n").unwrap();
 
     let repo_a = tmp.join("repo-a").join(".github").join("workflows");
@@ -469,20 +503,48 @@ fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
     let checks = collect_workflow_repo_exist_checks(
         tmp.to_str().unwrap(),
         &[
-            String::from("repo-b"),
-            String::from(WORKFLOW_SOURCE_REPO),
-            String::from("repo-a"),
+            make_repo("repo-b", "today", "2026-03-28T00:00:00Z"),
+            make_repo(WORKFLOW_SOURCE_REPO, "3d", "2026-03-25T00:00:00Z"),
+            make_repo("repo-a", "2w", "2026-03-14T00:00:00Z"),
         ],
     )
     .unwrap();
 
     assert_eq!(checks.len(), 2);
     assert_eq!(checks[0].workflow_file, "call-a.yml");
-    assert_eq!(checks[0].installed_repos, vec!["repo-a", "repo-b"]);
+    assert_eq!(
+        checks[0].installed_repos,
+        vec![
+            WorkflowRepoExistRepo {
+                name: String::from("repo-b"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            },
+            WorkflowRepoExistRepo {
+                name: String::from("repo-a"),
+                updated_at: String::from("2w"),
+                updated_at_raw: String::from("2026-03-14T00:00:00Z"),
+            },
+        ]
+    );
     assert!(checks[0].missing_repos.is_empty());
     assert_eq!(checks[1].workflow_file, "call-b.yml");
-    assert_eq!(checks[1].installed_repos, vec!["repo-b"]);
-    assert_eq!(checks[1].missing_repos, vec!["repo-a"]);
+    assert_eq!(
+        checks[1].installed_repos,
+        vec![WorkflowRepoExistRepo {
+            name: String::from("repo-b"),
+            updated_at: String::from("today"),
+            updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+        }]
+    );
+    assert_eq!(
+        checks[1].missing_repos,
+        vec![WorkflowRepoExistRepo {
+            name: String::from("repo-a"),
+            updated_at: String::from("2w"),
+            updated_at_raw: String::from("2026-03-14T00:00:00Z"),
+        }]
+    );
 }
 
 #[test]
