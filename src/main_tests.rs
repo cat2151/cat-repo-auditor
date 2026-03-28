@@ -1,6 +1,9 @@
 use super::*;
 use crate::main_cli::UPDATE_NOTICE_HEADER;
-use crate::main_helpers::{make_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
+use crate::main_helpers::{make_log_line, make_x_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
+use crate::main_launch::{
+    cargo_status_to_launch_args, format_launch_command, x_not_run_feedback_no_cargo_install,
+};
 
 #[test]
 fn parse_subcommand_recognizes_hash() {
