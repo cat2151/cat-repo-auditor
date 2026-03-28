@@ -1,4 +1,4 @@
-use crate::github_local::{get_cargo_bins, launch_app_with_args};
+use crate::github_local::{get_cargo_bins, launch_app_with_args, spawn_app_with_args};
 use crate::main_helpers::make_x_log_line;
 
 pub(crate) fn cargo_status_to_launch_args(
@@ -39,6 +39,22 @@ pub(crate) fn launch_cargo_app_for_repo(
         run_dir,
         get_cargo_bins,
         launch_app_with_args,
+    )
+}
+
+pub(crate) fn spawn_cargo_app_for_repo(
+    owner: &str,
+    repo_name: &str,
+    cargo_install: Option<bool>,
+    run_dir: &str,
+) -> LaunchFeedback {
+    launch_cargo_app_for_repo_with(
+        owner,
+        repo_name,
+        cargo_install,
+        run_dir,
+        get_cargo_bins,
+        spawn_app_with_args,
     )
 }
 

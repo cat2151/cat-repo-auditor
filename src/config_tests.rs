@@ -58,8 +58,15 @@ fn resolved_app_run_dir_empty_string_falls_back() {
 }
 
 #[test]
-fn config_deserializes_auto_update_with_default_and_explicit_true() {
-    let config: Config = toml::from_str(
+fn config_deserializes_auto_update_with_default_false_and_explicit_true() {
+    let default_config: Config = toml::from_str(
+        r#"
+owner = "owner"
+local_base_dir = "/base"
+"#,
+    )
+    .expect("config without auto_update should deserialize");
+    let explicit_true_config: Config = toml::from_str(
         r#"
 owner = "owner"
 local_base_dir = "/base"
@@ -68,6 +75,8 @@ auto_update = true
     )
     .expect("config should deserialize");
 
-    assert!(config.auto_update);
-    assert!(!config.auto_pull);
+    assert!(!default_config.auto_update);
+    assert!(!default_config.auto_pull);
+    assert!(explicit_true_config.auto_update);
+    assert!(!explicit_true_config.auto_pull);
 }

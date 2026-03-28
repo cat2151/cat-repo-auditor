@@ -7,7 +7,7 @@ use crate::{
         local_head_matches_upstream,
     },
     history::History,
-    main_launch::launch_cargo_app_for_repo,
+    main_launch::spawn_cargo_app_for_repo,
 };
 
 #[path = "github_types.rs"]
@@ -393,7 +393,7 @@ pub fn fetch_repos_with_progress(
                 if let Some(run_dir) = auto_update_run_dir.as_deref() {
                     if cargo_install == Some(false) {
                         let feedback =
-                            launch_cargo_app_for_repo(&owner, name, cargo_install, run_dir);
+                            spawn_cargo_app_for_repo(&owner, name, cargo_install, run_dir);
                         let _ = tx.send(FetchProgress::Log(format!(
                             "x {} {}",
                             repo.full_name, feedback.log_msg
