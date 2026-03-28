@@ -180,6 +180,24 @@ fn search_push_filters_and_jumps_to_first_match() {
 }
 
 #[test]
+fn search_enter_resets_query_and_match_index() {
+    let mut app = App::new(make_config());
+    app.repos = vec![make_active_repo("alpha"), make_active_repo("beta")];
+    app.rebuild_rows();
+    app.search_query = String::from("stale");
+    app.search_match_idx = 3;
+    app.repo_move_down(1);
+    let saved_cursor = app.row_cursor;
+
+    app.search_enter();
+
+    assert_eq!(app.search_state, SearchState::Active);
+    assert!(app.search_query.is_empty());
+    assert_eq!(app.search_match_idx, 0);
+    assert_eq!(app.search_saved_cursor, saved_cursor);
+}
+
+#[test]
 fn search_pop_expands_filter() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("beta"), make_repo("beta2")];
