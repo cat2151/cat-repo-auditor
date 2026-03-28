@@ -479,7 +479,7 @@ fn check_workflows_empty_dir_returns_false() {
 }
 
 #[test]
-fn check_workflows_cargo_target_requires_rust_windows_cargo_check_workflow() {
+fn check_workflows_cargo_requires_check_workflow() {
     let tmp = std::env::temp_dir().join(format!("wf_test_d_{}", std::process::id()));
     let wf_dir = tmp.join("myrepo").join(".github").join("workflows");
     std::fs::create_dir_all(&wf_dir).unwrap();
@@ -496,7 +496,7 @@ fn check_workflows_cargo_target_requires_rust_windows_cargo_check_workflow() {
 }
 
 #[test]
-fn check_workflows_cargo_target_passes_when_rust_windows_cargo_check_workflow_exists() {
+fn check_workflows_stale_cargo_with_check_workflow() {
     let tmp = std::env::temp_dir().join(format!("wf_test_e_{}", std::process::id()));
     let wf_dir = tmp.join("myrepo").join(".github").join("workflows");
     std::fs::create_dir_all(&wf_dir).unwrap();

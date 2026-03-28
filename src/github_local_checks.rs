@@ -58,6 +58,10 @@ const REQUIRED_WORKFLOWS: [&str; 3] = [
 const RUST_CARGO_CHECK_WORKFLOW: &str = "call-rust-windows-cargo-check.yml";
 
 /// Check if required workflow yml files are present in .github/workflows/
+///
+/// `cargo_install` is `Some(_)` when the repo is a cargo-check target app.
+/// Both `Some(true)` (up to date) and `Some(false)` (stale) require
+/// `call-rust-windows-cargo-check.yml`.
 pub(crate) fn check_workflows(
     base_dir: &str,
     repo_name: &str,
