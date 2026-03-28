@@ -3,6 +3,8 @@ use std::process::Command;
 
 #[path = "github_local_cargo_hash_checkout.rs"]
 mod checkout;
+#[path = "github_local_cargo_hash_remote.rs"]
+mod remote;
 
 /// Compare the commit hash of a `cargo install --git` entry against local HEAD.
 ///
@@ -37,7 +39,7 @@ pub(crate) fn check_cargo_git_install(
         base_dir,
         &cargo_home,
         super::append_log_message,
-        fetch_remote_main_hash,
+        remote::fetch_remote_main_hash,
     )
 }
 
@@ -82,64 +84,6 @@ where
     result
 }
 
-fn fetch_remote_main_hash(
-    log_fn: &mut impl FnMut(&str),
-    owner: &str,
-    repo_name: &str,
-) -> Option<String> {
-    let remote_command = super::format_git_ls_remote_main_command(owner, repo_name);
-    super::log_cargo_check_result(
-        log_fn,
-        owner,
-        repo_name,
-        &format!("remote のコミットハッシュ取得を開始します: コマンド={remote_command}"),
-    );
-    let out = Command::new("git")
-        .args([
-            "ls-remote",
-            &format!("https://github.com/{owner}/{repo_name}.git"),
-            "refs/heads/main",
-        ])
-        .output();
-    let out = match out {
-        Ok(out) => out,
-        Err(err) => {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                &format!("コマンドの起動に失敗しました: コマンド={remote_command}: {err}"),
-            );
-            return None;
-        }
-    };
-    super::log_cargo_check_command_result(log_fn, owner, repo_name, &remote_command, &out);
-    if !out.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    match stdout.split_whitespace().next() {
-        Some(hash) => {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                &format!("remote のコミットハッシュを取得しました: {hash}"),
-            );
-            Some(hash.to_string())
-        }
-        _ => {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "remote main ブランチのハッシュが空です",
-            );
-            None
-        }
-    }
-}
-
 /// Internal function exposed for testing.
 #[cfg(test)]
 pub(super) fn check_cargo_git_install_inner(
@@ -155,7 +99,7 @@ pub(super) fn check_cargo_git_install_inner(
         base_dir,
         cargo_home,
         &mut log_fn,
-        |log_fn, owner, repo_name| fetch_remote_main_hash(log_fn, owner, repo_name),
+        |log_fn, owner, repo_name| remote::fetch_remote_main_hash(log_fn, owner, repo_name),
     )
 }
 
