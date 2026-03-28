@@ -58,7 +58,7 @@ fn resolved_app_run_dir_empty_string_falls_back() {
 }
 
 #[test]
-fn config_deserializes_auto_update_with_default_false_and_explicit_true() {
+fn test_auto_update_default_false_and_explicit_true() {
     let default_config: Config = toml::from_str(
         r#"
 owner = "owner"
