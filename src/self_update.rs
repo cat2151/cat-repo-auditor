@@ -3,7 +3,7 @@ use cat_self_update_lib::{check_remote_commit, self_update as launch_self_update
 const REPO_OWNER: &str = "cat2151";
 const REPO_NAME: &str = "cat-repo-auditor";
 const MAIN_BRANCH: &str = "main";
-const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
+pub(crate) const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
 const GIT_URL: &str = "https://github.com/cat2151/cat-repo-auditor";
 const BIN_NAMES: &[&str] = &["catrepo"];
 
@@ -12,6 +12,9 @@ pub(crate) fn build_commit_hash() -> &'static str {
 }
 
 /// Full `cargo install` command string used in printed output.
+///
+/// This is shared by the self-update command output and the exit-time
+/// update notice so both surfaces stay in sync.
 pub(crate) fn install_cmd() -> String {
     format!("cargo install --force --git {GIT_URL}")
 }
@@ -28,7 +31,7 @@ pub(crate) fn is_update_available(build_hash: &str, remote_hash: &str) -> bool {
 /// Perform a self-update.
 pub fn run_self_update() -> anyhow::Result<bool> {
     launch_self_update(REPO_OWNER, REPO_NAME, BIN_NAMES)
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+        .map_err(|err| anyhow::anyhow!("failed to launch self-update helper: {err}"))?;
     println!("Running: {}", install_cmd());
     println!("The application will now exit so the updater can replace the binary.");
     Ok(true)
