@@ -1,10 +1,8 @@
 use cat_self_update_lib::{check_remote_commit, self_update as launch_self_update};
 
-const REPO_OWNER: &str = "cat2151";
-const REPO_NAME: &str = "cat-repo-auditor";
+pub(crate) const REPO_OWNER: &str = "cat2151";
+pub(crate) const REPO_NAME: &str = "cat-repo-auditor";
 const MAIN_BRANCH: &str = "main";
-pub(crate) const OWNER_REPO: &str = "cat2151/cat-repo-auditor";
-const GIT_URL: &str = "https://github.com/cat2151/cat-repo-auditor";
 const BIN_NAMES: &[&str] = &["catrepo"];
 
 pub(crate) fn build_commit_hash() -> &'static str {
@@ -16,7 +14,15 @@ pub(crate) fn build_commit_hash() -> &'static str {
 /// This is shared by the self-update command output and the exit-time
 /// update notice so both surfaces stay in sync.
 pub(crate) fn install_cmd() -> String {
-    format!("cargo install --force --git {GIT_URL}")
+    format!("cargo install --force --git {}", git_url())
+}
+
+pub(crate) fn owner_repo() -> String {
+    format!("{REPO_OWNER}/{REPO_NAME}")
+}
+
+fn git_url() -> String {
+    format!("https://github.com/{}", owner_repo())
 }
 
 /// Pure decision function: returns true if `remote_hash` differs from `build_hash`
@@ -47,7 +53,7 @@ pub fn check_self_update() -> Option<String> {
     let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_hash).ok()?;
 
     if is_update_available(&result.embedded_hash, &result.remote_hash) {
-        Some(OWNER_REPO.to_string())
+        Some(owner_repo())
     } else {
         None
     }
