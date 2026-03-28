@@ -391,7 +391,7 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
 
     let list_lines: Vec<Line> = if app.workflow_repo_exist_items.is_empty() {
         vec![Line::from(Span::styled(
-            " (github-actions に call* workflow がありません)",
+            " (github-actions: no call* workflows)",
             Style::default().fg(c(app, MK_COMMENT)),
         ))]
     } else {
@@ -446,13 +446,13 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
             MK_ORANGE,
         );
     } else {
-        let empty: Vec<String> = vec![];
+        let empty_repo_list: Vec<String> = vec![];
         draw_workflow_repo_list_box(
             f,
             app,
             right[0],
             String::from(" 導入済み repo (0) "),
-            &empty,
+            &empty_repo_list,
             MK_GREEN,
         );
         draw_workflow_repo_list_box(
@@ -460,7 +460,7 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
             app,
             right[1],
             String::from(" 未導入 repo (0) "),
-            &empty,
+            &empty_repo_list,
             MK_ORANGE,
         );
     }

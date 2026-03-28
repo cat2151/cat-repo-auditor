@@ -235,6 +235,6 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
     let rendered = rendered.join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
-    assert!(rendered.contains("call* workflow"));
+    assert!(rendered.contains("no call* workflows"));
     assert!(rendered.contains("(none)"));
 }

@@ -43,6 +43,22 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     dir
 }
 
+struct TempDirGuard {
+    path: std::path::PathBuf,
+}
+
+impl TempDirGuard {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 fn run_git_ok(path: &std::path::Path, args: &[&str]) -> std::process::Output {
     let out = Cmd::new("git")
         .args(args)
@@ -432,6 +448,7 @@ fn check_workflows_empty_dir_returns_false() {
 #[test]
 fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
     let tmp = std::env::temp_dir().join(format!("wf_repo_exist_{}", std::process::id()));
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
     let source_wf_dir = tmp
         .join(WORKFLOW_SOURCE_REPO)
         .join(".github")
@@ -458,8 +475,6 @@ fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
         ],
     )
     .unwrap();
-
-    std::fs::remove_dir_all(&tmp).ok();
 
     assert_eq!(checks.len(), 2);
     assert_eq!(checks[0].workflow_file, "call-a.yml");
