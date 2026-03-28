@@ -67,6 +67,7 @@ fn make_config() -> Config {
         local_base_dir: ".".to_string(),
         app_run_dir: None,
         auto_pull: false,
+        auto_update: false,
     }
 }
 

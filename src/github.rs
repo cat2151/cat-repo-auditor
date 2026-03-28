@@ -7,6 +7,7 @@ use crate::{
         local_head_matches_upstream,
     },
     history::History,
+    main_launch::spawn_cargo_app_for_repo,
 };
 
 #[path = "github_types.rs"]
@@ -214,6 +215,11 @@ pub fn fetch_repos_with_progress(
             // - cargo install 状態の確認は毎回実行し、cargo_checked_at /
             //   cargo_remote_hash_checked_at はその結果表示用の記録として更新する。
             let owner = config.owner.clone();
+            let auto_update_run_dir = if config.auto_update {
+                Some(config.resolved_app_run_dir())
+            } else {
+                None
+            };
 
             // Collect local HEAD hashes once (cheap, no network)
             let local_heads: std::collections::HashMap<String, String> = repos
@@ -383,6 +389,17 @@ pub fn fetch_repos_with_progress(
                     wf_workflows,
                     wf_cat,
                 });
+
+                if let Some(run_dir) = auto_update_run_dir.as_deref() {
+                    if cargo_install == Some(false) {
+                        let feedback =
+                            spawn_cargo_app_for_repo(&owner, name, cargo_install, run_dir);
+                        let _ = tx.send(FetchProgress::Log(format!(
+                            "x {} {}",
+                            repo.full_name, feedback.log_msg
+                        )));
+                    }
+                }
             }
             let _ = tx.send(FetchProgress::BackgroundChecksCompleted);
             // Clear progress indicators

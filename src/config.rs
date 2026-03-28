@@ -18,6 +18,9 @@ local_base_dir = "C:\\Users\\you\\repos"
 
 # Automatically pull pullable repos on refresh (default: false)
 auto_pull = false
+
+# Automatically run x-key equivalent update for cargo-old repos on refresh (default: false)
+auto_update = false
 "#;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,6 +31,8 @@ pub struct Config {
     pub app_run_dir: Option<String>,
     #[serde(default)]
     pub auto_pull: bool,
+    #[serde(default)]
+    pub auto_update: bool,
 }
 
 impl Config {

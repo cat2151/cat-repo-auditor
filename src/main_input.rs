@@ -11,15 +11,10 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::FetchProgress,
-    github_local::{
-        collect_workflow_repo_exist_checks, get_cargo_bins, launch_app_with_args, launch_lazygit,
-        open_url,
-    },
+    github_local::{collect_workflow_repo_exist_checks, launch_lazygit, open_url},
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, start_fetch},
-    main_launch::{
-        cargo_status_to_launch_args, format_launch_command, x_not_run_feedback_no_cargo_install,
-    },
+    main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install},
     ui::{Focus, SearchState},
 };
 
@@ -353,48 +348,22 @@ fn launch_selected_repo(
             repo.cargo_install,
         )
     }) {
-        if let Some(args) = cargo_status_to_launch_args(cargo_install) {
-            let owner = app.config.owner.clone();
-            let run_dir = app.config.resolved_app_run_dir();
-            if let Some(bins) = get_cargo_bins(&owner, &repo_name) {
-                if let Some(bin) = bins.first() {
-                    let bin = bin.clone();
-                    let cmd = format_launch_command(&bin, args);
-                    let cmd_desc = format!("run: `{cmd}` cwd=`{run_dir}`");
-                    match launch_app_with_args(&bin, args, &run_dir) {
-                        Ok(()) => {
-                            terminal.clear().ok();
-                            app.transient_msg = Some(format!("launched: {cmd}"));
-                            let line = make_x_log_line(&repo_full_name, &cmd_desc);
-                            persist_log_line(app, line);
-                        }
-                        Err(e) => {
-                            app.transient_msg = Some(format!("run failed: {e}"));
-                            let line = make_x_log_line(
-                                &repo_full_name,
-                                &format!("{cmd_desc} => failed: {e}"),
-                            );
-                            persist_log_line(app, line);
-                        }
-                    }
-                } else {
-                    let line =
-                        make_x_log_line(&repo_full_name, "not run: no installed cargo bin found");
-                    app.transient_msg = Some(String::from("x: no installed cargo bin found"));
-                    persist_log_line(app, line);
-                }
-            } else {
-                let line = make_x_log_line(
-                    &repo_full_name,
-                    "not run: .crates2.json has no matching install entry",
-                );
-                app.transient_msg = Some(String::from("x: no matching cargo install entry"));
-                persist_log_line(app, line);
-            }
-        } else {
+        if cargo_install.is_none() {
             let (log_line, transient_msg) = x_not_run_feedback_no_cargo_install(&repo_full_name);
             app.transient_msg = Some(transient_msg);
             persist_log_line(app, log_line);
+        } else {
+            let feedback = launch_cargo_app_for_repo(
+                &app.config.owner,
+                &repo_name,
+                cargo_install,
+                &app.config.resolved_app_run_dir(),
+            );
+            if feedback.launched {
+                terminal.clear().ok();
+            }
+            app.transient_msg = Some(feedback.transient_msg);
+            persist_log_line(app, make_x_log_line(&repo_full_name, &feedback.log_msg));
         }
     } else {
         let line = make_x_log_line("-", "not run: no repository selected");

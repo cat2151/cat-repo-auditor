@@ -11,6 +11,7 @@ pub(super) fn make_config() -> Config {
         local_base_dir: String::from("/base"),
         app_run_dir: None,
         auto_pull: false,
+        auto_update: false,
     }
 }
 

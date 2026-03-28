@@ -15,7 +15,7 @@ pub(crate) use checks::{
 pub(crate) use git::{
     check_local_status_no_fetch, git_pull, local_head_matches_upstream, WORKFLOW_SOURCE_REPO,
 };
-pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url};
+pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url, spawn_app_with_args};
 
 #[cfg(test)]
 use git::local_head_matches_upstream_with_logger;

@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Launch an application with LeaveAlternateScreen/EnterAlternateScreen
 /// to avoid terminal corruption (same pattern as lazygit).
@@ -21,6 +21,18 @@ pub(crate) fn launch_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> R
         Ok(_) => Ok(()),
         Err(e) => bail!("launch failed: {e}"),
     }
+}
+
+pub(crate) fn spawn_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> Result<()> {
+    Command::new(bin)
+        .args(args)
+        .current_dir(run_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("launch failed")?;
+    Ok(())
 }
 
 pub(crate) fn launch_lazygit(base_dir: &str, repo_name: &str) -> Result<()> {
