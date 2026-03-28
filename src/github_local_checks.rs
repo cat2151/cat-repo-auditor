@@ -30,9 +30,9 @@ pub(crate) fn check_pages_exists(owner: &str, repo: &str) -> bool {
     }
 }
 
-/// Check if DeepWiki page exists (HTTP GET, 404 = false)
-/// Scan local README.ja.md for a deepwiki.com link.
-/// Returns true if "deepwiki.com" appears anywhere in the file.
+/// Check if a DeepWiki link is configured for the repository.
+/// Scans local README.ja.md and README.md for a deepwiki.com link.
+/// Returns true if "deepwiki.com" appears in either file.
 pub(crate) fn check_deepwiki_exists(base_dir: &str, repo_name: &str) -> bool {
     for filename in &["README.ja.md", "README.md"] {
         let path = format!(

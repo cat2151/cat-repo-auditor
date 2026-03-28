@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
-    io,
+    io::{self, Write},
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -235,11 +235,8 @@ fn handle_repo_focus_input(
                 let base = app.config.local_base_dir.trim_end_matches(['/', '\\']);
                 let path = format!("{}\\{}", base, repo.name);
                 let clip_path = format!("{}\\", path);
-                let result = std::process::Command::new("cmd")
-                    .args(["/C", &format!("echo {}| clip", clip_path.trim())])
-                    .status();
-                match result {
-                    Ok(_) => app.transient_msg = Some(format!("copied: {clip_path}")),
+                match copy_to_clipboard(&clip_path) {
+                    Ok(()) => app.transient_msg = Some(format!("copied: {clip_path}")),
                     Err(e) => app.transient_msg = Some(format!("clip failed: {e}")),
                 }
             }
@@ -406,4 +403,23 @@ fn launch_selected_repo(
     }
 
     Ok(())
+}
+
+fn copy_to_clipboard(text: &str) -> io::Result<()> {
+    let mut child = std::process::Command::new("clip")
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(text.as_bytes())?;
+    }
+
+    let status = child.wait()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "clip exited with status {status}"
+        )))
+    }
 }
