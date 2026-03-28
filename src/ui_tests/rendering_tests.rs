@@ -1,4 +1,24 @@
 use super::*;
+use unicode_width::UnicodeWidthStr;
+
+fn find_text_x(buffer: &ratatui::buffer::Buffer, needle: &str) -> Option<u16> {
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            let mut matched = true;
+            for (offset, ch) in needle.chars().enumerate() {
+                let x = x + offset as u16;
+                if x >= buffer.area.width || buffer[(x, y)].symbol() != ch.to_string() {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                return Some(x);
+            }
+        }
+    }
+    None
+}
 
 // ── local_check_cell ──────────────────────────────────────────────────────────
 
@@ -258,4 +278,50 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
     assert!(rendered.contains("workflow repo exist check"));
     assert!(rendered.contains("no call-* workflows"));
     assert!(rendered.contains("(none)"));
+}
+
+#[test]
+fn draw_ui_keeps_workflow_repo_updated_column_aligned_with_wide_names() {
+    let backend = TestBackend::new(90, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.open_workflow_repo_exist(vec![crate::github_local::WorkflowRepoExistCheck {
+        workflow_file: String::from("call-幅-test.yml"),
+        installed_repos: vec![
+            crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-通常"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            },
+            crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-とても長い名前です-甲乙丙丁戊己庚辛壬"),
+                updated_at: String::from("2d"),
+                updated_at_raw: String::from("2026-03-26T00:00:00Z"),
+            },
+        ],
+        missing_repos: vec![],
+    }]);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let today_x = find_text_x(buffer, "today").unwrap() as usize;
+    let two_days_x = find_text_x(buffer, "2d").unwrap() as usize;
+
+    assert_eq!(
+        today_x + UnicodeWidthStr::width("today"),
+        two_days_x + UnicodeWidthStr::width("2d")
+    );
+
+    let area = buffer.area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(buffer[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    let rendered = rendered.join("\n");
+    assert!(rendered.contains('…'));
 }
