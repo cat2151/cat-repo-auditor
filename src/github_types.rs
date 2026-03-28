@@ -76,7 +76,7 @@ pub struct RepoInfo {
     #[serde(default)]
     pub cargo_installed_hash: String,
 
-    /// All 3 required workflow yml files present in .github/workflows/
+    /// Required workflow yml files are present in .github/workflows/
     #[serde(default)]
     pub wf_workflows: Option<bool>,
     /// local HEAD hash when wf_workflows was last checked

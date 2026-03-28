@@ -341,7 +341,7 @@ pub fn fetch_repos_with_progress(
                 );
 
                 let (wf_workflows, wf_cat) = if needs_wf {
-                    let v = check_workflows(&config.local_base_dir, name);
+                    let v = check_workflows(&config.local_base_dir, name, cargo_install);
                     (Some(v), local_head.clone())
                 } else {
                     (repo.wf_workflows, repo.wf_checked_at.clone())

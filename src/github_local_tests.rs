@@ -450,7 +450,7 @@ fn check_workflows_all_present_returns_true() {
     ] {
         std::fs::write(wf_dir.join(f), "").unwrap();
     }
-    let result = check_workflows(tmp.to_str().unwrap(), "myrepo");
+    let result = check_workflows(tmp.to_str().unwrap(), "myrepo", None);
     std::fs::remove_dir_all(&tmp).ok();
     assert!(result);
 }
@@ -463,7 +463,7 @@ fn check_workflows_missing_one_returns_false() {
     for f in &["call-translate-readme.yml", "call-issue-note.yml"] {
         std::fs::write(wf_dir.join(f), "").unwrap();
     }
-    let result = check_workflows(tmp.to_str().unwrap(), "myrepo");
+    let result = check_workflows(tmp.to_str().unwrap(), "myrepo", None);
     std::fs::remove_dir_all(&tmp).ok();
     assert!(!result);
 }
@@ -473,9 +473,44 @@ fn check_workflows_empty_dir_returns_false() {
     let tmp = std::env::temp_dir().join(format!("wf_test_c_{}", std::process::id()));
     let repo = tmp.join("myrepo");
     std::fs::create_dir_all(&repo).unwrap();
-    let result = check_workflows(tmp.to_str().unwrap(), "myrepo");
+    let result = check_workflows(tmp.to_str().unwrap(), "myrepo", None);
     std::fs::remove_dir_all(&tmp).ok();
     assert!(!result);
+}
+
+#[test]
+fn check_workflows_cargo_target_requires_rust_windows_cargo_check_workflow() {
+    let tmp = std::env::temp_dir().join(format!("wf_test_d_{}", std::process::id()));
+    let wf_dir = tmp.join("myrepo").join(".github").join("workflows");
+    std::fs::create_dir_all(&wf_dir).unwrap();
+    for f in &[
+        "call-translate-readme.yml",
+        "call-issue-note.yml",
+        "call-check-large-files.yml",
+    ] {
+        std::fs::write(wf_dir.join(f), "").unwrap();
+    }
+    let result = check_workflows(tmp.to_str().unwrap(), "myrepo", Some(true));
+    std::fs::remove_dir_all(&tmp).ok();
+    assert!(!result);
+}
+
+#[test]
+fn check_workflows_cargo_target_passes_when_rust_windows_cargo_check_workflow_exists() {
+    let tmp = std::env::temp_dir().join(format!("wf_test_e_{}", std::process::id()));
+    let wf_dir = tmp.join("myrepo").join(".github").join("workflows");
+    std::fs::create_dir_all(&wf_dir).unwrap();
+    for f in &[
+        "call-translate-readme.yml",
+        "call-issue-note.yml",
+        "call-check-large-files.yml",
+        "call-rust-windows-cargo-check.yml",
+    ] {
+        std::fs::write(wf_dir.join(f), "").unwrap();
+    }
+    let result = check_workflows(tmp.to_str().unwrap(), "myrepo", Some(false));
+    std::fs::remove_dir_all(&tmp).ok();
+    assert!(result);
 }
 
 #[test]
