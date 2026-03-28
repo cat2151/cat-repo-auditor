@@ -74,7 +74,7 @@ dependencies = [
 [[package]]
 name = "cat-self-update-lib"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/cat-self-update?rev=91927b751875a85692a01b98182127c99b33b311#91927b751875a85692a01b98182127c99b33b311"
+source = "git+https://github.com/cat2151/cat-self-update#91927b751875a85692a01b98182127c99b33b311"
 
 [[package]]
 name = "cc"
