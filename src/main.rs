@@ -244,12 +244,13 @@ fn main() -> Result<()> {
                     app.toggle_log();
                     continue;
                 }
-                let shift_w = matches!(key.code, KeyCode::Char('W'))
-                    || (matches!(key.code, KeyCode::Char('w'))
-                        && key.modifiers.contains(KeyModifiers::SHIFT));
 
                 match app.focus {
-                    Focus::Repos => match key.code {
+                    Focus::Repos => {
+                        let shift_w = matches!(key.code, KeyCode::Char('W'))
+                            || (matches!(key.code, KeyCode::Char('w'))
+                                && key.modifiers.contains(KeyModifiers::SHIFT));
+                        match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
                             let n = app.consume_prefix();
@@ -469,7 +470,8 @@ fn main() -> Result<()> {
                         _ => {
                             app.num_prefix = 0;
                         }
-                    },
+                    }
+                    }
                     Focus::Detail => match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('j') | KeyCode::Down => {
