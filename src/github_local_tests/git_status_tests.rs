@@ -5,6 +5,7 @@ use std::process::Command as Cmd;
 #[test]
 fn check_local_status_reports_modified_before_pullable() {
     let tmp = unique_temp_dir("status_modified");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
     let repo = tmp.join("myrepo");
     init_git_repo(&repo);
     std::fs::write(repo.join("f"), "changed-but-unstaged").unwrap();
@@ -12,7 +13,6 @@ fn check_local_status_reports_modified_before_pullable() {
     let (status, has_local_git, files) =
         check_local_status_no_fetch(tmp.to_str().unwrap(), "myrepo");
 
-    std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(status, LocalStatus::Modified);
     assert!(has_local_git);
     assert!(!files.is_empty());
@@ -21,6 +21,7 @@ fn check_local_status_reports_modified_before_pullable() {
 #[test]
 fn check_local_status_reports_staging_before_pullable() {
     let tmp = unique_temp_dir("status_staging");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
     let repo = tmp.join("myrepo");
     init_git_repo(&repo);
     std::fs::write(repo.join("f"), "changed-and-staged").unwrap();
@@ -29,7 +30,6 @@ fn check_local_status_reports_staging_before_pullable() {
     let (status, has_local_git, files) =
         check_local_status_no_fetch(tmp.to_str().unwrap(), "myrepo");
 
-    std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(status, LocalStatus::Staging);
     assert!(has_local_git);
     assert!(!files.is_empty());
@@ -38,6 +38,7 @@ fn check_local_status_reports_staging_before_pullable() {
 #[test]
 fn local_head_matches_upstream_returns_true_for_modified_repo_with_same_head() {
     let (tmp, _seed, local) = setup_remote_with_clone("same_head_modified");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
 
     std::fs::write(local.join("local-only.txt"), "local change\n").unwrap();
 
@@ -48,13 +49,12 @@ fn local_head_matches_upstream_returns_true_for_modified_repo_with_same_head() {
         tmp.join("repos").to_str().unwrap(),
         "myrepo"
     ));
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 #[test]
 fn local_head_matches_upstream_returns_true_for_staging_repo_with_same_head() {
     let (tmp, _seed, local) = setup_remote_with_clone("same_head_staging");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
 
     std::fs::write(local.join("staged.txt"), "local change\n").unwrap();
     run_git_ok(&local, &["add", "staged.txt"]);
@@ -66,13 +66,12 @@ fn local_head_matches_upstream_returns_true_for_staging_repo_with_same_head() {
         tmp.join("repos").to_str().unwrap(),
         "myrepo"
     ));
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 #[test]
 fn local_head_matches_upstream_returns_false_after_remote_advances() {
     let (tmp, seed, local) = setup_remote_with_clone("different_head_modified");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
 
     std::fs::write(local.join("local-only.txt"), "local change\n").unwrap();
     std::fs::write(seed.join("remote-only.txt"), "remote change\n").unwrap();
@@ -88,13 +87,12 @@ fn local_head_matches_upstream_returns_false_after_remote_advances() {
         tmp.join("repos").to_str().unwrap(),
         "myrepo"
     ));
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 #[test]
 fn local_head_matches_upstream_logs_start_hashes_and_result() {
     let (tmp, _seed, _local) = setup_remote_with_clone("same_head_logged");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
     let mut logs = Vec::new();
 
     let matches = local_head_matches_upstream_with_logger(
@@ -102,8 +100,6 @@ fn local_head_matches_upstream_logs_start_hashes_and_result() {
         "myrepo",
         |msg| logs.push(msg.to_string()),
     );
-
-    std::fs::remove_dir_all(&tmp).ok();
 
     assert!(matches);
     assert!(logs.iter().any(|msg| {
@@ -137,6 +133,7 @@ fn local_head_matches_upstream_logs_start_hashes_and_result() {
 #[test]
 fn check_local_status_reports_conflict() {
     let tmp = unique_temp_dir("status_conflict");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
     let repo = tmp.join("myrepo");
     std::fs::create_dir_all(&repo).unwrap();
     run_git_ok(&repo, &["init", "-b", "master"]);
@@ -162,7 +159,6 @@ fn check_local_status_reports_conflict() {
     let (status, has_local_git, files) =
         check_local_status_no_fetch(tmp.to_str().unwrap(), "myrepo");
 
-    std::fs::remove_dir_all(&tmp).ok();
     assert_eq!(status, LocalStatus::Conflict);
     assert!(has_local_git);
     assert!(files.iter().any(|line| line.starts_with("UU ")));
