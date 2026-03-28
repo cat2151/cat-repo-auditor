@@ -447,7 +447,7 @@ fn check_workflows_empty_dir_returns_false() {
 
 #[test]
 fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
-    let tmp = std::env::temp_dir().join(format!("wf_repo_exist_{}", std::process::id()));
+    let tmp = unique_temp_dir("wf_repo_exist");
     let _tmp_guard = TempDirGuard::new(tmp.clone());
     let source_wf_dir = tmp
         .join(WORKFLOW_SOURCE_REPO)

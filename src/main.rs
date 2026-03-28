@@ -244,6 +244,9 @@ fn main() -> Result<()> {
                     app.toggle_log();
                     continue;
                 }
+                let shift_w = matches!(key.code, KeyCode::Char('W'))
+                    || (matches!(key.code, KeyCode::Char('w'))
+                        && key.modifiers.contains(KeyModifiers::SHIFT));
 
                 match app.focus {
                     Focus::Repos => match key.code {
@@ -299,7 +302,7 @@ fn main() -> Result<()> {
                                 }
                             }
                         }
-                        KeyCode::Char('W') if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                        _ if shift_w => {
                             app.num_prefix = 0;
                             let local_repo_names = app
                                 .repos

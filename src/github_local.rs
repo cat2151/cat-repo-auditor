@@ -98,18 +98,23 @@ pub(crate) fn collect_workflow_repo_exist_checks(
 
     let mut workflow_files = fs::read_dir(workflow_dir_path)
         .with_context(|| format!("Failed to read workflow dir: {workflow_dir}"))?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
+        .map(|entry| -> Result<Option<String>> {
+            let entry = entry?;
             let path = entry.path();
             if !path.is_file() {
-                return None;
+                return Ok(None);
             }
             let file_name = entry.file_name();
-            let file_name = file_name.to_str()?;
+            let Some(file_name) = file_name.to_str() else {
+                return Ok(None);
+            };
             let is_call_workflow = file_name.starts_with(CALL_WORKFLOW_PREFIX)
                 && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"));
-            is_call_workflow.then(|| file_name.to_string())
+            Ok(is_call_workflow.then(|| file_name.to_string()))
         })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
         .collect::<Vec<_>>();
     workflow_files.sort();
 
