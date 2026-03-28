@@ -1,4 +1,4 @@
-use crate::github::LocalStatus;
+use crate::github::{LocalStatus, RepoInfo};
 use anyhow::{anyhow, bail, Context, Result};
 use std::{fs, process::Command};
 
@@ -11,13 +11,20 @@ pub(crate) use cargo::{append_cargo_check_results, check_cargo_git_install, get_
 pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url};
 
 pub(crate) const WORKFLOW_SOURCE_REPO: &str = "github-actions";
-const CALL_WORKFLOW_PREFIX: &str = "call";
+const CALL_WORKFLOW_PREFIX: &str = "call-";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowRepoExistRepo {
+    pub name: String,
+    pub updated_at: String,
+    pub updated_at_raw: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowRepoExistCheck {
     pub workflow_file: String,
-    pub installed_repos: Vec<String>,
-    pub missing_repos: Vec<String>,
+    pub installed_repos: Vec<WorkflowRepoExistRepo>,
+    pub missing_repos: Vec<WorkflowRepoExistRepo>,
 }
 
 // ──────────────────────────────────────────────
@@ -85,7 +92,7 @@ pub(crate) fn check_workflows(base_dir: &str, repo_name: &str) -> bool {
 
 pub(crate) fn collect_workflow_repo_exist_checks(
     base_dir: &str,
-    repo_names: &[String],
+    repos: &[RepoInfo],
 ) -> Result<Vec<WorkflowRepoExistCheck>> {
     let base = base_dir.trim_end_matches(['/', '\\']);
     let workflow_dir = format!("{base}/{WORKFLOW_SOURCE_REPO}/.github/workflows");
@@ -118,24 +125,32 @@ pub(crate) fn collect_workflow_repo_exist_checks(
         .collect::<Vec<_>>();
     workflow_files.sort();
 
-    let mut local_repo_names = repo_names
+    let mut local_repos = repos
         .iter()
-        .filter(|name| name.as_str() != WORKFLOW_SOURCE_REPO)
-        .cloned()
+        .filter(|repo| repo.has_local_git && repo.name.as_str() != WORKFLOW_SOURCE_REPO)
+        .map(|repo| WorkflowRepoExistRepo {
+            name: repo.name.clone(),
+            updated_at: repo.updated_at.clone(),
+            updated_at_raw: repo.updated_at_raw.clone(),
+        })
         .collect::<Vec<_>>();
-    local_repo_names.sort();
+    local_repos.sort_by(|a, b| {
+        b.updated_at_raw
+            .cmp(&a.updated_at_raw)
+            .then_with(|| a.name.cmp(&b.name))
+    });
 
     Ok(workflow_files
         .into_iter()
         .map(|workflow_file| {
             let mut installed_repos = Vec::new();
             let mut missing_repos = Vec::new();
-            for repo_name in &local_repo_names {
-                let path = format!("{base}/{repo_name}/.github/workflows/{workflow_file}");
+            for repo in &local_repos {
+                let path = format!("{base}/{}/.github/workflows/{workflow_file}", repo.name);
                 if std::path::Path::new(&path).exists() {
-                    installed_repos.push(repo_name.clone());
+                    installed_repos.push(repo.clone());
                 } else {
-                    missing_repos.push(repo_name.clone());
+                    missing_repos.push(repo.clone());
                 }
             }
             WorkflowRepoExistCheck {

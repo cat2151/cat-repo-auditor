@@ -184,13 +184,32 @@ fn draw_ui_shows_workflow_repo_exist_overlay() {
     app.open_workflow_repo_exist(vec![
         crate::github_local::WorkflowRepoExistCheck {
             workflow_file: String::from("call-a.yml"),
-            installed_repos: vec![String::from("repo-a")],
-            missing_repos: vec![String::from("repo-b"), String::from("repo-c")],
+            installed_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-a"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            }],
+            missing_repos: vec![
+                crate::github_local::WorkflowRepoExistRepo {
+                    name: String::from("repo-b"),
+                    updated_at: String::from("2d"),
+                    updated_at_raw: String::from("2026-03-26T00:00:00Z"),
+                },
+                crate::github_local::WorkflowRepoExistRepo {
+                    name: String::from("repo-c"),
+                    updated_at: String::from("3w"),
+                    updated_at_raw: String::from("2026-03-07T00:00:00Z"),
+                },
+            ],
         },
         crate::github_local::WorkflowRepoExistCheck {
             workflow_file: String::from("call-b.yml"),
             installed_repos: vec![],
-            missing_repos: vec![String::from("repo-a")],
+            missing_repos: vec![crate::github_local::WorkflowRepoExistRepo {
+                name: String::from("repo-a"),
+                updated_at: String::from("today"),
+                updated_at_raw: String::from("2026-03-28T00:00:00Z"),
+            }],
         },
     ]);
 
@@ -212,6 +231,8 @@ fn draw_ui_shows_workflow_repo_exist_overlay() {
     assert!(rendered.contains("repo-a"));
     assert!(rendered.contains("repo-b"));
     assert!(rendered.contains("repo-c"));
+    assert!(rendered.contains("today"));
+    assert!(rendered.contains("2d"));
 }
 
 #[test]
@@ -235,6 +256,6 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
     let rendered = rendered.join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
-    assert!(rendered.contains("no call* workflows"));
+    assert!(rendered.contains("no call-* workflows"));
     assert!(rendered.contains("(none)"));
 }

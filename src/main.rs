@@ -305,15 +305,9 @@ fn main() -> Result<()> {
                             }
                             _ if shift_w => {
                                 app.num_prefix = 0;
-                                let local_repo_names = app
-                                    .repos
-                                    .iter()
-                                    .filter(|repo| repo.has_local_git)
-                                    .map(|repo| repo.name.clone())
-                                    .collect::<Vec<_>>();
                                 match collect_workflow_repo_exist_checks(
                                     &app.config.local_base_dir,
-                                    &local_repo_names,
+                                    &app.repos,
                                 ) {
                                     Ok(items) => {
                                         app.open_workflow_repo_exist(items);
