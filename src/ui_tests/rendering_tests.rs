@@ -281,7 +281,7 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
 }
 
 #[test]
-fn draw_ui_keeps_workflow_repo_updated_column_aligned_with_wide_names() {
+fn test_workflow_repo_column_alignment_with_wide_chars() {
     let backend = TestBackend::new(90, 24);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = make_test_app_with_focus(true);
