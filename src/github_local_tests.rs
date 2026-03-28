@@ -430,6 +430,47 @@ fn check_workflows_empty_dir_returns_false() {
 }
 
 #[test]
+fn collect_workflow_repo_exist_checks_groups_installed_and_missing_repos() {
+    let tmp = std::env::temp_dir().join(format!("wf_repo_exist_{}", std::process::id()));
+    let source_wf_dir = tmp
+        .join(WORKFLOW_SOURCE_REPO)
+        .join(".github")
+        .join("workflows");
+    std::fs::create_dir_all(&source_wf_dir).unwrap();
+    std::fs::write(source_wf_dir.join("call-a.yml"), "name: a\n").unwrap();
+    std::fs::write(source_wf_dir.join("call-b.yml"), "name: b\n").unwrap();
+    std::fs::write(source_wf_dir.join("note.txt"), "ignore\n").unwrap();
+
+    let repo_a = tmp.join("repo-a").join(".github").join("workflows");
+    let repo_b = tmp.join("repo-b").join(".github").join("workflows");
+    std::fs::create_dir_all(&repo_a).unwrap();
+    std::fs::create_dir_all(&repo_b).unwrap();
+    std::fs::write(repo_a.join("call-a.yml"), "repo-a\n").unwrap();
+    std::fs::write(repo_b.join("call-a.yml"), "repo-b\n").unwrap();
+    std::fs::write(repo_b.join("call-b.yml"), "repo-b\n").unwrap();
+
+    let checks = collect_workflow_repo_exist_checks(
+        tmp.to_str().unwrap(),
+        &[
+            String::from("repo-b"),
+            String::from(WORKFLOW_SOURCE_REPO),
+            String::from("repo-a"),
+        ],
+    )
+    .unwrap();
+
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert_eq!(checks.len(), 2);
+    assert_eq!(checks[0].workflow_file, "call-a.yml");
+    assert_eq!(checks[0].installed_repos, vec!["repo-a", "repo-b"]);
+    assert!(checks[0].missing_repos.is_empty());
+    assert_eq!(checks[1].workflow_file, "call-b.yml");
+    assert_eq!(checks[1].installed_repos, vec!["repo-b"]);
+    assert_eq!(checks[1].missing_repos, vec!["repo-a"]);
+}
+
+#[test]
 fn check_readme_ja_badge_finds_self_reference() {
     let tmp = std::env::temp_dir().join(format!("badge_test_a_{}", std::process::id()));
     let repo = tmp.join("myrepo");

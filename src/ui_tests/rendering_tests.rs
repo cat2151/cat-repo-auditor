@@ -175,3 +175,41 @@ fn build_tasks_display_spinner_wraps_after_full_cycle() {
     let b = build_tasks_display(&tasks, (SPINNER_FRAMES.len() as u64) * SPINNER_FRAME_MS);
     assert_eq!(a, b);
 }
+
+#[test]
+fn draw_ui_shows_workflow_repo_exist_overlay() {
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.open_workflow_repo_exist(vec![
+        crate::github_local::WorkflowRepoExistCheck {
+            workflow_file: String::from("call-a.yml"),
+            installed_repos: vec![String::from("repo-a")],
+            missing_repos: vec![String::from("repo-b"), String::from("repo-c")],
+        },
+        crate::github_local::WorkflowRepoExistCheck {
+            workflow_file: String::from("call-b.yml"),
+            installed_repos: vec![],
+            missing_repos: vec![String::from("repo-a")],
+        },
+    ]);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let area = terminal.backend().buffer().area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    let rendered = rendered.join("\n");
+
+    assert!(rendered.contains("workflow repo exist check"));
+    assert!(rendered.contains("call-a.yml"));
+    assert!(rendered.contains("repo-a"));
+    assert!(rendered.contains("repo-b"));
+    assert!(rendered.contains("repo-c"));
+}

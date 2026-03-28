@@ -426,3 +426,48 @@ fn set_log_lines_caps_history() {
     assert_eq!(app.log_lines.first().unwrap(), "line100");
     assert_eq!(app.log_lines.last().unwrap(), "line2099");
 }
+
+#[test]
+fn workflow_repo_exist_open_and_select() {
+    let mut app = App::new(make_config());
+    let items = vec![
+        crate::github_local::WorkflowRepoExistCheck {
+            workflow_file: String::from("call-a.yml"),
+            installed_repos: vec![String::from("repo-a")],
+            missing_repos: vec![String::from("repo-b")],
+        },
+        crate::github_local::WorkflowRepoExistCheck {
+            workflow_file: String::from("call-b.yml"),
+            installed_repos: vec![String::from("repo-b")],
+            missing_repos: vec![String::from("repo-a")],
+        },
+    ];
+
+    app.open_workflow_repo_exist(items);
+    app.workflow_repo_exist_move_down(1);
+
+    assert!(app.show_workflow_repo_exist);
+    assert_eq!(
+        app.selected_workflow_repo_exist().unwrap().workflow_file,
+        "call-b.yml"
+    );
+}
+
+#[test]
+fn adjust_workflow_repo_exist_scroll_tracks_selection() {
+    let mut app = App::new(make_config());
+    app.open_workflow_repo_exist(
+        (0..4)
+            .map(|i| crate::github_local::WorkflowRepoExistCheck {
+                workflow_file: format!("call-{i}.yml"),
+                installed_repos: vec![],
+                missing_repos: vec![],
+            })
+            .collect(),
+    );
+
+    app.workflow_repo_exist_move_down(3);
+    app.adjust_workflow_repo_exist_scroll(2);
+
+    assert_eq!(app.workflow_repo_exist_scroll, 2);
+}
