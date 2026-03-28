@@ -1,4 +1,5 @@
 use cat_self_update_lib::{check_remote_commit, self_update as launch_self_update};
+use std::sync::OnceLock;
 
 pub(crate) const REPO_OWNER: &str = "cat2151";
 pub(crate) const REPO_NAME: &str = "cat-repo-auditor";
@@ -17,12 +18,18 @@ pub(crate) fn install_cmd() -> String {
     format!("cargo install --force --git {}", git_url())
 }
 
-pub(crate) fn owner_repo() -> String {
-    format!("{REPO_OWNER}/{REPO_NAME}")
+pub(crate) fn owner_repo() -> &'static str {
+    static OWNER_REPO: OnceLock<String> = OnceLock::new();
+    OWNER_REPO
+        .get_or_init(|| format!("{REPO_OWNER}/{REPO_NAME}"))
+        .as_str()
 }
 
-fn git_url() -> String {
-    format!("https://github.com/{}", owner_repo())
+fn git_url() -> &'static str {
+    static GIT_URL: OnceLock<String> = OnceLock::new();
+    GIT_URL
+        .get_or_init(|| format!("https://github.com/{}", owner_repo()))
+        .as_str()
 }
 
 /// Pure decision function: returns true if `remote_hash` differs from `build_hash`
@@ -53,7 +60,7 @@ pub fn check_self_update() -> Option<String> {
     let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_hash).ok()?;
 
     if is_update_available(&result.embedded_hash, &result.remote_hash) {
-        Some(owner_repo())
+        Some(owner_repo().to_string())
     } else {
         None
     }
