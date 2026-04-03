@@ -37,8 +37,8 @@ catrepo hash
 
 - 使い方
   - config
-    - 初回起動時に、config.html が local config dirに生成され、そのfullpathが表示されます。
-      - それをヒントにして、config.htmlを自力で編集してください。
+    - 初回起動時に、config.toml が local config dirに生成され、そのfullpathが表示されます。
+      - それをヒントにして、config.tomlを自力で編集してください。
       - 編集しないと動きません。
   - help
     - 起動したら、`?` キーを押すとhelpが出ます。
