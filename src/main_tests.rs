@@ -6,6 +6,38 @@ use crate::main_launch::{
     x_not_run_feedback_no_cargo_install,
 };
 
+fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
+    crate::github::RepoInfo {
+        name: name.to_string(),
+        full_name: format!("owner/{name}"),
+        updated_at: String::from("2024-01-01"),
+        updated_at_raw: String::from("2024-01-01T00:00:00Z"),
+        open_issues: 0,
+        open_prs: 0,
+        is_private: false,
+        local_status: crate::github::LocalStatus::Clean,
+        has_local_git: true,
+        staging_files: vec![],
+        issues: vec![],
+        prs: vec![],
+        readme_ja: None,
+        readme_ja_checked_at: String::new(),
+        readme_ja_badge: None,
+        readme_ja_badge_checked_at: String::new(),
+        pages: None,
+        pages_checked_at: String::new(),
+        deepwiki: None,
+        deepwiki_checked_at: String::new(),
+        cargo_install: None,
+        cargo_checked_at: String::new(),
+        cargo_remote_hash: String::new(),
+        cargo_remote_hash_checked_at: String::new(),
+        cargo_installed_hash: String::new(),
+        wf_workflows: None,
+        wf_checked_at: String::new(),
+    }
+}
+
 #[test]
 fn parse_subcommand_recognizes_hash() {
     let args = vec!["catrepo".to_string(), "hash".to_string()];
@@ -125,4 +157,26 @@ fn launch_cargo_app_for_repo_with_skips_when_repo_has_no_cargo_install() {
     assert_eq!(feedback.transient_msg, X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP);
     assert_eq!(feedback.log_msg, X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP);
     assert!(!feedback.launched);
+}
+
+#[test]
+fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
+    let mut repo = make_poll_repo("repo");
+
+    let matched_remote = apply_cargo_hash_poll_result(
+        &mut repo,
+        Some((
+            false,
+            String::from("installed123"),
+            String::from("local456"),
+            String::from("installed123"),
+        )),
+    );
+
+    assert!(matched_remote);
+    assert_eq!(repo.cargo_install, Some(false));
+    assert_eq!(repo.cargo_checked_at, "local456");
+    assert_eq!(repo.cargo_remote_hash, "installed123");
+    assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-01T00:00:00Z");
+    assert_eq!(repo.cargo_installed_hash, "installed123");
 }
