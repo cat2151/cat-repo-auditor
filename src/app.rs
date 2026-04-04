@@ -386,7 +386,8 @@ impl App {
             .cargo_hash_polls
             .iter()
             .filter(|poll| {
-                now.duration_since(poll.started_at).unwrap_or(Duration::ZERO)
+                now.duration_since(poll.started_at)
+                    .unwrap_or(Duration::ZERO)
                     >= CARGO_HASH_POLL_TIMEOUT
             })
             .map(|poll| poll.repo_name.clone())

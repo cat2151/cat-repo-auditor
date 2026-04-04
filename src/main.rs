@@ -21,11 +21,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{
-    io,
-    sync::mpsc,
-    time::SystemTime,
-};
+use std::{io, sync::mpsc, time::SystemTime};
 
 use crate::{
     app::{App, READY_MSG},
@@ -99,16 +95,15 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
             CargoHashPollEvent::Checked { name, result } => {
                 let now = SystemTime::now();
                 let mut repo_full_name = None;
-                let matched_remote = if let Some(repo) =
-                    app.repos.iter_mut().find(|repo| repo.name == name)
-                {
-                    repo_full_name = Some(repo.full_name.clone());
-                    let matched_remote = apply_cargo_hash_poll_result(repo, result);
-                    persist_repo_cargo_state(repo);
-                    matched_remote
-                } else {
-                    false
-                };
+                let matched_remote =
+                    if let Some(repo) = app.repos.iter_mut().find(|repo| repo.name == name) {
+                        repo_full_name = Some(repo.full_name.clone());
+                        let matched_remote = apply_cargo_hash_poll_result(repo, result);
+                        persist_repo_cargo_state(repo);
+                        matched_remote
+                    } else {
+                        false
+                    };
 
                 if matched_remote {
                     app.stop_cargo_hash_polling(&name);
@@ -135,10 +130,7 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
     }
 }
 
-fn start_due_cargo_hash_polls(
-    app: &mut App,
-    tx: &mpsc::Sender<CargoHashPollEvent>,
-) {
+fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEvent>) {
     let now = SystemTime::now();
     for repo_name in app.expire_cargo_hash_polls_at(now) {
         if let Some(repo_full_name) = app

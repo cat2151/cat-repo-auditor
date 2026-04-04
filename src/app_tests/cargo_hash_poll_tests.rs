@@ -25,11 +25,10 @@ fn finish_cargo_hash_poll_attempt_reschedules_until_timeout() {
     app.start_cargo_hash_polling_at("repo", now);
     app.mark_cargo_hash_poll_in_flight("repo");
 
-    assert!(!app.finish_cargo_hash_poll_attempt_at(
-        "repo",
-        now + Duration::from_secs(90)
-    ));
-    assert!(app.due_cargo_hash_polls_at(now + Duration::from_secs(149)).is_empty());
+    assert!(!app.finish_cargo_hash_poll_attempt_at("repo", now + Duration::from_secs(90)));
+    assert!(app
+        .due_cargo_hash_polls_at(now + Duration::from_secs(149))
+        .is_empty());
     assert_eq!(
         app.due_cargo_hash_polls_at(now + Duration::from_secs(150)),
         vec![String::from("repo")]
