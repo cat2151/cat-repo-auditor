@@ -2,15 +2,25 @@ use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::github_local::WorkflowRepoExistCheck;
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 #[path = "app_search.rs"]
 mod app_search;
 
 const MAX_LOG_LINES: usize = 2_000;
+pub(crate) const CARGO_HASH_POLL_INTERVAL: Duration = Duration::from_secs(60);
+pub(crate) const CARGO_HASH_POLL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub const READY_MSG: &str =
     "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:workflow  g:lazygit  Shift+L:log  /:search";
+
+#[derive(Debug, Clone)]
+pub(crate) struct CargoHashPoll {
+    pub repo_name: String,
+    pub started_at: SystemTime,
+    pub next_check_at: SystemTime,
+    pub in_flight: bool,
+}
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -35,6 +45,7 @@ pub struct App {
     pub checking_repo: String,
     /// Active background tasks: (tag, cur, total)
     pub bg_tasks: Vec<(&'static str, usize, usize)>,
+    pub cargo_hash_polls: Vec<CargoHashPoll>,
     pub show_help: bool,
     pub show_workflow_repo_exist: bool,
     pub workflow_repo_exist_items: Vec<WorkflowRepoExistCheck>,
@@ -78,6 +89,7 @@ impl App {
             num_prefix: 0,
             checking_repo: String::new(),
             bg_tasks: vec![],
+            cargo_hash_polls: vec![],
             show_help: false,
             show_workflow_repo_exist: false,
             workflow_repo_exist_items: vec![],
@@ -293,6 +305,100 @@ impl App {
 
     pub fn toggle_log(&mut self) {
         self.show_log = !self.show_log;
+    }
+
+    pub(crate) fn start_cargo_hash_polling(&mut self, repo_name: &str) {
+        self.start_cargo_hash_polling_at(repo_name, SystemTime::now());
+    }
+
+    pub(crate) fn start_cargo_hash_polling_at(&mut self, repo_name: &str, now: SystemTime) {
+        let next_check_at = now + CARGO_HASH_POLL_INTERVAL;
+        if let Some(poll) = self
+            .cargo_hash_polls
+            .iter_mut()
+            .find(|poll| poll.repo_name == repo_name)
+        {
+            poll.started_at = now;
+            poll.next_check_at = next_check_at;
+            poll.in_flight = false;
+        } else {
+            self.cargo_hash_polls.push(CargoHashPoll {
+                repo_name: repo_name.to_string(),
+                started_at: now,
+                next_check_at,
+                in_flight: false,
+            });
+        }
+    }
+
+    pub(crate) fn due_cargo_hash_polls_at(&self, now: SystemTime) -> Vec<String> {
+        self.cargo_hash_polls
+            .iter()
+            .filter(|poll| !poll.in_flight && poll.next_check_at <= now)
+            .map(|poll| poll.repo_name.clone())
+            .collect()
+    }
+
+    pub(crate) fn mark_cargo_hash_poll_in_flight(&mut self, repo_name: &str) {
+        if let Some(poll) = self
+            .cargo_hash_polls
+            .iter_mut()
+            .find(|poll| poll.repo_name == repo_name)
+        {
+            poll.in_flight = true;
+        }
+    }
+
+    pub(crate) fn stop_cargo_hash_polling(&mut self, repo_name: &str) {
+        self.cargo_hash_polls
+            .retain(|poll| poll.repo_name != repo_name);
+    }
+
+    pub(crate) fn finish_cargo_hash_poll_attempt_at(
+        &mut self,
+        repo_name: &str,
+        now: SystemTime,
+    ) -> bool {
+        if let Some(idx) = self
+            .cargo_hash_polls
+            .iter()
+            .position(|poll| poll.repo_name == repo_name)
+        {
+            if now
+                .duration_since(self.cargo_hash_polls[idx].started_at)
+                .unwrap_or(Duration::ZERO)
+                >= CARGO_HASH_POLL_TIMEOUT
+            {
+                self.cargo_hash_polls.remove(idx);
+                true
+            } else {
+                self.cargo_hash_polls[idx].in_flight = false;
+                self.cargo_hash_polls[idx].next_check_at = now + CARGO_HASH_POLL_INTERVAL;
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn expire_cargo_hash_polls_at(&mut self, now: SystemTime) -> Vec<String> {
+        let expired: Vec<String> = self
+            .cargo_hash_polls
+            .iter()
+            .filter(|poll| {
+                now.duration_since(poll.started_at).unwrap_or(Duration::ZERO)
+                    >= CARGO_HASH_POLL_TIMEOUT
+            })
+            .map(|poll| poll.repo_name.clone())
+            .collect();
+        for repo_name in &expired {
+            self.stop_cargo_hash_polling(repo_name);
+        }
+        expired
+    }
+
+    pub(crate) fn active_cargo_hash_poll_count(&self) -> usize {
+        self.cargo_hash_polls.len()
     }
 
     fn trim_log_lines(lines: &mut Vec<String>) {

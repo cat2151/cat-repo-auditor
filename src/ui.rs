@@ -141,7 +141,15 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
         .unwrap_or(0);
-    let tasks_display = build_tasks_display(app.bg_tasks.iter(), unix_millis);
+    let cargo_poll_tasks = if app.active_cargo_hash_poll_count() > 0 {
+        vec![("cgo", app.active_cargo_hash_poll_count(), 0)]
+    } else {
+        vec![]
+    };
+    let tasks_display = build_tasks_display(
+        app.bg_tasks.iter().chain(cargo_poll_tasks.iter()),
+        unix_millis,
+    );
 
     let rl_text = if let Some(rl) = &app.rate_limit {
         format!(

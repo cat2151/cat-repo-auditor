@@ -1,11 +1,22 @@
 use super::*;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn unique_history_test_path(prefix: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "{prefix}_{}_{}_{}.json",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("名前なし"),
+        nanos
+    ))
+}
 
 #[test]
 fn save_and_load_roundtrip() {
-    let tmp = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_history_test_{}.json",
-        std::process::id()
-    ));
+    let tmp = unique_history_test_path("cat_repo_auditor_history_test");
     let path_str = tmp.to_str().unwrap();
 
     let mut history = History::default();
@@ -24,10 +35,7 @@ fn save_and_load_roundtrip() {
 
 #[test]
 fn load_nonexistent_file_returns_error() {
-    let path = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_no_such_file_{}.json",
-        std::process::id()
-    ));
+    let path = unique_history_test_path("cat_repo_auditor_no_such_file");
     // Ensure the file does not exist before testing
     std::fs::remove_file(&path).ok();
     let result = History::load(path.to_str().unwrap());
@@ -38,10 +46,7 @@ fn load_nonexistent_file_returns_error() {
 fn save_and_load_with_rate_limit() {
     use crate::github::RateLimit;
 
-    let tmp = std::env::temp_dir().join(format!(
-        "cat_repo_auditor_rl_test_{}.json",
-        std::process::id()
-    ));
+    let tmp = unique_history_test_path("cat_repo_auditor_rl_test");
     let path_str = tmp.to_str().unwrap();
 
     let history = History {
@@ -69,4 +74,22 @@ fn default_history_has_empty_fields() {
     assert!(history.etags.is_empty());
     assert!(history.repos.is_empty());
     assert!(history.rate_limit.is_none());
+}
+
+#[test]
+fn update_creates_file_when_missing() {
+    let tmp = unique_history_test_path("cat_repo_auditor_history_update_missing");
+    std::fs::remove_file(&tmp).ok();
+    let path_str = tmp.to_str().unwrap();
+
+    History::update(path_str, |history| {
+        history
+            .etags
+            .insert(String::from("owner"), String::from("etag456"));
+    })
+    .unwrap();
+
+    let loaded = History::load(path_str).unwrap();
+    assert_eq!(loaded.etags.get("owner").unwrap(), "etag456");
+    std::fs::remove_file(&tmp).ok();
 }

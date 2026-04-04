@@ -361,6 +361,9 @@ fn launch_selected_repo(
             );
             if feedback.launched {
                 terminal.clear().ok();
+                if cargo_install == Some(false) {
+                    app.start_cargo_hash_polling(&repo_name);
+                }
             }
             app.transient_msg = Some(feedback.transient_msg);
             persist_log_line(app, make_x_log_line(&repo_full_name, &feedback.log_msg));

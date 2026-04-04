@@ -172,6 +172,13 @@ fn build_tasks_display_includes_spinner_and_progress() {
 }
 
 #[test]
+fn build_tasks_display_includes_cargo_hash_poll_count() {
+    let tasks = vec![("cgo", 2, 0)];
+    let s = build_tasks_display(&tasks, 0);
+    assert_eq!(s, "  ⠋ cgo2");
+}
+
+#[test]
 fn build_tasks_display_spinner_changes_by_250ms() {
     let tasks = vec![("scan", 1, 2)];
     let a = build_tasks_display(&tasks, 0);

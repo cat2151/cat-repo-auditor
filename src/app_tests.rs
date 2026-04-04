@@ -10,6 +10,8 @@ mod detail_pane_tests;
 mod log_and_workflow_tests;
 #[path = "app_tests/num_prefix_tests.rs"]
 mod num_prefix_tests;
+#[path = "app_tests/cargo_hash_poll_tests.rs"]
+mod cargo_hash_poll_tests;
 #[path = "app_tests/repo_navigation_tests.rs"]
 mod repo_navigation_tests;
 #[path = "app_tests/search_tests.rs"]
