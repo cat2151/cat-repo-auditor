@@ -359,21 +359,21 @@ impl App {
         repo_name: &str,
         now: SystemTime,
     ) -> bool {
-        if let Some(poll) = self
+        if let Some(idx) = self
             .cargo_hash_polls
-            .iter_mut()
-            .find(|poll| poll.repo_name == repo_name)
+            .iter()
+            .position(|poll| poll.repo_name == repo_name)
         {
             if now
-                .duration_since(poll.started_at)
+                .duration_since(self.cargo_hash_polls[idx].started_at)
                 .unwrap_or(Duration::ZERO)
                 >= CARGO_HASH_POLL_TIMEOUT
             {
-                self.stop_cargo_hash_polling(repo_name);
+                self.cargo_hash_polls.remove(idx);
                 true
             } else {
-                poll.in_flight = false;
-                poll.next_check_at = now + CARGO_HASH_POLL_INTERVAL;
+                self.cargo_hash_polls[idx].in_flight = false;
+                self.cargo_hash_polls[idx].next_check_at = now + CARGO_HASH_POLL_INTERVAL;
                 false
             }
         } else {
@@ -386,11 +386,8 @@ impl App {
             .cargo_hash_polls
             .iter()
             .filter(|poll| {
-                !poll.in_flight
-                    && now
-                        .duration_since(poll.started_at)
-                        .unwrap_or(Duration::ZERO)
-                        >= CARGO_HASH_POLL_TIMEOUT
+                now.duration_since(poll.started_at).unwrap_or(Duration::ZERO)
+                    >= CARGO_HASH_POLL_TIMEOUT
             })
             .map(|poll| poll.repo_name.clone())
             .collect();

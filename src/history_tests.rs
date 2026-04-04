@@ -70,3 +70,24 @@ fn default_history_has_empty_fields() {
     assert!(history.repos.is_empty());
     assert!(history.rate_limit.is_none());
 }
+
+#[test]
+fn update_creates_file_when_missing() {
+    let tmp = std::env::temp_dir().join(format!(
+        "cat_repo_auditor_history_update_missing_{}.json",
+        std::process::id()
+    ));
+    std::fs::remove_file(&tmp).ok();
+    let path_str = tmp.to_str().unwrap();
+
+    History::update(path_str, |history| {
+        history
+            .etags
+            .insert(String::from("owner"), String::from("etag456"));
+    })
+    .unwrap();
+
+    let loaded = History::load(path_str).unwrap();
+    assert_eq!(loaded.etags.get("owner").unwrap(), "etag456");
+    std::fs::remove_file(&tmp).ok();
+}

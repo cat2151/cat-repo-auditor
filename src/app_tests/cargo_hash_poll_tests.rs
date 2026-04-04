@@ -50,6 +50,20 @@ fn expire_cargo_hash_polls_removes_timed_out_repo() {
 }
 
 #[test]
+fn expire_cargo_hash_polls_removes_timed_out_repo_even_if_in_flight() {
+    let mut app = App::new(make_config());
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000);
+
+    app.start_cargo_hash_polling_at("repo", now);
+    app.mark_cargo_hash_poll_in_flight("repo");
+
+    let expired = app.expire_cargo_hash_polls_at(now + CARGO_HASH_POLL_TIMEOUT);
+
+    assert_eq!(expired, vec![String::from("repo")]);
+    assert_eq!(app.active_cargo_hash_poll_count(), 0);
+}
+
+#[test]
 fn stop_cargo_hash_polling_removes_existing_entry() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo")];

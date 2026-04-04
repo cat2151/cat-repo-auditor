@@ -81,15 +81,16 @@ fn apply_cargo_hash_poll_result(
 fn persist_repo_cargo_state(repo: &RepoInfo) {
     let path = Config::history_path();
     let path_str = path.to_string_lossy();
-    let mut history = History::load(&path_str).unwrap_or_default();
-    if let Some(history_repo) = history.repos.iter_mut().find(|r| r.name == repo.name) {
-        history_repo.cargo_install = repo.cargo_install;
-        history_repo.cargo_checked_at = repo.cargo_checked_at.clone();
-        history_repo.cargo_remote_hash = repo.cargo_remote_hash.clone();
-        history_repo.cargo_remote_hash_checked_at = repo.cargo_remote_hash_checked_at.clone();
-        history_repo.cargo_installed_hash = repo.cargo_installed_hash.clone();
-        history.save(&path_str).ok();
-    }
+    History::update(&path_str, |history| {
+        if let Some(history_repo) = history.repos.iter_mut().find(|r| r.name == repo.name) {
+            history_repo.cargo_install = repo.cargo_install;
+            history_repo.cargo_checked_at = repo.cargo_checked_at.clone();
+            history_repo.cargo_remote_hash = repo.cargo_remote_hash.clone();
+            history_repo.cargo_remote_hash_checked_at = repo.cargo_remote_hash_checked_at.clone();
+            history_repo.cargo_installed_hash = repo.cargo_installed_hash.clone();
+        }
+    })
+    .ok();
 }
 
 fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPollEvent>) {
