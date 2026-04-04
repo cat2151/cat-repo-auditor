@@ -39,14 +39,13 @@ fn write_atomic(path: &Path, content: &str) -> io::Result<()> {
 
     match fs::rename(&tmp_path, path) {
         Ok(()) => Ok(()),
-        Err(_) if path.exists() => {
-            fs::remove_file(path)?;
-            fs::rename(&tmp_path, path).inspect_err(|_rename_err| {
-                let _ = fs::remove_file(&tmp_path);
-            })
-        }
         Err(err) => {
-            let _ = fs::remove_file(&tmp_path);
+            if let Err(remove_err) = fs::remove_file(&tmp_path) {
+                eprintln!(
+                    "history temp file cleanup failed: path={} error={remove_err}",
+                    tmp_path.display()
+                );
+            }
             Err(err)
         }
     }
