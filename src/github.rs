@@ -381,6 +381,15 @@ fn apply_cargo_result_to_history(history: &mut History, result: &CargoRepoResult
     }
 }
 
+/// Spawn cargo check workers that run independently from auto-pull / existence checks.
+///
+/// Each completed repo sends a `FetchProgress::CargoUpdate` immediately, so the UI can reflect
+/// cargo state without waiting for README / Pages / DeepWiki / workflow checks.
+/// When auto update is enabled, this worker also performs the recheck-and-spawn flow for stale
+/// cargo installs as soon as each cargo result is available.
+///
+/// The returned join handle yields all completed cargo results so the caller can merge them back
+/// into in-memory history before saving the final history snapshot.
 fn spawn_background_cargo_checks(
     repos: &[RepoInfo],
     local_heads: &std::collections::HashMap<String, String>,

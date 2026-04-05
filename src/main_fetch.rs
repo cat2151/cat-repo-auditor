@@ -23,18 +23,27 @@ fn apply_cargo_update(
     repo.cargo_installed_hash = cargo_installed_hash;
 }
 
+fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
+    repo.cargo_install.is_some()
+        || !repo.cargo_checked_at.is_empty()
+        || !repo.cargo_remote_hash.is_empty()
+        || !repo.cargo_remote_hash_checked_at.is_empty()
+        || !repo.cargo_installed_hash.is_empty()
+}
+
+/// Merge cargo fields that were updated live after the previous `Done`.
+///
+/// `fetch_repos_with_progress()` can now send an initial `Done` after phase 1 and a second `Done`
+/// after auto-pull refresh. If cargo checks finished in between those two snapshots, the incoming
+/// refreshed repos would otherwise overwrite newer cargo state with older history-backed values.
+/// This merge preserves only the live cargo fields for repos that already have such state.
 fn merge_live_repo_state(
     existing_repos: &[crate::github::RepoInfo],
     incoming_repos: &mut [crate::github::RepoInfo],
 ) {
     for incoming in incoming_repos {
         if let Some(existing) = existing_repos.iter().find(|repo| repo.name == incoming.name) {
-            if existing.cargo_install.is_some()
-                || !existing.cargo_checked_at.is_empty()
-                || !existing.cargo_remote_hash.is_empty()
-                || !existing.cargo_remote_hash_checked_at.is_empty()
-                || !existing.cargo_installed_hash.is_empty()
-            {
+            if has_live_cargo_state(existing) {
                 incoming.cargo_install = existing.cargo_install;
                 incoming.cargo_checked_at = existing.cargo_checked_at.clone();
                 incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
