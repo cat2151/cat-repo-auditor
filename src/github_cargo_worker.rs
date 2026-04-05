@@ -11,18 +11,36 @@ use super::{phase3_worker_count, should_spawn_auto_update_after_recheck, FetchPr
 /// `needs_local` / `needs_remote` は実行判定には使わず、ログで
 /// 「何が最新か / 何が古いか」を説明するために保持している。
 #[derive(Clone, Copy)]
-pub(crate) struct CargoCheckStatus {
-    pub(crate) needs_local: bool,
-    pub(crate) needs_remote: bool,
+pub(super) struct CargoCheckStatus {
+    needs_local: bool,
+    needs_remote: bool,
 }
 
 impl CargoCheckStatus {
-    pub(crate) fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
+    pub(super) fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
         Self {
             needs_local: repo.cargo_checked_at != local_head,
             needs_remote: repo.cargo_remote_hash_checked_at != repo.updated_at_raw
                 || repo.cargo_remote_hash.is_empty(),
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn new(needs_local: bool, needs_remote: bool) -> Self {
+        Self {
+            needs_local,
+            needs_remote,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn needs_local(self) -> bool {
+        self.needs_local
+    }
+
+    #[cfg(test)]
+    pub(super) fn needs_remote(self) -> bool {
+        self.needs_remote
     }
 }
 
@@ -64,7 +82,7 @@ fn format_cargo_check_status_reason(status: CargoCheckStatus) -> &'static str {
     }
 }
 
-pub(crate) fn format_cargo_check_status_log(
+pub(super) fn format_cargo_check_status_log(
     repo: &RepoInfo,
     local_head: &str,
     status: CargoCheckStatus,
@@ -83,7 +101,7 @@ pub(crate) fn format_cargo_check_status_log(
     )
 }
 
-pub(crate) fn resolve_cargo_check_fields(
+pub(super) fn resolve_cargo_check_fields(
     repo: &RepoInfo,
     updated_at_raw: &str,
     cargo_result: Option<(bool, String, String, String)>,
@@ -102,7 +120,7 @@ pub(crate) fn resolve_cargo_check_fields(
     }
 }
 
-pub(crate) fn cargo_check_order(repos: &[RepoInfo]) -> Vec<String> {
+pub(super) fn cargo_check_order(repos: &[RepoInfo]) -> Vec<String> {
     let mut ordered: Vec<&RepoInfo> = repos.iter().collect();
     ordered.sort_by_key(cargo_check_priority);
     ordered.into_iter().map(|repo| repo.name.clone()).collect()

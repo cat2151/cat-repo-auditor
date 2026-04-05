@@ -15,10 +15,6 @@ mod cargo_worker;
 mod types;
 
 use cargo_worker::{apply_cargo_result_to_history, spawn_background_cargo_checks};
-#[cfg(test)]
-pub(crate) use cargo_worker::{
-    cargo_check_order, format_cargo_check_status_log, resolve_cargo_check_fields, CargoCheckStatus,
-};
 
 pub use types::{FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo};
 

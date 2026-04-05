@@ -1,3 +1,6 @@
+use super::cargo_worker::{
+    cargo_check_order, format_cargo_check_status_log, resolve_cargo_check_fields, CargoCheckStatus,
+};
 use super::*;
 
 fn make_repo_for_cargo_log() -> RepoInfo {
@@ -95,14 +98,7 @@ fn should_auto_pull_status_matches_issue_rules() {
 fn cargo_check_status_log_explains_run_when_cache_is_current() {
     let repo = make_repo_for_cargo_log();
 
-    let log = format_cargo_check_status_log(
-        &repo,
-        "local123",
-        CargoCheckStatus {
-            needs_local: false,
-            needs_remote: false,
-        },
-    );
+    let log = format_cargo_check_status_log(&repo, "local123", CargoCheckStatus::new(false, false));
 
     assert!(log.contains(
         "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
@@ -120,14 +116,7 @@ fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
     let mut repo = make_repo_for_cargo_log();
     repo.cargo_remote_hash.clear();
 
-    let log = format_cargo_check_status_log(
-        &repo,
-        "local123",
-        CargoCheckStatus {
-            needs_local: false,
-            needs_remote: true,
-        },
-    );
+    let log = format_cargo_check_status_log(&repo, "local123", CargoCheckStatus::new(false, true));
 
     assert!(log.contains(
         "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
@@ -145,10 +134,10 @@ fn cargo_check_status_matches_run_state() {
     let run_with_current_cache = CargoCheckStatus::for_repo(&repo, "local123");
     let run = CargoCheckStatus::for_repo(&repo, "different-local-head");
 
-    assert!(!run_with_current_cache.needs_local);
-    assert!(!run_with_current_cache.needs_remote);
-    assert!(run.needs_local);
-    assert_eq!(run.needs_remote, run_with_current_cache.needs_remote);
+    assert!(!run_with_current_cache.needs_local());
+    assert!(!run_with_current_cache.needs_remote());
+    assert!(run.needs_local());
+    assert_eq!(run.needs_remote(), run_with_current_cache.needs_remote());
 }
 
 #[test]
@@ -158,8 +147,8 @@ fn cargo_check_status_log_explains_run_when_local_head_is_unavailable() {
 
     let log = format_cargo_check_status_log(&repo, "", status);
 
-    assert!(status.needs_local);
-    assert!(!status.needs_remote);
+    assert!(status.needs_local());
+    assert!(!status.needs_remote());
     assert!(log.contains(
         "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
     ));
