@@ -10,7 +10,14 @@ pub(crate) fn launch_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> R
         crossterm::terminal::LeaveAlternateScreen,
         crossterm::event::DisableMouseCapture,
     )?;
-    let status = Command::new(bin).args(args).current_dir(run_dir).status();
+    crossterm::execute!(std::io::stdout(), crossterm::cursor::MoveTo(0, 0))?;
+    let status = Command::new(bin)
+        .args(args)
+        .current_dir(run_dir)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status();
     let _ = crossterm::terminal::enable_raw_mode();
     let _ = crossterm::execute!(
         std::io::stdout(),

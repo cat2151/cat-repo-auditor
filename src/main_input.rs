@@ -1,6 +1,9 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{
+    backend::{Backend, CrosstermBackend},
+    Terminal,
+};
 use std::{
     io::{self, Write},
     sync::mpsc,
@@ -14,8 +17,10 @@ use crate::{
     github_local::{collect_workflow_repo_exist_checks, launch_lazygit, open_url},
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, start_fetch},
-    main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install},
-    ui::{Focus, SearchState},
+    main_launch::{
+        launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback,
+    },
+    ui::{draw_ui, Focus, SearchState},
 };
 
 /// Tracks keyboard input state to implement 50ms key debouncing.
@@ -341,6 +346,24 @@ fn launch_selected_repo(
     app: &mut App,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<()> {
+    launch_selected_repo_with(app, terminal, launch_cargo_app_for_repo, persist_log_line)
+}
+
+/// Launches the selected cargo-installed app and restores the TUI immediately after it exits.
+///
+/// `launch_repo` must execute the repo app and return launch feedback for the current selection.
+/// `persist_log` must record the generated x-key log line in the same way as the production path.
+fn launch_selected_repo_with<B, Launch, Persist>(
+    app: &mut App,
+    terminal: &mut Terminal<B>,
+    launch_repo: Launch,
+    persist_log: Persist,
+) -> Result<()>
+where
+    B: Backend,
+    Launch: FnOnce(&str, &str, Option<bool>, &str) -> LaunchFeedback,
+    Persist: Fn(&mut App, String),
+{
     if let Some((repo_full_name, repo_name, cargo_install)) = app.selected_repo().map(|repo| {
         (
             repo.full_name.clone(),
@@ -351,29 +374,44 @@ fn launch_selected_repo(
         if cargo_install.is_none() {
             let (log_line, transient_msg) = x_not_run_feedback_no_cargo_install(&repo_full_name);
             app.transient_msg = Some(transient_msg);
-            persist_log_line(app, log_line);
+            persist_log(app, log_line);
         } else {
-            let feedback = launch_cargo_app_for_repo(
+            let feedback = launch_repo(
                 &app.config.owner,
                 &repo_name,
                 cargo_install,
                 &app.config.resolved_app_run_dir(),
             );
-            if feedback.launched {
-                terminal.clear().ok();
-                if cargo_install == Some(false) {
-                    app.start_cargo_hash_polling(&repo_name);
-                }
+            let LaunchFeedback {
+                transient_msg,
+                log_msg,
+                launched,
+            } = feedback;
+            let needs_cargo_polling = launched && cargo_install == Some(false);
+            app.transient_msg = Some(transient_msg);
+            persist_log(app, make_x_log_line(&repo_full_name, &log_msg));
+            if needs_cargo_polling {
+                app.start_cargo_hash_polling(&repo_name);
             }
-            app.transient_msg = Some(feedback.transient_msg);
-            persist_log_line(app, make_x_log_line(&repo_full_name, &feedback.log_msg));
+            terminal.clear().ok();
+            rerender_terminal(app, terminal)?;
         }
     } else {
         let line = make_x_log_line("-", "not run: no repository selected");
         app.transient_msg = Some(String::from("x: no repository selected"));
-        persist_log_line(app, line);
+        persist_log(app, line);
     }
 
+    Ok(())
+}
+
+/// Re-renders the TUI right after returning from an external command so the terminal is restored
+/// immediately instead of waiting for the next main-loop draw.
+fn rerender_terminal<B: Backend>(app: &mut App, terminal: &mut Terminal<B>) -> Result<()> {
+    terminal.draw(|f| {
+        app.term_height = f.area().height as usize;
+        draw_ui(f, app);
+    })?;
     Ok(())
 }
 
@@ -396,3 +434,7 @@ fn copy_to_clipboard(text: &str) -> io::Result<()> {
         )))
     }
 }
+
+#[cfg(test)]
+#[path = "main_input_tests.rs"]
+mod tests;
