@@ -1,26 +1,38 @@
 # cat-repo-auditor
 
-A TUI application for Windows, written in Rust, that lists and visualizes the remote/local status of GitHub repositories, automating parts of their maintenance for improved efficiency.
+A TUI written in Rust that lists, visualizes, and automates part of the maintenance of GitHub repositories to streamline the process.
 
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cat2151/cat-repo-auditor)
 
-## Current State
+## Status
 
-Generated a Rust version of the TUI. This is for personal use.
+Dogfooding in progress.
 
-### Installation
+### install
 
 ```
 cargo install --force --git https://github.com/cat2151/cat-repo-auditor
 ```
 
-### Running
+### Run
 
 ```
 catrepo
 ```
 
-Displays the commit hash embedded during build:
+### update
+
+```
+catrepo update
+```
+
+If it fails, run the following (same as the install command):
+
+```
+cargo install --force --git https://github.com/cat2151/cat-repo-auditor
+```
+
+### Display the commit hash embedded at build time:
 
 ```
 catrepo hash
@@ -28,47 +40,47 @@ catrepo hash
 
 ### Usage
 
-- This is for personal use and not intended for others. The following are also my personal notes.
+- This is for personal use and not intended for others. The following are also personal notes.
 
 - Motivation for Creation
-  - My personal open-source repositories have increased. Maintaining them takes cognitive load and effort.
-  - Hence, a TUI. I'll create my own TUI to simplify maintenance.
-  - Small-scale TUIs can be easily made with the free version of Claude's chat, so I'll use that approach.
+  - My personal OSS repositories have increased. Maintaining them takes cognitive load and effort.
+  - Hence, a TUI. I'm building my own TUI to simplify maintenance.
+  - For small-scale TUIs, it's easy to create them using Claude's free chat version, so I'll go with that.
 
-- Usage
-  - Config
-    - Upon first launch, `config.toml` will be generated in the local config directory, and its full path will be displayed.
+- How to Use
+  - config
+    - Upon first launch, `config.toml` will be generated in your local config directory, and its full path will be displayed.
       - Use that as a hint to manually edit `config.toml`.
-      - It will not function without editing.
-  - Help
+      - It will not work without editing.
+  - help
     - Once launched, press the `?` key to display help.
 
-- Proof of Concept (PoC)
-  - The overall purpose of this repository is as a PoC.
-  - This is to demonstrate that such a small-scale TUI can be created using the free version of Claude's chat.
-  - Therefore, it's meant to encourage others to create their own tools!
+- PoC
+  - Regarding the overall usage of this repository, it's a PoC (Proof of Concept).
+  - This is to demonstrate that small-scale TUIs like this can be created using Claude's free chat version.
+  - So, it's meant to encourage everyone to create one for themselves!
 
-## The following is old content. It's a separate project, moved to `python/`. I plan to rewrite it later.
+## The following is old. It's a separate entity. Moved to python/. Will rewrite later.
 
 ## Overview
 
-Retrieves the 20 most recent repositories of a user authenticated with the `gh` command (GitHub CLI), and automatically checks the following items for each repository. The results are output to a JSON file, with a color-coded summary displayed in the terminal.
+Retrieves the latest 20 repositories of a user authenticated with the `gh` command (GitHub CLI), and automatically checks the following items for each repository. The results are output to a JSON file, and a colorized summary is displayed in the terminal.
 
 ### Check Items
 
 | Item | Description |
 |------|------|
 | `README.ja.md` | Presence of Japanese README |
-| DeepWiki link | Presence of a DeepWiki link in `README.ja.md` |
-| `google*.html` | Presence of Google Search Console verification file |
-| `AGENTS.md` / `copilot-instructions.md` | Presence of AI agent instruction file |
-| `.github/workflows/*.yml` | Presence of CI/CD workflow |
+| DeepWiki Entry | Link to DeepWiki in `README.ja.md` |
+| `google*.html` | Presence of verification file for Google Search Console |
+| `AGENTS.md` / `copilot-instructions.md` | Presence of instruction files for AI agents |
+| `.github/workflows/*.yml` | Presence of CI/CD workflows |
 | `_config.yml` | Presence of Jekyll configuration file |
 
 ## Requirements
 
-- Python 3.11 or higher (or Python 3.10 or lower + `pip install tomli`)
-- [GitHub CLI](https://cli.github.com/) must be installed and authenticated via `gh auth login`
+- Python 3.11+ (or Python 3.10- + `pip install tomli`)
+- [GitHub CLI](https://cli.github.com/) installed and authenticated with `gh auth login`
 
 ## Installation
 
@@ -79,7 +91,7 @@ cd cat-repo-auditor
 
 No additional packages required (uses only Python 3.11+ standard library).
 
-For Python 3.10 or lower:
+For Python 3.10 or earlier:
 
 ```bash
 pip install tomli
@@ -108,7 +120,7 @@ Options:
 
 ## Example Output
 
-A summary is displayed in Monokai colors in the terminal.
+A summary will be displayed in Monokai colors in the terminal.
 
 ```
 === GitHub Repository Analysis CLI ===
@@ -133,22 +145,22 @@ Authentication: Obtained via gh auth token
 
 The JSON file (`repo_analysis.json`) contains detailed information for each repository.
 
-# github_local_checker.py
+## github_local_checker.py
 
-- A checking tool focused on the local side.
-- Uses the same TOML configuration.
-- When run normally, it performs a dry-run, checking local repositories and printing the results.
+- A check tool centered on the local side
+- Uses the same TOML
+- When run normally, it performs a dry-run check of local repositories and prints the results.
 - When run with `--pull`, it pulls all pullable repositories.
-- Intended for users with many small experimental repositories to easily keep track of them by pulling them all locally.
+- Its purpose is to help users with many small experimental repositories manage them easily by bulk-pulling them locally.
 
 # check_local_workflows.py
 
-- A checking tool focused on the local side.
-- Uses the same TOML configuration.
-- Performs hash checks.
-- Intended for users with many small experimental repositories to easily keep track of them.
+- A check tool centered on the local side
+- Uses the same TOML
+- Performs hash checks
+- Its purpose is to help users with many small experimental repositories manage them easily.
 
 # sync_workflows.py
 
-- Intended for synchronizing workflow files among local repositories to match the majority.
-- A confirmation prompt (y/[N]) is displayed before the final commit and push.
+- Its purpose is to synchronize workflow files across local repositories to match the majority.
+- Before the final commit and push, a confirmation prompt (y/[N]) will be displayed.
