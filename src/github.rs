@@ -212,10 +212,11 @@ fn build_phase3_tasks(
 }
 
 fn phase3_worker_count(total_check: usize) -> usize {
+    debug_assert!(total_check > 0);
     std::thread::available_parallelism()
         .map(std::num::NonZeroUsize::get)
         .unwrap_or(4)
-        .min(total_check.max(1))
+        .min(total_check)
 }
 
 fn run_phase3_repo_task(task: Phase3RepoTask, owner: &str, base_dir: &str) -> Phase3RepoResult {
@@ -451,17 +452,15 @@ pub fn fetch_repos_with_progress(
                     let phase3_result_tx = phase3_result_tx.clone();
                     let owner = owner.clone();
                     let base_dir = config.local_base_dir.clone();
-                    scope.spawn(move || loop {
-                        let task = {
+                    scope.spawn(move || {
+                        while let Some(task) = {
                             let mut work_queue =
                                 work_queue.lock().unwrap_or_else(|e| e.into_inner());
                             work_queue.pop_front()
-                        };
-                        let Some(task) = task else {
-                            break;
-                        };
-                        let result = run_phase3_repo_task(task, &owner, &base_dir);
-                        let _ = phase3_result_tx.send(result);
+                        } {
+                            let result = run_phase3_repo_task(task, &owner, &base_dir);
+                            let _ = phase3_result_tx.send(result);
+                        }
                     });
                 }
                 drop(phase3_result_tx);
