@@ -1,11 +1,6 @@
-use anyhow::Result;
 #[cfg(test)]
 use clap::CommandFactory;
 use clap::{Parser, Subcommand as ClapSubcommand};
-
-use crate::self_update::{install_cmd, owner_repo};
-
-pub(crate) const UPDATE_NOTICE_HEADER: &str = "catrepo update available!";
 
 #[derive(Parser, Debug)]
 #[command(name = "catrepo")]
@@ -32,19 +27,4 @@ pub(crate) fn parse_subcommand(args: &[String]) -> clap::error::Result<Option<Su
 #[cfg(test)]
 pub(crate) fn command() -> clap::Command {
     Cli::command()
-}
-
-pub(crate) fn print_update_notice(repo: Option<&str>) -> Result<()> {
-    if let Some(repo) = repo {
-        println!();
-        println!("{UPDATE_NOTICE_HEADER}");
-        println!("Run:");
-        if repo == owner_repo() {
-            println!("{}", install_cmd());
-        } else {
-            println!("cargo install --force --git https://github.com/{repo}");
-        }
-        println!();
-    }
-    Ok(())
 }

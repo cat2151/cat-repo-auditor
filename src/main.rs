@@ -29,14 +29,14 @@ use crate::{
     github::{FetchProgress, RepoInfo},
     github_local::check_cargo_git_install,
     history::History,
-    main_cli::{parse_subcommand, print_update_notice, Subcommand},
+    main_cli::{parse_subcommand, Subcommand},
     main_fetch::drain_fetch_channel,
     main_helpers::{
         make_log_line, make_startup_log_line, persist_log_line, refresh_log_lines_if_changed,
         start_fetch, STARTUP_LOG_SEPARATOR,
     },
     main_input::{handle_terminal_input, InputState},
-    self_update::{build_commit_hash, check_self_update, run_self_check, run_self_update},
+    self_update::{build_commit_hash, run_self_check, run_self_update},
     ui::draw_ui,
 };
 
@@ -187,14 +187,6 @@ fn main() -> Result<()> {
     let config = Config::load()?;
     let history = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
 
-    let update_rx = {
-        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-        std::thread::spawn(move || {
-            let _ = tx.send(check_self_update());
-        });
-        rx
-    };
-
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(
@@ -230,12 +222,6 @@ fn main() -> Result<()> {
         drain_cargo_hash_poll_channel(&mut app, &cargo_hash_poll_rx);
         start_due_cargo_hash_polls(&mut app, &cargo_hash_poll_tx);
 
-        if app.update_available.is_none() {
-            if let Ok(result) = update_rx.try_recv() {
-                app.update_available = result;
-            }
-        }
-
         terminal.draw(|f| {
             app.term_height = f.area().height as usize;
             draw_ui(f, &mut app);
@@ -254,6 +240,5 @@ fn main() -> Result<()> {
         DisableFocusChange
     )?;
     terminal.show_cursor()?;
-
-    print_update_notice(app.update_available.as_deref())
+    Ok(())
 }
