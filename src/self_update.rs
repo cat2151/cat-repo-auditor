@@ -52,7 +52,7 @@ pub fn run_self_update() -> anyhow::Result<bool> {
 
 pub fn run_self_check() -> anyhow::Result<()> {
     let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_commit_hash())
-        .map_err(|err| anyhow::anyhow!("failed to check for updates: {err}"))?;
+        .map_err(|err| anyhow::anyhow!("failed to compare embedded vs remote commit: {err}"))?;
     println!("{result}");
     Ok(())
 }
