@@ -382,7 +382,6 @@ where
                 cargo_install,
                 &app.config.resolved_app_run_dir(),
             );
-            let should_rerender_terminal = true;
             let LaunchFeedback {
                 transient_msg,
                 log_msg,
@@ -394,10 +393,8 @@ where
             if should_start_cargo_hash_polling {
                 app.start_cargo_hash_polling(&repo_name);
             }
-            if should_rerender_terminal {
-                terminal.clear().ok();
-                rerender_terminal(app, terminal)?;
-            }
+            terminal.clear().ok();
+            rerender_terminal(app, terminal)?;
         }
     } else {
         let line = make_x_log_line("-", "not run: no repository selected");

@@ -10,7 +10,7 @@ pub(crate) fn launch_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> R
         crossterm::terminal::LeaveAlternateScreen,
         crossterm::event::DisableMouseCapture,
     )?;
-    crossterm::execute!(std::io::stdout(), crossterm::cursor::MoveTo(0, 0),)?;
+    crossterm::execute!(std::io::stdout(), crossterm::cursor::MoveTo(0, 0))?;
     let status = Command::new(bin)
         .args(args)
         .current_dir(run_dir)
