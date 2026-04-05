@@ -29,7 +29,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
 
     let json = make_crates2_json("owner", "myrepo", "myrepo");
     std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
-    let remote_hash = "fedcba9876543210fedcba9876543210fedcba98";
+    let remote_hash = local_hash.as_str();
 
     let result = check_cargo_git_install_with_remote_hash_and_logger(
         "owner",
@@ -42,7 +42,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
     std::fs::remove_dir_all(&tmp).ok();
 
     let (matches, inst, loc, remote) = result.expect("should return Some");
-    assert!(matches, "hashes should match: inst={inst} loc={loc}");
+    assert!(matches, "hashes should match: inst={inst} remote={remote}");
     assert_eq!(inst, local_hash);
     assert_eq!(loc, local_hash);
     assert_eq!(remote, remote_hash);

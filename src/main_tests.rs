@@ -210,7 +210,7 @@ fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
     let matched_remote = apply_cargo_hash_poll_result(
         &mut repo,
         Some((
-            false,
+            true,
             String::from("installed123"),
             String::from("local456"),
             String::from("installed123"),
@@ -218,7 +218,7 @@ fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
     );
 
     assert!(matched_remote);
-    assert_eq!(repo.cargo_install, Some(false));
+    assert_eq!(repo.cargo_install, Some(true));
     assert_eq!(repo.cargo_checked_at, "local456");
     assert_eq!(repo.cargo_remote_hash, "installed123");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-01T00:00:00Z");

@@ -6,7 +6,7 @@ mod checkout;
 #[path = "github_local_cargo_hash_remote.rs"]
 mod remote;
 
-/// Compare the commit hash of a `cargo install --git` entry against local HEAD.
+/// Compare the commit hash of a `cargo install --git` entry against remote HEAD.
 ///
 /// Method:
 ///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name only.
@@ -17,7 +17,7 @@ mod remote;
 ///      in the most recently modified one to obtain the installed commit hash.
 ///   4. Run `git ls-remote ... refs/heads/main` against the GitHub remote to obtain the
 ///      remote `main` hash for logging.
-///   5. Run `git rev-parse HEAD` in the local clone and compare.
+///   5. Run `git rev-parse HEAD` in the local clone for display/debug output.
 ///
 /// Returns:
 ///   None                         – repo not installed via `cargo install --git`, OR
@@ -25,8 +25,8 @@ mod remote;
 ///                                  checkout directory not found, OR
 ///                                  `git rev-parse HEAD` failed, OR
 ///                                  `git ls-remote` failed
-///   Some((true,  inst, local, remote))   – installed hash == local HEAD
-///   Some((false, inst, local, remote))   – installed hash != local HEAD (stale install)
+///   Some((true,  inst, local, remote))   – installed hash == remote HEAD
+///   Some((false, inst, local, remote))   – installed hash != remote HEAD (stale install)
 pub(crate) fn check_cargo_git_install(
     owner: &str,
     repo_name: &str,
@@ -70,7 +70,7 @@ where
         &mut resolve_remote_hash,
     );
     let completion_message = match &result {
-        Some((_matches_local, installed_hash, _local_hash, remote_hash)) => format!(
+        Some((_matches_remote, installed_hash, _local_hash, remote_hash)) => format!(
             "終了: cargo check を完了しました (cargo install と remote の比較結果={})",
             if installed_hash == remote_hash {
                 "一致"
@@ -343,7 +343,7 @@ where
     );
 
     Some((
-        installed_hash == local_hash,
+        installed_hash == remote_hash,
         installed_hash,
         local_hash,
         remote_hash,

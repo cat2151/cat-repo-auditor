@@ -37,6 +37,20 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
+fn should_spawn_auto_update_after_recheck<Recheck>(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_install: Option<bool>,
+    recheck: Recheck,
+) -> bool
+where
+    Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
+{
+    cargo_install == Some(false)
+        && matches!(recheck(owner, repo_name, base_dir), Some((false, _, _, _)))
+}
+
 fn compact_log_detail(detail: &str) -> String {
     detail
         .lines()
@@ -510,7 +524,13 @@ pub fn fetch_repos_with_progress(
                     });
 
                     if let Some(run_dir) = auto_update_run_dir.as_deref() {
-                        if result.cargo_install == Some(false) {
+                        if should_spawn_auto_update_after_recheck(
+                            &owner,
+                            &result.name,
+                            &config.local_base_dir,
+                            result.cargo_install,
+                            check_cargo_git_install,
+                        ) {
                             let feedback = spawn_cargo_app_for_repo(
                                 &owner,
                                 &result.name,
@@ -520,6 +540,11 @@ pub fn fetch_repos_with_progress(
                             let _ = tx.send(FetchProgress::Log(format!(
                                 "x {} {}",
                                 result.full_name, feedback.log_msg
+                            )));
+                        } else if result.cargo_install == Some(false) {
+                            let _ = tx.send(FetchProgress::Log(format!(
+                                "x {} not run: cargo install status changed on recheck",
+                                result.full_name
                             )));
                         }
                     }

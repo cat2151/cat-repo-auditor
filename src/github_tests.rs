@@ -228,3 +228,35 @@ fn format_pull_log_includes_repo_and_compacts_error_output() {
         "pull owner/repo failed: git pull failed | repository has unresolved conflicts"
     );
 }
+
+#[test]
+fn should_spawn_auto_update_after_recheck_requires_repo_to_still_be_old() {
+    assert!(should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| Some((false, String::new(), String::new(), String::new())),
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| Some((true, String::new(), String::new(), String::new())),
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| None,
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(true),
+        |_owner, _repo_name, _base_dir| panic!("recheck should not run for cargo ok"),
+    ));
+}

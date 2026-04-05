@@ -60,7 +60,7 @@ pub struct RepoInfo {
     pub deepwiki_checked_at: String,
 
     /// None = repo not found in .crates2.json (not installed via cargo install --git)
-    /// Some(true) = installed hash == local HEAD, Some(false) = stale
+    /// Some(true) = installed hash == remote main HEAD, Some(false) = stale against upstream
     #[serde(default)]
     pub cargo_install: Option<bool>,
     /// local git HEAD hash when cargo_install was last checked (doubles as display value for local hash)
