@@ -267,7 +267,11 @@ fn run_phase3_repo_task(task: Phase3RepoTask, owner: &str, base_dir: &str) -> Ph
     };
 
     let (cargo_install, cargo_cat, cargo_remote_hash, cargo_remote_hash_cat, cargo_installed_hash) =
-        resolve_cargo_check_fields(&repo, &cat, check_cargo_git_install(owner, &name, base_dir));
+        resolve_cargo_check_fields(
+            &repo,
+            &cat,
+            check_cargo_git_install(owner, name.as_str(), base_dir),
+        );
 
     let (wf_workflows, wf_cat) = if needs_wf {
         (
@@ -435,11 +439,13 @@ pub fn fetch_repos_with_progress(
                 let _ = tx.send(FetchProgress::CheckingRepo(task.repo.name.clone()));
             }
             let (phase3_result_tx, phase3_result_rx) = std::sync::mpsc::channel();
+            let work_queue = std::sync::Arc::new(std::sync::Mutex::new(
+                phase3_tasks
+                    .into_iter()
+                    .collect::<std::collections::VecDeque<_>>(),
+            ));
 
             std::thread::scope(|scope| {
-                let work_queue = std::sync::Arc::new(std::sync::Mutex::new(
-                    std::collections::VecDeque::from(phase3_tasks.clone()),
-                ));
                 for _ in 0..worker_count {
                     let work_queue = std::sync::Arc::clone(&work_queue);
                     let phase3_result_tx = phase3_result_tx.clone();

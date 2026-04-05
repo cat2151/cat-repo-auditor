@@ -48,8 +48,8 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::CheckingRepo(name)) => {
                 if name.is_empty() {
                     app.checking_repos.clear();
-                } else if !app.checking_repos.iter().any(|checking| checking == &name) {
-                    app.checking_repos.push(name);
+                } else {
+                    app.checking_repos.insert(name);
                 }
             }
             Ok(FetchProgress::ExistenceUpdate {
@@ -87,7 +87,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;
                 }
-                app.checking_repos.retain(|checking| checking != &name);
+                app.checking_repos.remove(&name);
             }
             Ok(FetchProgress::Done(Ok((repos, rl)))) => {
                 app.repos = repos;

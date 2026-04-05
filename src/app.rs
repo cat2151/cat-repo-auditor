@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::github::{RateLimit, RepoInfo};
 use crate::github_local::WorkflowRepoExistCheck;
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
 #[path = "app_search.rs"]
@@ -42,7 +43,7 @@ pub struct App {
     pub config: Config,
     pub num_prefix: u32,
     /// repos currently being checked in phase 3
-    pub checking_repos: Vec<String>,
+    pub checking_repos: HashSet<String>,
     /// Active background tasks: (tag, cur, total)
     pub bg_tasks: Vec<(&'static str, usize, usize)>,
     pub cargo_hash_polls: Vec<CargoHashPoll>,
@@ -87,7 +88,7 @@ impl App {
             window_focused: true,
             config,
             num_prefix: 0,
-            checking_repos: vec![],
+            checking_repos: HashSet::new(),
             bg_tasks: vec![],
             cargo_hash_polls: vec![],
             show_help: false,

@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
 use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_MSG;
 use std::{
+    collections::HashSet,
     fs,
     path::PathBuf,
     sync::Mutex,
@@ -86,7 +87,7 @@ fn make_config() -> Config {
 fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     let mut app = App::new(make_config());
     app.bg_tasks.push(("chk", 1, 1));
-    app.checking_repos.push(String::from("repo"));
+    app.checking_repos.insert(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::Done(Ok((
@@ -144,7 +145,7 @@ fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives(
     let mut fetch_rx = Some(rx);
     drain_fetch_channel(&mut app, &mut fetch_rx);
 
-    assert_eq!(app.checking_repos, vec![String::from("repo-b")]);
+    assert_eq!(app.checking_repos, HashSet::from([String::from("repo-b")]));
 }
 
 #[test]
