@@ -47,7 +47,10 @@ fn merge_live_repo_state(
     incoming_repos: &mut [crate::github::RepoInfo],
 ) {
     for incoming in incoming_repos {
-        if let Some(existing) = existing_repos.iter().find(|repo| repo.name == incoming.name) {
+        if let Some(existing) = existing_repos
+            .iter()
+            .find(|repo| repo.name == incoming.name)
+        {
             if has_live_cargo_state(existing) {
                 incoming.cargo_install = existing.cargo_install;
                 incoming.cargo_checked_at = existing.cargo_checked_at.clone();

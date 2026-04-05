@@ -262,7 +262,8 @@ fn collect_local_heads(
     repos: &[RepoInfo],
     local_base_dir: &str,
 ) -> std::collections::HashMap<String, String> {
-    repos.iter()
+    repos
+        .iter()
         .filter(|r| r.has_local_git)
         .filter_map(|r| {
             let path = format!(
@@ -409,7 +410,10 @@ fn spawn_background_cargo_checks(
         .iter()
         .map(|repo| {
             let local_head = local_head_for(local_heads, &repo.name);
-            (repo.name.clone(), CargoCheckStatus::for_repo(repo, local_head))
+            (
+                repo.name.clone(),
+                CargoCheckStatus::for_repo(repo, local_head),
+            )
         })
         .collect();
     let cargo_check_logs: Vec<(String, String)> = repos
@@ -452,8 +456,7 @@ fn spawn_background_cargo_checks(
                 let base_dir = base_dir.clone();
                 scope.spawn(move || {
                     while let Some(task) = {
-                        let mut work_queue =
-                            work_queue.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut work_queue = work_queue.lock().unwrap_or_else(|e| e.into_inner());
                         work_queue.pop_front()
                     } {
                         let result = run_cargo_repo_task(task, &owner, &base_dir);
@@ -486,8 +489,12 @@ fn spawn_background_cargo_checks(
                         result.cargo_install,
                         check_cargo_git_install,
                     ) {
-                        let feedback =
-                            spawn_cargo_app_for_repo(&owner, &result.name, result.cargo_install, run_dir);
+                        let feedback = spawn_cargo_app_for_repo(
+                            &owner,
+                            &result.name,
+                            result.cargo_install,
+                            run_dir,
+                        );
                         let _ = tx.send(FetchProgress::Log(format!(
                             "x {} {}",
                             result.full_name, feedback.log_msg

@@ -292,7 +292,10 @@ fn cargo_install_returns_some_false_when_hashes_differ() {
     std::fs::remove_dir_all(&tmp).ok();
 
     let (matches, inst, loc, remote) = result.expect("should return Some");
-    assert!(!matches, "hashes should differ: inst={inst} remote={remote}");
+    assert!(
+        !matches,
+        "hashes should differ: inst={inst} remote={remote}"
+    );
     assert_eq!(inst, installed_hash);
     assert_eq!(loc, local_hash);
     assert_eq!(remote, remote_hash);
