@@ -142,13 +142,17 @@ pub enum FetchProgress {
         pages_cat: String,
         deepwiki: Option<bool>,
         deepwiki_cat: String,
+        wf_workflows: Option<bool>,
+        wf_cat: String,
+    },
+    /// Incremental cargo-only update that can arrive independently of other checks.
+    CargoUpdate {
+        name: String,
         cargo_install: Option<bool>,
         cargo_cat: String,
         cargo_remote_hash: String,
         cargo_remote_hash_cat: String,
         cargo_installed_hash: String,
-        wf_workflows: Option<bool>,
-        wf_cat: String,
     },
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }

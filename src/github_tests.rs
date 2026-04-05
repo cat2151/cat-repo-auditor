@@ -185,7 +185,7 @@ fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
 }
 
 #[test]
-fn phase3_check_order_prioritizes_known_cargo_old_repos() {
+fn cargo_check_order_prioritizes_known_cargo_old_repos() {
     let repos = vec![
         make_repo_with_cargo_state("repo-ok", Some(true)),
         make_repo_with_cargo_state("repo-old-1", Some(false)),
@@ -194,7 +194,7 @@ fn phase3_check_order_prioritizes_known_cargo_old_repos() {
     ];
 
     assert_eq!(
-        phase3_check_order(&repos),
+        cargo_check_order(&repos),
         vec![
             String::from("repo-old-1"),
             String::from("repo-old-2"),

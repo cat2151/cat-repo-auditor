@@ -8,6 +8,44 @@ use crate::{
 };
 use std::path::Path;
 
+fn apply_cargo_update(
+    repo: &mut crate::github::RepoInfo,
+    cargo_install: Option<bool>,
+    cargo_cat: String,
+    cargo_remote_hash: String,
+    cargo_remote_hash_cat: String,
+    cargo_installed_hash: String,
+) {
+    repo.cargo_install = cargo_install;
+    repo.cargo_checked_at = cargo_cat;
+    repo.cargo_remote_hash = cargo_remote_hash;
+    repo.cargo_remote_hash_checked_at = cargo_remote_hash_cat;
+    repo.cargo_installed_hash = cargo_installed_hash;
+}
+
+fn merge_live_repo_state(
+    existing_repos: &[crate::github::RepoInfo],
+    incoming_repos: &mut [crate::github::RepoInfo],
+) {
+    for incoming in incoming_repos {
+        if let Some(existing) = existing_repos.iter().find(|repo| repo.name == incoming.name) {
+            if existing.cargo_install.is_some()
+                || !existing.cargo_checked_at.is_empty()
+                || !existing.cargo_remote_hash.is_empty()
+                || !existing.cargo_remote_hash_checked_at.is_empty()
+                || !existing.cargo_installed_hash.is_empty()
+            {
+                incoming.cargo_install = existing.cargo_install;
+                incoming.cargo_checked_at = existing.cargo_checked_at.clone();
+                incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
+                incoming.cargo_remote_hash_checked_at =
+                    existing.cargo_remote_hash_checked_at.clone();
+                incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
+            }
+        }
+    }
+}
+
 pub(crate) fn drain_fetch_channel(
     app: &mut App,
     fetch_rx: &mut Option<mpsc::Receiver<FetchProgress>>,
@@ -62,11 +100,6 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 pages_cat,
                 deepwiki,
                 deepwiki_cat,
-                cargo_install,
-                cargo_cat,
-                cargo_remote_hash,
-                cargo_remote_hash_cat,
-                cargo_installed_hash,
                 wf_workflows,
                 wf_cat,
             }) => {
@@ -79,17 +112,33 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                     r.pages_checked_at = pages_cat;
                     r.deepwiki = deepwiki;
                     r.deepwiki_checked_at = deepwiki_cat;
-                    r.cargo_install = cargo_install;
-                    r.cargo_checked_at = cargo_cat;
-                    r.cargo_remote_hash = cargo_remote_hash;
-                    r.cargo_remote_hash_checked_at = cargo_remote_hash_cat;
-                    r.cargo_installed_hash = cargo_installed_hash;
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;
                 }
                 app.checking_repos.remove(&name);
             }
+            Ok(FetchProgress::CargoUpdate {
+                name,
+                cargo_install,
+                cargo_cat,
+                cargo_remote_hash,
+                cargo_remote_hash_cat,
+                cargo_installed_hash,
+            }) => {
+                if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
+                    apply_cargo_update(
+                        r,
+                        cargo_install,
+                        cargo_cat,
+                        cargo_remote_hash,
+                        cargo_remote_hash_cat,
+                        cargo_installed_hash,
+                    );
+                }
+            }
             Ok(FetchProgress::Done(Ok((repos, rl)))) => {
+                let mut repos = repos;
+                merge_live_repo_state(&app.repos, &mut repos);
                 app.repos = repos;
                 app.rate_limit = Some(rl);
                 app.rebuild_rows();
