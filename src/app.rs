@@ -56,8 +56,6 @@ pub struct App {
     pub show_log: bool,
     pub log_lines: Vec<String>,
     pub log_last_modified: Option<SystemTime>,
-    /// Some("owner/repo") when update is available
-    pub update_available: Option<String>,
     pub term_height: usize,
     pub left_visible: usize,
     pub right_visible: usize,
@@ -100,7 +98,6 @@ impl App {
             show_log: false,
             log_lines: vec![],
             log_last_modified: None,
-            update_available: None,
             term_height: 40,
             left_visible: 30,
             right_visible: 30,

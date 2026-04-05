@@ -1,7 +1,6 @@
 use super::*;
 #[cfg(test)]
 use crate::main_cli::command as cli_command;
-use crate::main_cli::UPDATE_NOTICE_HEADER;
 use crate::main_helpers::{make_log_line, make_x_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 use crate::main_launch::{
     cargo_status_to_launch_args, format_launch_command, launch_cargo_app_for_repo_with,
@@ -155,11 +154,6 @@ fn test_x_not_run_messages_match_expected_wording() {
         make_x_log_line("owner/repo", X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP)
     );
     assert_eq!(transient_msg, X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP);
-}
-
-#[test]
-fn update_notice_header_uses_catrepo_name() {
-    assert_eq!(UPDATE_NOTICE_HEADER, "catrepo update available!");
 }
 
 #[test]

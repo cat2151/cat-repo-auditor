@@ -32,15 +32,6 @@ fn git_url() -> &'static str {
         .as_str()
 }
 
-/// Pure decision function: returns true if `remote_hash` differs from `build_hash`
-/// and both are non-empty and `build_hash` is not "unknown".
-pub(crate) fn is_update_available(build_hash: &str, remote_hash: &str) -> bool {
-    !build_hash.is_empty()
-        && build_hash != "unknown"
-        && !remote_hash.is_empty()
-        && remote_hash != build_hash
-}
-
 /// Perform a self-update.
 pub fn run_self_update() -> anyhow::Result<bool> {
     launch_self_update(REPO_OWNER, REPO_NAME, BIN_NAMES)
@@ -55,22 +46,6 @@ pub fn run_self_check() -> anyhow::Result<()> {
         .map_err(|err| anyhow::anyhow!("failed to compare embedded vs remote commit: {err}"))?;
     println!("{result}");
     Ok(())
-}
-
-/// Check if a newer version of cat-repo-auditor is available by comparing
-/// the build-time commit hash (embedded at compile time) against the
-/// latest commit on the remote repository's main branch.
-/// Returns Some("owner/repo") if an update is available, None if up-to-date
-/// or if the check cannot be performed.
-pub fn check_self_update() -> Option<String> {
-    let build_hash = build_commit_hash();
-    let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_hash).ok()?;
-
-    if is_update_available(&result.embedded_hash, &result.remote_hash) {
-        Some(owner_repo().to_string())
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]
