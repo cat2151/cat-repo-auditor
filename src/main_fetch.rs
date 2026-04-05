@@ -46,7 +46,11 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 }
             }
             Ok(FetchProgress::CheckingRepo(name)) => {
-                app.checking_repo = name;
+                if name.is_empty() {
+                    app.checking_repos.clear();
+                } else if !app.checking_repos.iter().any(|checking| checking == &name) {
+                    app.checking_repos.push(name);
+                }
             }
             Ok(FetchProgress::ExistenceUpdate {
                 name,
@@ -83,7 +87,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;
                 }
-                app.checking_repo.clear();
+                app.checking_repos.retain(|checking| checking != &name);
             }
             Ok(FetchProgress::Done(Ok((repos, rl)))) => {
                 app.repos = repos;
@@ -105,7 +109,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Err(mpsc::TryRecvError::Disconnected) => {
                 *fetch_rx = None;
                 app.bg_tasks.clear();
-                app.checking_repo.clear();
+                app.checking_repos.clear();
                 break;
             }
         }

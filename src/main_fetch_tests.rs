@@ -86,7 +86,7 @@ fn make_config() -> Config {
 fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     let mut app = App::new(make_config());
     app.bg_tasks.push(("chk", 1, 1));
-    app.checking_repo = String::from("repo");
+    app.checking_repos.push(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::Done(Ok((
@@ -108,7 +108,43 @@ fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     assert_eq!(app.status_msg, READY_MSG);
     assert!(fetch_rx.is_none());
     assert!(app.bg_tasks.is_empty());
-    assert!(app.checking_repo.is_empty());
+    assert!(app.checking_repos.is_empty());
+}
+
+#[test]
+fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives() {
+    let mut app = App::new(make_config());
+    app.repos = vec![make_repo("repo-a"), make_repo("repo-b")];
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::CheckingRepo(String::from("repo-a")))
+        .unwrap();
+    tx.send(FetchProgress::CheckingRepo(String::from("repo-b")))
+        .unwrap();
+    tx.send(FetchProgress::ExistenceUpdate {
+        name: String::from("repo-a"),
+        readme_ja: None,
+        readme_ja_cat: String::new(),
+        readme_ja_badge: None,
+        readme_ja_badge_cat: String::new(),
+        pages: None,
+        pages_cat: String::new(),
+        deepwiki: None,
+        deepwiki_cat: String::new(),
+        cargo_install: Some(true),
+        cargo_cat: String::from("local123"),
+        cargo_remote_hash: String::from("remote456"),
+        cargo_remote_hash_cat: String::from("2024-01-02T00:00:00Z"),
+        cargo_installed_hash: String::from("installed789"),
+        wf_workflows: None,
+        wf_cat: String::new(),
+    })
+    .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(app.checking_repos, vec![String::from("repo-b")]);
 }
 
 #[test]
