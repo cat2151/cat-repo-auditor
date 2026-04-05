@@ -152,6 +152,12 @@ fn resolve_cargo_check_fields(
     }
 }
 
+fn phase3_check_order(repos: &[RepoInfo]) -> Vec<String> {
+    let mut ordered: Vec<&RepoInfo> = repos.iter().collect();
+    ordered.sort_by_key(|repo| repo.cargo_install != Some(false));
+    ordered.into_iter().map(|repo| repo.name.clone()).collect()
+}
+
 // ──────────────────────────────────────────────
 // Fetch orchestration
 // ──────────────────────────────────────────────
@@ -261,7 +267,7 @@ pub fn fetch_repos_with_progress(
 
             // Build per-repo check tasks.
             // cargo install 状態の確認は毎回実行するため、Phase 3 は全 repo を対象にする。
-            let to_check: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
+            let to_check = phase3_check_order(&repos);
 
             let cargo_check_logs: Vec<(String, String)> = repos
                 .iter()

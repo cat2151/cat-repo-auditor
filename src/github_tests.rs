@@ -32,6 +32,14 @@ fn make_repo_for_cargo_log() -> RepoInfo {
     }
 }
 
+fn make_repo_with_cargo_state(name: &str, cargo_install: Option<bool>) -> RepoInfo {
+    let mut repo = make_repo_for_cargo_log();
+    repo.name = String::from(name);
+    repo.full_name = format!("owner/{name}");
+    repo.cargo_install = cargo_install;
+    repo
+}
+
 #[test]
 fn issue_url_format() {
     let item = IssueOrPr {
@@ -173,6 +181,26 @@ fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
             repo.cargo_remote_hash_checked_at.clone(),
             repo.cargo_installed_hash.clone(),
         )
+    );
+}
+
+#[test]
+fn phase3_check_order_prioritizes_known_cargo_old_repos() {
+    let repos = vec![
+        make_repo_with_cargo_state("repo-ok", Some(true)),
+        make_repo_with_cargo_state("repo-old-1", Some(false)),
+        make_repo_with_cargo_state("repo-none", None),
+        make_repo_with_cargo_state("repo-old-2", Some(false)),
+    ];
+
+    assert_eq!(
+        phase3_check_order(&repos),
+        vec![
+            String::from("repo-old-1"),
+            String::from("repo-old-2"),
+            String::from("repo-ok"),
+            String::from("repo-none"),
+        ]
     );
 }
 
