@@ -1,7 +1,7 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand as ClapSubcommand};
 #[cfg(test)]
 use clap::CommandFactory;
+use clap::{Parser, Subcommand as ClapSubcommand};
 
 use crate::self_update::{install_cmd, owner_repo};
 
