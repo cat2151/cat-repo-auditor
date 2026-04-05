@@ -111,6 +111,13 @@ fn cargo_check_status(
         })
 }
 
+fn local_head_for<'a>(
+    local_heads: &'a std::collections::HashMap<String, String>,
+    repo_name: &str,
+) -> &'a str {
+    local_heads.get(repo_name).map(|s| s.as_str()).unwrap_or("")
+}
+
 fn format_cargo_check_status_reason(status: CargoCheckStatus) -> &'static str {
     match (status.needs_local, status.needs_remote) {
         (false, false) => {
@@ -401,17 +408,14 @@ fn spawn_background_cargo_checks(
     let cargo_check_statuses: std::collections::HashMap<String, CargoCheckStatus> = repos
         .iter()
         .map(|repo| {
-            let local_head = local_heads.get(&repo.name).map(|s| s.as_str()).unwrap_or("");
-            (
-                repo.name.clone(),
-                CargoCheckStatus::for_repo(repo, local_head),
-            )
+            let local_head = local_head_for(local_heads, &repo.name);
+            (repo.name.clone(), CargoCheckStatus::for_repo(repo, local_head))
         })
         .collect();
     let cargo_check_logs: Vec<(String, String)> = repos
         .iter()
         .map(|repo| {
-            let local_head = local_heads.get(&repo.name).map(|s| s.as_str()).unwrap_or("");
+            let local_head = local_head_for(local_heads, &repo.name);
             let status = cargo_check_status(&cargo_check_statuses, &repo.name);
             (
                 repo.name.clone(),
@@ -533,10 +537,10 @@ pub fn fetch_repos_with_progress(
             } else {
                 None
             };
-            let cargo_local_heads = collect_local_heads(&repos, &config.local_base_dir);
+            let local_heads = collect_local_heads(&repos, &config.local_base_dir);
             let cargo_handle = spawn_background_cargo_checks(
                 &repos,
-                &cargo_local_heads,
+                &local_heads,
                 &owner,
                 &config.local_base_dir,
                 auto_update_run_dir.as_deref(),

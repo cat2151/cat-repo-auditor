@@ -23,6 +23,11 @@ fn apply_cargo_update(
     repo.cargo_installed_hash = cargo_installed_hash;
 }
 
+/// Return true when the repo already holds cargo fields that were updated live in the current
+/// fetch session rather than coming only from the next history-backed `Done` snapshot.
+///
+/// Any one of these fields being present means a later refresh must preserve the current cargo
+/// state instead of overwriting it with older values.
 fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
     repo.cargo_install.is_some()
         || !repo.cargo_checked_at.is_empty()
