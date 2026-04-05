@@ -60,28 +60,11 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
     dir
 }
 
-fn contains_unix_epoch_timestamp(log_line: &str) -> bool {
+fn contains_human_readable_timestamp(log_line: &str) -> bool {
     log_line.split_whitespace().any(|token| {
         let trimmed = token.trim_matches(|ch: char| matches!(ch, '[' | ']' | '(' | ')' | ','));
-        let Some(value) = trimmed.strip_suffix("s_since_unix_epoch") else {
-            return false;
-        };
-        let mut parts = value.split('.');
-        let Some(seconds) = parts.next() else {
-            return false;
-        };
-        let Some(nanos) = parts.next() else {
-            return false;
-        };
-        parts.next().is_none()
-            && {
-                let seconds_without_sign = seconds.strip_prefix('-').unwrap_or(seconds);
-                !seconds_without_sign.is_empty()
-                    && seconds_without_sign.chars().all(|ch| ch.is_ascii_digit())
-            }
-            && !nanos.is_empty()
-            && nanos.len() == 9
-            && nanos.chars().all(|ch| ch.is_ascii_digit())
+        let value = trimmed.strip_prefix("更新日時=").unwrap_or(trimmed);
+        chrono::DateTime::parse_from_rfc3339(value).is_ok()
     })
 }
 
@@ -342,16 +325,32 @@ fn cargo_install_picks_latest_mtime_subdir() {
     assert_eq!(inst, expected_installed_hash);
     assert_ne!(inst, local_hash);
     assert_eq!(remote, remote_hash);
-    assert!(logs.iter().any(|msg| {
-        msg.contains("更新日時順の checkout subdir 候補=[")
-            && msg.contains(&old_sub_display)
+    let candidate_logs = logs
+        .iter()
+        .filter(|msg| msg.contains("更新日時順の checkout subdir 候補["))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        candidate_logs.len(),
+        2,
+        "このテストでは checkout subdir を old/new の 2 つだけ作成している"
+    );
+    assert!(candidate_logs.iter().any(|msg| {
+        msg.contains("更新日時順の checkout subdir 候補[0]=")
             && msg.contains(&new_sub_display)
-            && contains_unix_epoch_timestamp(msg)
+            && msg.contains("更新日時=")
+            && contains_human_readable_timestamp(msg)
+    }));
+    assert!(candidate_logs.iter().any(|msg| {
+        msg.contains("更新日時順の checkout subdir 候補[1]=")
+            && msg.contains(&old_sub_display)
+            && msg.contains("更新日時=")
+            && contains_human_readable_timestamp(msg)
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains("選択した checkout ディレクトリ=")
             && msg.contains(&new_sub_display)
             && msg.contains("更新日時=")
+            && contains_human_readable_timestamp(msg)
     }));
 }
 

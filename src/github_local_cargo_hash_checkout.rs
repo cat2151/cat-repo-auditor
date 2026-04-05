@@ -1,3 +1,4 @@
+use chrono::{DateTime, SecondsFormat, Utc};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,21 +10,7 @@ fn checkout_dir_modified_at(path: &Path) -> SystemTime {
 }
 
 fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
-    match timestamp.duration_since(UNIX_EPOCH) {
-        Ok(duration) => format!(
-            "{}.{:09}s_since_unix_epoch",
-            duration.as_secs(),
-            duration.subsec_nanos()
-        ),
-        Err(err) => {
-            let duration = err.duration();
-            format!(
-                "-{}.{:09}s_since_unix_epoch",
-                duration.as_secs(),
-                duration.subsec_nanos()
-            )
-        }
-    }
+    DateTime::<Utc>::from(timestamp).to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 /// Resolve the newest cargo git checkout sub-directory for the matched crate name.
@@ -151,24 +138,19 @@ pub(super) fn resolve_checkout_subdir(
     });
 
     if !checkout_candidates.is_empty() {
-        let candidate_list = checkout_candidates
-            .iter()
-            .map(|(modified_at, path)| {
-                format!(
-                    "{} ({})",
+        for (index, (modified_at, path)) in checkout_candidates.iter().enumerate() {
+            super::super::log_cargo_check_path_result(
+                log_fn,
+                owner,
+                repo_name,
+                &checkout_base,
+                &format!(
+                    "更新日時順の checkout subdir 候補[{index}]={} 更新日時={}",
                     path.display(),
                     format_checkout_dir_modified_at(*modified_at)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        super::super::log_cargo_check_path_result(
-            log_fn,
-            owner,
-            repo_name,
-            &checkout_base,
-            &format!("更新日時順の checkout subdir 候補=[{candidate_list}]"),
-        );
+                ),
+            );
+        }
     }
 
     let (sub_dir_modified_at, sub_dir) = match checkout_candidates.into_iter().next() {
