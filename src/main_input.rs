@@ -17,9 +17,7 @@ use crate::{
     github_local::{collect_workflow_repo_exist_checks, launch_lazygit, open_url},
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, start_fetch},
-    main_launch::{
-        launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback,
-    },
+    main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback},
     ui::{draw_ui, Focus, SearchState},
 };
 

@@ -77,7 +77,10 @@ fn test_launch_with_rerender_and_polling() {
     .unwrap();
 
     assert_eq!(app.term_height, 20);
-    assert_eq!(app.transient_msg.as_deref(), Some("launched: repo-bin update"));
+    assert_eq!(
+        app.transient_msg.as_deref(),
+        Some("launched: repo-bin update")
+    );
     assert_eq!(app.cargo_hash_polls.len(), 1);
     assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
     let expected_log = make_x_log_line("owner/repo", "run: `repo-bin update` cwd=`/run`");
