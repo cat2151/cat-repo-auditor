@@ -1,12 +1,12 @@
 # cat-repo-auditor
 
-GitHubリポジトリのremote/local状況をlistし、可視化し、メンテの一部を自動化して効率化するアプリ。TUI。Rust。Windows用。
+GitHubリポジトリのremote/local状況をlistし、可視化し、メンテの一部を自動化して効率化するTUI。Rustで書かれています。
 
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cat2151/cat-repo-auditor)
 
 ## 状況
 
-Rust版TUIを生成させました。自分用です
+ドッグフーディング中です。
 
 ### install
 
@@ -20,7 +20,19 @@ cargo install --force --git https://github.com/cat2151/cat-repo-auditor
 catrepo
 ```
 
-ビルド時に埋め込まれた commit hash を表示する:
+### update
+
+```
+catrepo update
+```
+
+もし失敗したら以下を実行（installコマンドと同じ）：
+
+```
+cargo install --force --git https://github.com/cat2151/cat-repo-auditor
+```
+
+### ビルド時に埋め込まれた commit hash を表示する:
 
 ```
 catrepo hash
