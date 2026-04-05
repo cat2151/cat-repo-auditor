@@ -50,6 +50,13 @@ pub fn run_self_update() -> anyhow::Result<bool> {
     Ok(true)
 }
 
+pub fn run_self_check() -> anyhow::Result<()> {
+    let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, build_commit_hash())
+        .map_err(|err| anyhow::anyhow!("failed to check for updates: {err}"))?;
+    println!("{result}");
+    Ok(())
+}
+
 /// Check if a newer version of cat-repo-auditor is available by comparing
 /// the build-time commit hash (embedded at compile time) against the
 /// latest commit on the remote repository's main branch.

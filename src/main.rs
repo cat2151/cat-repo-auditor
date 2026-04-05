@@ -36,7 +36,7 @@ use crate::{
         start_fetch, STARTUP_LOG_SEPARATOR,
     },
     main_input::{handle_terminal_input, InputState},
-    self_update::{build_commit_hash, check_self_update, run_self_update},
+    self_update::{build_commit_hash, check_self_update, run_self_check, run_self_update},
     ui::draw_ui,
 };
 
@@ -165,18 +165,23 @@ fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEven
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match parse_subcommand(&args) {
-        Some(Subcommand::Hash) => {
+        Ok(Some(Subcommand::Hash)) => {
             println!("{}", build_commit_hash());
             return Ok(());
         }
-        Some(Subcommand::Update) => {
+        Ok(Some(Subcommand::Update)) => {
             let should_exit = run_self_update()?;
             if should_exit {
                 std::process::exit(0);
             }
             return Ok(());
         }
-        None => {}
+        Ok(Some(Subcommand::Check)) => {
+            run_self_check()?;
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(err) => err.exit(),
     }
 
     let config = Config::load()?;

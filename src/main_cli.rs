@@ -1,21 +1,37 @@
 use anyhow::Result;
+use clap::{Parser, Subcommand as ClapSubcommand};
+#[cfg(test)]
+use clap::CommandFactory;
 
 use crate::self_update::{install_cmd, owner_repo};
 
 pub(crate) const UPDATE_NOTICE_HEADER: &str = "catrepo update available!";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Subcommand {
-    Hash,
-    Update,
+#[derive(Parser, Debug)]
+#[command(name = "catrepo")]
+#[command(about = "A TUI for auditing GitHub repositories")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Subcommand>,
 }
 
-pub(crate) fn parse_subcommand(args: &[String]) -> Option<Subcommand> {
-    match args.get(1).map(String::as_str) {
-        Some("hash") => Some(Subcommand::Hash),
-        Some("update") => Some(Subcommand::Update),
-        _ => None,
-    }
+#[derive(ClapSubcommand, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Subcommand {
+    /// Print the build-time commit hash
+    Hash,
+    /// Self-update the application from GitHub
+    Update,
+    /// Compare the build-time commit hash with the remote main branch
+    Check,
+}
+
+pub(crate) fn parse_subcommand(args: &[String]) -> clap::error::Result<Option<Subcommand>> {
+    Cli::try_parse_from(args).map(|cli| cli.command)
+}
+
+#[cfg(test)]
+pub(crate) fn command() -> clap::Command {
+    Cli::command()
 }
 
 pub(crate) fn print_update_notice(repo: Option<&str>) -> Result<()> {

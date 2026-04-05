@@ -1,10 +1,13 @@
 use super::*;
+#[cfg(test)]
+use crate::main_cli::command as cli_command;
 use crate::main_cli::UPDATE_NOTICE_HEADER;
 use crate::main_helpers::{make_log_line, make_x_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 use crate::main_launch::{
     cargo_status_to_launch_args, format_launch_command, launch_cargo_app_for_repo_with,
     x_not_run_feedback_no_cargo_install,
 };
+use clap::error::ErrorKind;
 
 fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
     crate::github::RepoInfo {
@@ -41,19 +44,60 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
 #[test]
 fn parse_subcommand_recognizes_hash() {
     let args = vec!["catrepo".to_string(), "hash".to_string()];
-    assert_eq!(parse_subcommand(&args), Some(Subcommand::Hash));
+    assert_eq!(parse_subcommand(&args).unwrap(), Some(Subcommand::Hash));
 }
 
 #[test]
 fn parse_subcommand_recognizes_update() {
     let args = vec!["catrepo".to_string(), "update".to_string()];
-    assert_eq!(parse_subcommand(&args), Some(Subcommand::Update));
+    assert_eq!(parse_subcommand(&args).unwrap(), Some(Subcommand::Update));
 }
 
 #[test]
-fn parse_subcommand_ignores_unknown_command() {
+fn parse_subcommand_recognizes_check() {
+    let args = vec!["catrepo".to_string(), "check".to_string()];
+    assert_eq!(parse_subcommand(&args).unwrap(), Some(Subcommand::Check));
+}
+
+#[test]
+fn parse_subcommand_allows_no_command_for_tui_launch() {
+    let args = vec!["catrepo".to_string()];
+    assert_eq!(parse_subcommand(&args).unwrap(), None);
+}
+
+#[test]
+fn parse_subcommand_rejects_unknown_command() {
     let args = vec!["catrepo".to_string(), "unknown".to_string()];
-    assert_eq!(parse_subcommand(&args), None);
+    let err = parse_subcommand(&args).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+}
+
+#[test]
+fn parse_subcommand_help_subcommand_displays_help() {
+    let args = vec!["catrepo".to_string(), "help".to_string()];
+    let err = parse_subcommand(&args).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+    let output = err.to_string();
+    assert!(output.contains("check"));
+    assert!(output.contains("update"));
+}
+
+#[test]
+fn parse_subcommand_help_option_displays_help() {
+    let args = vec!["catrepo".to_string(), "--help".to_string()];
+    let err = parse_subcommand(&args).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+    let output = err.to_string();
+    assert!(output.contains("check"));
+    assert!(output.contains("help"));
+}
+
+#[test]
+fn command_help_lists_check_subcommand() {
+    let output = cli_command().render_help().to_string();
+    assert!(output.contains("check"));
+    assert!(output.contains("update"));
+    assert!(output.contains("hash"));
 }
 
 #[test]
