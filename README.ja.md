@@ -38,6 +38,19 @@ cargo install --force --git https://github.com/cat2151/cat-repo-auditor
 catrepo hash
 ```
 
+### update があるか確認する:
+
+```
+catrepo check
+```
+
+### CLIヘルプを表示する:
+
+```
+catrepo help
+catrepo --help
+```
+
 ### 使い方
 
 - 自分用なので他人が使うことを想定していません。以下も自分用のメモです。
