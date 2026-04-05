@@ -50,7 +50,7 @@ fn make_repo(name: &str, cargo_install: Option<bool>) -> RepoInfo {
 }
 
 #[test]
-fn launch_selected_repo_with_rerenders_and_starts_polling_for_cargo_old() {
+fn test_launch_with_rerender_and_polling() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo", Some(false))];
     app.rebuild_rows();
@@ -88,7 +88,7 @@ fn launch_selected_repo_with_rerenders_and_starts_polling_for_cargo_old() {
 }
 
 #[test]
-fn launch_selected_repo_with_skips_rerender_when_launch_does_not_happen() {
+fn test_launch_skips_rerender_on_failure() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo", Some(false))];
     app.rebuild_rows();

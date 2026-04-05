@@ -349,6 +349,10 @@ fn launch_selected_repo(
     launch_selected_repo_with(app, terminal, launch_cargo_app_for_repo, persist_log_line)
 }
 
+/// Launches the selected cargo-installed app and restores the TUI immediately after it exits.
+///
+/// `launch_repo` must execute the repo app and return launch feedback for the current selection.
+/// `persist_log` must record the generated x-key log line in the same way as the production path.
 fn launch_selected_repo_with<B, Launch, Persist>(
     app: &mut App,
     terminal: &mut Terminal<B>,
@@ -378,9 +382,11 @@ where
                 cargo_install,
                 &app.config.resolved_app_run_dir(),
             );
-            let transient_msg = feedback.transient_msg;
-            let log_msg = feedback.log_msg;
-            let launched = feedback.launched;
+            let LaunchFeedback {
+                transient_msg,
+                log_msg,
+                launched,
+            } = feedback;
             app.transient_msg = Some(transient_msg);
             persist_log(app, make_x_log_line(&repo_full_name, &log_msg));
             if launched {
@@ -400,6 +406,8 @@ where
     Ok(())
 }
 
+/// Re-renders the TUI right after returning from an external command so the terminal is restored
+/// immediately instead of waiting for the next main-loop draw.
 fn rerender_terminal<B: Backend>(app: &mut App, terminal: &mut Terminal<B>) -> Result<()> {
     terminal.draw(|f| {
         app.term_height = f.area().height as usize;
