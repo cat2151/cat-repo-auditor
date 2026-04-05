@@ -387,10 +387,10 @@ where
                 log_msg,
                 launched,
             } = feedback;
-            let should_start_cargo_hash_polling = launched && cargo_install == Some(false);
+            let needs_cargo_polling = launched && cargo_install == Some(false);
             app.transient_msg = Some(transient_msg);
             persist_log(app, make_x_log_line(&repo_full_name, &log_msg));
-            if should_start_cargo_hash_polling {
+            if needs_cargo_polling {
                 app.start_cargo_hash_polling(&repo_name);
             }
             terminal.clear().ok();
