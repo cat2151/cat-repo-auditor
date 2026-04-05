@@ -32,6 +32,14 @@ fn make_repo_for_cargo_log() -> RepoInfo {
     }
 }
 
+fn make_repo_with_cargo_state(name: &str, cargo_install: Option<bool>) -> RepoInfo {
+    let mut repo = make_repo_for_cargo_log();
+    repo.name = String::from(name);
+    repo.full_name = format!("owner/{name}");
+    repo.cargo_install = cargo_install;
+    repo
+}
+
 #[test]
 fn issue_url_format() {
     let item = IssueOrPr {
@@ -177,6 +185,26 @@ fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
 }
 
 #[test]
+fn cargo_check_order_prioritizes_known_cargo_old_repos() {
+    let repos = vec![
+        make_repo_with_cargo_state("repo-ok", Some(true)),
+        make_repo_with_cargo_state("repo-old-1", Some(false)),
+        make_repo_with_cargo_state("repo-none", None),
+        make_repo_with_cargo_state("repo-old-2", Some(false)),
+    ];
+
+    assert_eq!(
+        cargo_check_order(&repos),
+        vec![
+            String::from("repo-old-1"),
+            String::from("repo-old-2"),
+            String::from("repo-ok"),
+            String::from("repo-none"),
+        ]
+    );
+}
+
+#[test]
 fn format_pull_log_includes_repo_and_compacts_success_output() {
     let line = format_pull_log(
         "owner/repo",
@@ -199,4 +227,36 @@ fn format_pull_log_includes_repo_and_compacts_error_output() {
         line,
         "pull owner/repo failed: git pull failed | repository has unresolved conflicts"
     );
+}
+
+#[test]
+fn should_spawn_auto_update_after_recheck_requires_repo_to_still_be_old() {
+    assert!(should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| Some((false, String::new(), String::new(), String::new())),
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| Some((true, String::new(), String::new(), String::new())),
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| None,
+    ));
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        "/base",
+        Some(true),
+        |_owner, _repo_name, _base_dir| panic!("recheck should not run for cargo ok"),
+    ));
 }

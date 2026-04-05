@@ -209,7 +209,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                 let lock_char = if repo.is_private { "🔒" } else { "" };
                 let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
 
-                let is_checking = app.checking_repo == repo.name;
+                let is_checking = app.checking_repos.contains(&repo.name);
                 let pending = ("…", MK_ORANGE);
 
                 let (doc_str, doc_col) = if is_checking && repo.readme_ja_checked_at.is_empty() {

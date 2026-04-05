@@ -60,7 +60,7 @@ pub struct RepoInfo {
     pub deepwiki_checked_at: String,
 
     /// None = repo not found in .crates2.json (not installed via cargo install --git)
-    /// Some(true) = installed hash == local HEAD, Some(false) = stale
+    /// Some(true) = installed hash == remote main HEAD, Some(false) = stale against upstream
     #[serde(default)]
     pub cargo_install: Option<bool>,
     /// local git HEAD hash when cargo_install was last checked (doubles as display value for local hash)
@@ -142,13 +142,17 @@ pub enum FetchProgress {
         pages_cat: String,
         deepwiki: Option<bool>,
         deepwiki_cat: String,
+        wf_workflows: Option<bool>,
+        wf_cat: String,
+    },
+    /// Incremental cargo-only update that can arrive independently of other checks.
+    CargoUpdate {
+        name: String,
         cargo_install: Option<bool>,
         cargo_cat: String,
         cargo_remote_hash: String,
         cargo_remote_hash_cat: String,
         cargo_installed_hash: String,
-        wf_workflows: Option<bool>,
-        wf_cat: String,
     },
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }

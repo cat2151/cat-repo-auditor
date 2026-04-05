@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
 use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_MSG;
 use std::{
+    collections::HashSet,
     fs,
     path::PathBuf,
     sync::Mutex,
@@ -86,7 +87,7 @@ fn make_config() -> Config {
 fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     let mut app = App::new(make_config());
     app.bg_tasks.push(("chk", 1, 1));
-    app.checking_repo = String::from("repo");
+    app.checking_repos.insert(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::Done(Ok((
@@ -108,17 +109,21 @@ fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     assert_eq!(app.status_msg, READY_MSG);
     assert!(fetch_rx.is_none());
     assert!(app.bg_tasks.is_empty());
-    assert!(app.checking_repo.is_empty());
+    assert!(app.checking_repos.is_empty());
 }
 
 #[test]
-fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
+fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives() {
     let mut app = App::new(make_config());
-    app.repos = vec![make_repo("repo")];
+    app.repos = vec![make_repo("repo-a"), make_repo("repo-b")];
 
     let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::CheckingRepo(String::from("repo-a")))
+        .unwrap();
+    tx.send(FetchProgress::CheckingRepo(String::from("repo-b")))
+        .unwrap();
     tx.send(FetchProgress::ExistenceUpdate {
-        name: String::from("repo"),
+        name: String::from("repo-a"),
         readme_ja: None,
         readme_ja_cat: String::new(),
         readme_ja_badge: None,
@@ -127,13 +132,30 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
         pages_cat: String::new(),
         deepwiki: None,
         deepwiki_cat: String::new(),
+        wf_workflows: None,
+        wf_cat: String::new(),
+    })
+    .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(app.checking_repos, HashSet::from([String::from("repo-b")]));
+}
+
+#[test]
+fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
+    let mut app = App::new(make_config());
+    app.repos = vec![make_repo("repo")];
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::CargoUpdate {
+        name: String::from("repo"),
         cargo_install: Some(true),
         cargo_cat: String::from("local123"),
         cargo_remote_hash: String::from("remote456"),
         cargo_remote_hash_cat: String::from("2024-01-02T00:00:00Z"),
         cargo_installed_hash: String::from("installed789"),
-        wf_workflows: None,
-        wf_cat: String::new(),
     })
     .unwrap();
     drop(tx);
@@ -146,6 +168,40 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     assert_eq!(repo.cargo_remote_hash, "remote456");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed789");
+}
+
+#[test]
+fn drain_fetch_channel_done_preserves_live_cargo_state() {
+    let mut app = App::new(make_config());
+    let mut existing = make_repo("repo");
+    existing.cargo_install = Some(false);
+    existing.cargo_checked_at = String::from("local-live");
+    existing.cargo_remote_hash = String::from("remote-live");
+    existing.cargo_remote_hash_checked_at = String::from("2024-01-03T00:00:00Z");
+    existing.cargo_installed_hash = String::from("installed-live");
+    app.repos = vec![existing];
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::Done(Ok((
+        vec![make_repo("repo")],
+        RateLimit {
+            remaining: 9,
+            limit: 60,
+            reset_at: String::from("2026-01-01T00:00:00Z"),
+        },
+    ))))
+    .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    let repo = &app.repos[0];
+    assert_eq!(repo.cargo_install, Some(false));
+    assert_eq!(repo.cargo_checked_at, "local-live");
+    assert_eq!(repo.cargo_remote_hash, "remote-live");
+    assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-03T00:00:00Z");
+    assert_eq!(repo.cargo_installed_hash, "installed-live");
 }
 
 #[test]
