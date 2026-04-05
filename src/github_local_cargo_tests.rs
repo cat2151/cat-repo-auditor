@@ -329,7 +329,11 @@ fn cargo_install_picks_latest_mtime_subdir() {
         .iter()
         .filter(|msg| msg.contains("更新日時順の checkout subdir 候補["))
         .collect::<Vec<_>>();
-    assert_eq!(candidate_logs.len(), 2);
+    assert_eq!(
+        candidate_logs.len(),
+        2,
+        "このテストでは checkout subdir を old/new の 2 つだけ作成している"
+    );
     assert!(candidate_logs.iter().any(|msg| {
         msg.contains("更新日時順の checkout subdir 候補[0]=")
             && msg.contains(&new_sub_display)
