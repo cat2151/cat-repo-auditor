@@ -154,11 +154,16 @@ fn resolve_cargo_check_fields(
 
 fn phase3_check_order(repos: &[RepoInfo]) -> Vec<String> {
     let mut ordered: Vec<&RepoInfo> = repos.iter().collect();
-    ordered.sort_by_key(|repo| match repo.cargo_install {
-        Some(false) => 0u8,
-        _ => 1u8,
-    });
+    ordered.sort_by_key(phase3_check_priority);
     ordered.into_iter().map(|repo| repo.name.clone()).collect()
+}
+
+fn phase3_check_priority(repo: &&RepoInfo) -> u8 {
+    if repo.cargo_install == Some(false) {
+        0
+    } else {
+        1
+    }
 }
 
 // ──────────────────────────────────────────────
