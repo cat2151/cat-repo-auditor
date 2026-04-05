@@ -88,7 +88,7 @@ fn test_launch_with_rerender_and_polling() {
 }
 
 #[test]
-fn test_launch_skips_rerender_on_failure() {
+fn test_launch_rerenders_on_failure_without_starting_polling() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo", Some(false))];
     app.rebuild_rows();
@@ -108,7 +108,7 @@ fn test_launch_skips_rerender_on_failure() {
     )
     .unwrap();
 
-    assert_eq!(app.term_height, 0);
+    assert_eq!(app.term_height, 20);
     assert!(app.cargo_hash_polls.is_empty());
     assert_eq!(app.transient_msg.as_deref(), Some("run failed: boom"));
 }

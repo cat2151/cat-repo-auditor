@@ -382,17 +382,19 @@ where
                 cargo_install,
                 &app.config.resolved_app_run_dir(),
             );
+            let should_rerender_terminal = true;
             let LaunchFeedback {
                 transient_msg,
                 log_msg,
                 launched,
             } = feedback;
+            let should_start_cargo_hash_polling = launched && cargo_install == Some(false);
             app.transient_msg = Some(transient_msg);
             persist_log(app, make_x_log_line(&repo_full_name, &log_msg));
-            if launched {
-                if cargo_install == Some(false) {
-                    app.start_cargo_hash_polling(&repo_name);
-                }
+            if should_start_cargo_hash_polling {
+                app.start_cargo_hash_polling(&repo_name);
+            }
+            if should_rerender_terminal {
                 terminal.clear().ok();
                 rerender_terminal(app, terminal)?;
             }
