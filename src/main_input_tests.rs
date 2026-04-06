@@ -173,7 +173,7 @@ fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
 }
 
 #[test]
-fn test_refresh_selected_repo_local_status_preserves_selection_when_row_positions_change() {
+fn test_refresh_preserves_selection_after_separator_change() {
     let mut app = App::new(make_config());
     let mut alpha = make_repo("alpha", Some(false));
     alpha.open_prs = 1;
@@ -181,6 +181,7 @@ fn test_refresh_selected_repo_local_status_preserves_selection_when_row_position
     beta.open_prs = 1;
     app.repos = vec![alpha, beta];
     app.rebuild_rows();
+    assert!(matches!(app.filtered_rows.get(1), Some(RepoRow::Repo(1))));
     app.row_cursor = 1;
 
     refresh_selected_repo_local_status_with(&mut app, |_base_dir, repo_name| {

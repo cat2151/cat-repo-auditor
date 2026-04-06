@@ -370,13 +370,12 @@ where
     repo.has_local_git = has_local_git;
     repo.staging_files = staging_files;
     app.rebuild_rows();
-    if let Some(row_idx) = app
+    let fallback_row_idx = app.row_cursor;
+    app.row_cursor = app
         .filtered_rows
         .iter()
         .position(|row| matches!(row, RepoRow::Repo(idx) if *idx == repo_idx))
-    {
-        app.row_cursor = row_idx;
-    }
+        .unwrap_or(fallback_row_idx);
 }
 
 /// Launches the selected cargo-installed app and restores the TUI immediately after it exits.
