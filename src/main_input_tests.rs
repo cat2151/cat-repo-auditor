@@ -4,6 +4,7 @@ use crate::{
     config::Config,
     github::{LocalStatus, RepoInfo},
     main_helpers::make_x_log_line,
+    ui::RepoRow,
 };
 use ratatui::{backend::TestBackend, Terminal};
 
@@ -114,4 +115,44 @@ fn test_launch_rerenders_on_failure_without_starting_polling() {
     assert_eq!(app.term_height, 20);
     assert!(app.cargo_hash_polls.is_empty());
     assert_eq!(app.transient_msg.as_deref(), Some("run failed: boom"));
+}
+
+#[test]
+fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
+    let mut app = App::new(make_config());
+    let mut alpha = make_repo("alpha", Some(false));
+    alpha.local_status = LocalStatus::Modified;
+    alpha.staging_files = vec![String::from("src/lib.rs")];
+    let mut beta = make_repo("beta", Some(false));
+    beta.local_status = LocalStatus::Modified;
+    beta.staging_files = vec![String::from("README.md")];
+    app.repos = vec![alpha, beta];
+    app.rebuild_rows();
+    app.row_cursor = app
+        .filtered_rows
+        .iter()
+        .position(|row| matches!(row, RepoRow::Repo(idx) if *idx == 1))
+        .unwrap();
+
+    refresh_selected_repo_local_status_with(&mut app, |base_dir, repo_name| {
+        assert_eq!(base_dir, "/base");
+        assert_eq!(repo_name, "beta");
+        (
+            LocalStatus::Clean,
+            true,
+            vec![String::from("Cargo.toml"), String::from("src/main.rs")],
+        )
+    });
+
+    assert_eq!(app.repos[0].local_status, LocalStatus::Modified);
+    assert_eq!(app.repos[0].staging_files, vec![String::from("src/lib.rs")]);
+    assert_eq!(app.repos[1].local_status, LocalStatus::Clean);
+    assert_eq!(
+        app.repos[1].staging_files,
+        vec![String::from("Cargo.toml"), String::from("src/main.rs")]
+    );
+    assert!(matches!(
+        app.filtered_rows.get(app.row_cursor),
+        Some(RepoRow::Repo(1))
+    ));
 }

@@ -14,7 +14,9 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::FetchProgress,
-    github_local::{collect_workflow_repo_exist_checks, launch_lazygit, open_url},
+    github_local::{
+        check_local_status_no_fetch, collect_workflow_repo_exist_checks, launch_lazygit, open_url,
+    },
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, start_fetch},
     main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback},
@@ -174,7 +176,9 @@ fn handle_repo_focus_input(
                     if let Err(e) = launch_lazygit(&base, &name) {
                         app.transient_msg = Some(format!("lazygit: {e}"));
                     } else {
+                        refresh_selected_repo_local_status(app);
                         terminal.clear()?;
+                        rerender_terminal(app, terminal)?;
                     }
                 }
             }
@@ -345,6 +349,27 @@ fn launch_selected_repo(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<()> {
     launch_selected_repo_with(app, terminal, launch_cargo_app_for_repo, persist_log_line)
+}
+
+fn refresh_selected_repo_local_status(app: &mut App) {
+    refresh_selected_repo_local_status_with(app, check_local_status_no_fetch);
+}
+
+fn refresh_selected_repo_local_status_with<Check>(app: &mut App, check_local_status: Check)
+where
+    Check: FnOnce(&str, &str) -> (crate::github::LocalStatus, bool, Vec<String>),
+{
+    let Some(repo_idx) = app.selected_repo_idx() else {
+        return;
+    };
+    let repo_name = app.repos[repo_idx].name.clone();
+    let (local_status, has_local_git, staging_files) =
+        check_local_status(&app.config.local_base_dir, &repo_name);
+    let repo = &mut app.repos[repo_idx];
+    repo.local_status = local_status;
+    repo.has_local_git = has_local_git;
+    repo.staging_files = staging_files;
+    app.rebuild_rows();
 }
 
 /// Launches the selected cargo-installed app and restores the TUI immediately after it exits.
