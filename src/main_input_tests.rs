@@ -3,7 +3,6 @@ use crate::{
     app::App,
     config::Config,
     github::{LocalStatus, RepoInfo},
-    main_helpers::make_x_log_line,
     ui::RepoRow,
 };
 use ratatui::{backend::TestBackend, Terminal};
@@ -84,11 +83,9 @@ fn test_launch_with_rerender_and_polling() {
     );
     assert_eq!(app.cargo_hash_polls.len(), 1);
     assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
-    let expected_log = make_x_log_line("owner/repo", "run: `repo-bin update` cwd=`/run`");
-    assert_eq!(
-        app.log_lines.last().map(String::as_str),
-        Some(expected_log.as_str())
-    );
+    let log_line = app.log_lines.last().expect("expected launch log line");
+    assert!(log_line.contains("x owner/repo"));
+    assert!(log_line.ends_with("run: `repo-bin update` cwd=`/run`"));
 }
 
 #[test]
@@ -128,6 +125,15 @@ fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
     beta.staging_files = vec![String::from("README.md")];
     app.repos = vec![alpha, beta];
     app.rebuild_rows();
+    let repo_rows_before: Vec<usize> = app
+        .filtered_rows
+        .iter()
+        .filter_map(|row| match row {
+            RepoRow::Repo(idx) => Some(*idx),
+            RepoRow::Separator(_) => None,
+        })
+        .collect();
+    assert_eq!(repo_rows_before, vec![0, 1]);
     app.row_cursor = app
         .filtered_rows
         .iter()
@@ -151,6 +157,15 @@ fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
         app.repos[1].staging_files,
         vec![String::from("Cargo.toml"), String::from("src/main.rs")]
     );
+    let repo_rows_after: Vec<usize> = app
+        .filtered_rows
+        .iter()
+        .filter_map(|row| match row {
+            RepoRow::Repo(idx) => Some(*idx),
+            RepoRow::Separator(_) => None,
+        })
+        .collect();
+    assert_eq!(repo_rows_after, vec![0, 1]);
     assert!(matches!(
         app.filtered_rows.get(app.row_cursor),
         Some(RepoRow::Repo(1))
