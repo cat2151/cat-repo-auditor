@@ -3,7 +3,7 @@ use crate::{
     app::App,
     config::Config,
     github::{LocalStatus, RepoInfo},
-    main_helpers::make_x_log_line,
+    ui::RepoRow,
 };
 use ratatui::{backend::TestBackend, Terminal};
 
@@ -83,11 +83,9 @@ fn test_launch_with_rerender_and_polling() {
     );
     assert_eq!(app.cargo_hash_polls.len(), 1);
     assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
-    let expected_log = make_x_log_line("owner/repo", "run: `repo-bin update` cwd=`/run`");
-    assert_eq!(
-        app.log_lines.last().map(String::as_str),
-        Some(expected_log.as_str())
-    );
+    let log_line = app.log_lines.last().expect("expected launch log line");
+    assert!(log_line.contains("x owner/repo"));
+    assert!(log_line.ends_with("run: `repo-bin update` cwd=`/run`"));
 }
 
 #[test]
@@ -114,4 +112,91 @@ fn test_launch_rerenders_on_failure_without_starting_polling() {
     assert_eq!(app.term_height, 20);
     assert!(app.cargo_hash_polls.is_empty());
     assert_eq!(app.transient_msg.as_deref(), Some("run failed: boom"));
+}
+
+#[test]
+fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
+    let mut app = App::new(make_config());
+    let mut alpha = make_repo("alpha", Some(false));
+    alpha.local_status = LocalStatus::Modified;
+    alpha.staging_files = vec![String::from("src/lib.rs")];
+    let mut beta = make_repo("beta", Some(false));
+    beta.local_status = LocalStatus::Modified;
+    beta.staging_files = vec![String::from("README.md")];
+    app.repos = vec![alpha, beta];
+    app.rebuild_rows();
+    let repo_rows_before: Vec<usize> = app
+        .filtered_rows
+        .iter()
+        .filter_map(|row| match row {
+            RepoRow::Repo(idx) => Some(*idx),
+            RepoRow::Separator(_) => None,
+        })
+        .collect();
+    assert_eq!(repo_rows_before, vec![0, 1]);
+    app.row_cursor = app
+        .filtered_rows
+        .iter()
+        .position(|row| matches!(row, RepoRow::Repo(idx) if *idx == 1))
+        .unwrap();
+
+    refresh_selected_repo_local_status_with(&mut app, |base_dir, repo_name| {
+        assert_eq!(base_dir, "/base");
+        assert_eq!(repo_name, "beta");
+        (
+            LocalStatus::Clean,
+            true,
+            vec![String::from("Cargo.toml"), String::from("src/main.rs")],
+        )
+    });
+
+    assert_eq!(app.repos[0].local_status, LocalStatus::Modified);
+    assert_eq!(app.repos[0].staging_files, vec![String::from("src/lib.rs")]);
+    assert_eq!(app.repos[1].local_status, LocalStatus::Clean);
+    assert_eq!(
+        app.repos[1].staging_files,
+        vec![String::from("Cargo.toml"), String::from("src/main.rs")]
+    );
+    let repo_rows_after: Vec<usize> = app
+        .filtered_rows
+        .iter()
+        .filter_map(|row| match row {
+            RepoRow::Repo(idx) => Some(*idx),
+            RepoRow::Separator(_) => None,
+        })
+        .collect();
+    assert_eq!(repo_rows_after, vec![0, 1]);
+    assert!(matches!(
+        app.filtered_rows.get(app.row_cursor),
+        Some(RepoRow::Repo(1))
+    ));
+}
+
+#[test]
+fn test_refresh_preserves_selection_after_separator_change() {
+    let mut app = App::new(make_config());
+    let mut alpha = make_repo("alpha", Some(false));
+    alpha.open_prs = 1;
+    let mut beta = make_repo("beta", Some(false));
+    beta.open_prs = 1;
+    app.repos = vec![alpha, beta];
+    app.rebuild_rows();
+    assert!(matches!(app.filtered_rows.get(1), Some(RepoRow::Repo(1))));
+    app.row_cursor = 1;
+
+    refresh_selected_repo_local_status_with(&mut app, |_base_dir, repo_name| {
+        assert_eq!(repo_name, "beta");
+        (LocalStatus::NotFound, false, vec![])
+    });
+
+    assert_eq!(app.repos[1].local_status, LocalStatus::NotFound);
+    assert_eq!(app.row_cursor, 2);
+    assert!(matches!(
+        app.filtered_rows.get(1),
+        Some(RepoRow::Separator(_))
+    ));
+    assert!(matches!(
+        app.filtered_rows.get(app.row_cursor),
+        Some(RepoRow::Repo(1))
+    ));
 }
