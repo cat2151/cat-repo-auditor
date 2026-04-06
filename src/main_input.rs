@@ -20,7 +20,7 @@ use crate::{
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, start_fetch},
     main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback},
-    ui::{draw_ui, Focus, SearchState},
+    ui::{draw_ui, Focus, RepoRow, SearchState},
 };
 
 /// Tracks keyboard input state to implement 50ms key debouncing.
@@ -370,6 +370,13 @@ where
     repo.has_local_git = has_local_git;
     repo.staging_files = staging_files;
     app.rebuild_rows();
+    if let Some(row_idx) = app
+        .filtered_rows
+        .iter()
+        .position(|row| matches!(row, RepoRow::Repo(idx) if *idx == repo_idx))
+    {
+        app.row_cursor = row_idx;
+    }
 }
 
 /// Launches the selected cargo-installed app and restores the TUI immediately after it exits.
