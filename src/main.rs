@@ -1,17 +1,28 @@
 mod app;
 mod config;
+#[path = "github/github.rs"]
 mod github;
+#[path = "github/github_fetch.rs"]
 mod github_fetch;
+#[path = "github/github_local.rs"]
 mod github_local;
 mod history;
+#[path = "main/main_cli.rs"]
 mod main_cli;
+#[path = "main/main_fetch.rs"]
 mod main_fetch;
+#[path = "main/main_helpers.rs"]
 mod main_helpers;
+#[path = "main/main_input.rs"]
 mod main_input;
+#[path = "main/main_launch.rs"]
 mod main_launch;
 mod self_update;
+#[path = "ui/ui.rs"]
 mod ui;
+#[path = "ui/ui_detail.rs"]
 mod ui_detail;
+#[path = "ui/ui_types.rs"]
 mod ui_types;
 
 use anyhow::Result;
@@ -46,7 +57,7 @@ use crate::main_launch::{
 };
 
 #[cfg(test)]
-#[path = "main_tests.rs"]
+#[path = "main/main_tests.rs"]
 mod tests;
 
 enum CargoHashPollEvent {
