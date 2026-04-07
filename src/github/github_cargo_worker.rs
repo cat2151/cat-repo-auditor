@@ -1,10 +1,16 @@
 use crate::{
-    github_local::{append_cargo_check_results, check_cargo_git_install},
+    github_local::{
+        append_cargo_check_after_auto_update_log, append_cargo_check_results,
+        check_cargo_git_install,
+    },
     history::History,
     main_launch::spawn_cargo_app_for_repo,
 };
 
-use super::{phase3_worker_count, should_spawn_auto_update_after_recheck, FetchProgress, RepoInfo};
+use super::{
+    inspect_auto_update_after_recheck, phase3_worker_count, AutoUpdateAfterRecheck, FetchProgress,
+    RepoInfo,
+};
 
 /// Cargo check の状態とログ用の説明材料を保持する。
 ///
@@ -149,6 +155,13 @@ pub(super) struct CargoRepoResult {
     pub(super) cargo_installed_hash: String,
 }
 
+fn append_auto_update_recheck_log(
+    repo_full_name: &str,
+    messages: impl IntoIterator<Item = impl AsRef<str>>,
+) {
+    append_cargo_check_after_auto_update_log(repo_full_name, messages);
+}
+
 fn build_cargo_tasks(repos: &[RepoInfo]) -> Vec<CargoRepoTask> {
     let repos_by_name: std::collections::HashMap<&str, &RepoInfo> = repos
         .iter()
@@ -288,28 +301,89 @@ pub(super) fn spawn_background_cargo_checks(
                 });
 
                 if let Some(run_dir) = auto_update_run_dir.as_deref() {
-                    if should_spawn_auto_update_after_recheck(
+                    match inspect_auto_update_after_recheck(
                         &owner,
                         &result.name,
                         &base_dir,
                         result.cargo_install,
                         check_cargo_git_install,
                     ) {
-                        let feedback = spawn_cargo_app_for_repo(
-                            &owner,
-                            &result.name,
-                            result.cargo_install,
-                            run_dir,
-                        );
-                        let _ = tx.send(FetchProgress::Log(format!(
-                            "x {} {}",
-                            result.full_name, feedback.log_msg
-                        )));
-                    } else if result.cargo_install == Some(false) {
-                        let _ = tx.send(FetchProgress::Log(format!(
-                            "x {} not run: cargo install status changed on recheck",
-                            result.full_name
-                        )));
+                        AutoUpdateAfterRecheck::StillOld {
+                            installed_hash,
+                            remote_hash,
+                        } => {
+                            let feedback = spawn_cargo_app_for_repo(
+                                &owner,
+                                &result.name,
+                                result.cargo_install,
+                                run_dir,
+                            );
+                            let mut messages = vec![
+                                String::from(
+                                    "この repo は cargo check で old でしたので、recheck でも old のままか確認しました。",
+                                ),
+                                format!(
+                                    "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
+                                ),
+                                format!("update 実行: {}", feedback.log_msg),
+                            ];
+                            if feedback.launched {
+                                messages.push(String::from(
+                                    "1分後から、1分間隔で installed hash を確認し、remote hash と一致したかをこのログに追記します。",
+                                ));
+                                let _ = tx.send(FetchProgress::StartAutoUpdateCargoHashPolling {
+                                    name: result.name.clone(),
+                                });
+                            } else {
+                                messages.push(String::from(
+                                    "update の起動に失敗したため、1分後の installed hash 確認は開始しません。",
+                                ));
+                            }
+                            append_auto_update_recheck_log(&result.full_name, messages);
+                            let _ = tx.send(FetchProgress::Log(format!(
+                                "x {} {}",
+                                result.full_name, feedback.log_msg
+                            )));
+                        }
+                        AutoUpdateAfterRecheck::UpdatedDuringRecheck {
+                            installed_hash,
+                            remote_hash,
+                        } => {
+                            append_auto_update_recheck_log(
+                                &result.full_name,
+                                [
+                                    "この repo は cargo check で old でしたが、recheck 時点では update 実行前に installed hash が更新されていました。".to_string(),
+                                    format!(
+                                        "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
+                                    ),
+                                    String::from(
+                                        "remote hash と一致したため update サブコマンドは実行しません。",
+                                    ),
+                                ],
+                            );
+                            let _ = tx.send(FetchProgress::Log(format!(
+                                "x {} not run: cargo install status changed on recheck",
+                                result.full_name
+                            )));
+                        }
+                        AutoUpdateAfterRecheck::RecheckFailed => {
+                            append_auto_update_recheck_log(
+                                &result.full_name,
+                                [
+                                    String::from(
+                                        "この repo は cargo check で old でしたが、recheck で installed hash を取得できませんでした。",
+                                    ),
+                                    String::from(
+                                        "recheck 失敗のため update サブコマンドは実行せず、1分後の polling も開始しません。",
+                                    ),
+                                ],
+                            );
+                            let _ = tx.send(FetchProgress::Log(format!(
+                                "x {} not run: cargo install recheck failed",
+                                result.full_name
+                            )));
+                        }
+                        AutoUpdateAfterRecheck::NotOldBeforeRecheck => {}
                     }
                 }
 

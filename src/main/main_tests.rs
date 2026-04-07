@@ -7,6 +7,14 @@ use crate::main_launch::{
     x_not_run_feedback_no_cargo_install,
 };
 use clap::error::ErrorKind;
+use std::{
+    fs,
+    path::PathBuf,
+    sync::Mutex,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+static AUTO_UPDATE_LOG_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
     crate::github::RepoInfo {
@@ -37,6 +45,46 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
         cargo_installed_hash: String::new(),
         wf_workflows: None,
         wf_checked_at: String::new(),
+    }
+}
+
+struct TempConfigDir {
+    root: PathBuf,
+    previous_xdg_config_home: Option<std::ffi::OsString>,
+}
+
+impl TempConfigDir {
+    fn new() -> Self {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "catrepo-main-tests-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("should create temp config dir");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", &root);
+        Self {
+            root,
+            previous_xdg_config_home,
+        }
+    }
+
+    fn auto_update_log_path(&self) -> PathBuf {
+        crate::config::Config::cargo_check_after_auto_update_log_path()
+    }
+}
+
+impl Drop for TempConfigDir {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous_xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", previous);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        let _ = fs::remove_dir_all(&self.root);
     }
 }
 
@@ -217,4 +265,44 @@ fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
     assert_eq!(repo.cargo_remote_hash, "installed123");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-01T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed123");
+}
+
+#[test]
+fn test_auto_update_timeout_logged_to_dedicated_file() {
+    let _guard = AUTO_UPDATE_LOG_TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let temp_config_dir = TempConfigDir::new();
+    let mut app = App::new(Config {
+        owner: String::from("owner"),
+        local_base_dir: String::from("/base"),
+        app_run_dir: None,
+        auto_pull: false,
+        auto_update: false,
+    });
+    let mut repo = make_poll_repo("repo");
+    repo.cargo_installed_hash = String::from("installed123");
+    repo.cargo_remote_hash = String::from("remote456");
+    app.repos = vec![repo];
+    app.cargo_hash_polls.push(crate::app::CargoHashPoll {
+        repo_name: String::from("repo"),
+        started_at: UNIX_EPOCH,
+        next_check_at: UNIX_EPOCH + Duration::from_secs(60),
+        in_flight: true,
+        after_auto_update: true,
+    });
+
+    let (tx, _rx) = std::sync::mpsc::channel();
+    start_due_cargo_hash_polls(&mut app, &tx);
+
+    assert!(app.cargo_hash_polls.is_empty());
+    let persisted =
+        fs::read_to_string(temp_config_dir.auto_update_log_path()).expect("should write log");
+    assert!(persisted.contains("========== owner/repo =========="));
+    assert!(persisted.contains(
+        "installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"
+    ));
+    assert!(persisted.contains(
+        "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。"
+    ));
 }

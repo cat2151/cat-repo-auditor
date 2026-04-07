@@ -7,7 +7,10 @@ mod git;
 #[path = "github_local_launch.rs"]
 mod launch;
 
-pub(crate) use cargo::{append_cargo_check_results, check_cargo_git_install, get_cargo_bins};
+pub(crate) use cargo::{
+    append_cargo_check_after_auto_update_log, append_cargo_check_results, check_cargo_git_install,
+    get_cargo_bins,
+};
 pub(crate) use checks::{
     check_deepwiki_exists, check_file_exists, check_pages_exists, check_readme_ja_badge,
     check_workflows, collect_workflow_repo_exist_checks,

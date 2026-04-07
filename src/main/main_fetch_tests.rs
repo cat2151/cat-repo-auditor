@@ -171,6 +171,26 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
 }
 
 #[test]
+fn drain_fetch_channel_starts_auto_update_cargo_hash_polling() {
+    let mut app = App::new(make_config());
+    app.repos = vec![make_repo("repo")];
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::StartAutoUpdateCargoHashPolling {
+        name: String::from("repo"),
+    })
+    .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(app.cargo_hash_polls.len(), 1);
+    assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
+    assert!(app.cargo_hash_polls[0].after_auto_update);
+}
+
+#[test]
 fn drain_fetch_channel_done_preserves_live_cargo_state() {
     let mut app = App::new(make_config());
     let mut existing = make_repo("repo");

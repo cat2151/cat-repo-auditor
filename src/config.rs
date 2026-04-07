@@ -73,12 +73,29 @@ impl Config {
         config_dir.join("logs").join("log.txt")
     }
 
+    pub(crate) fn cargo_check_after_auto_update_log_path_from_config_dir(
+        config_dir: &Path,
+    ) -> PathBuf {
+        config_dir
+            .join("logs")
+            .join("cargo_check_after_auto_update.log")
+    }
+
     /// Returns the unified log file path under logs/log.txt.
     pub fn log_path() -> PathBuf {
         Self::config_path()
             .parent()
             .map(Self::log_path_from_config_dir)
             .unwrap_or_else(|| PathBuf::from("logs/log.txt"))
+    }
+
+    /// Returns the auto-update cargo recheck log file path under
+    /// logs/cargo_check_after_auto_update.log.
+    pub fn cargo_check_after_auto_update_log_path() -> PathBuf {
+        Self::config_path()
+            .parent()
+            .map(Self::cargo_check_after_auto_update_log_path_from_config_dir)
+            .unwrap_or_else(|| PathBuf::from("logs/cargo_check_after_auto_update.log"))
     }
 
     /// Load config from platform config dir.

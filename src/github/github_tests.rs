@@ -249,3 +249,27 @@ fn should_spawn_auto_update_after_recheck_requires_repo_to_still_be_old() {
         |_owner, _repo_name, _base_dir| panic!("recheck should not run for cargo ok"),
     ));
 }
+
+#[test]
+fn inspect_auto_update_after_recheck_reports_updated_and_failed_cases() {
+    assert_eq!(
+        inspect_auto_update_after_recheck("owner", "repo", "/base", Some(false), |_o, _r, _b| {
+            Some((
+                true,
+                String::from("installed123"),
+                String::from("local123"),
+                String::from("remote123"),
+            ))
+        }),
+        AutoUpdateAfterRecheck::UpdatedDuringRecheck {
+            installed_hash: String::from("installed123"),
+            remote_hash: String::from("remote123"),
+        }
+    );
+    assert_eq!(
+        inspect_auto_update_after_recheck("owner", "repo", "/base", Some(false), |_o, _r, _b| {
+            None
+        }),
+        AutoUpdateAfterRecheck::RecheckFailed
+    );
+}

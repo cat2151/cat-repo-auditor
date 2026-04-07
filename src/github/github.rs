@@ -40,6 +40,51 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
     should_auto_pull_status(&repo.local_status, head_matches_upstream)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum AutoUpdateAfterRecheck {
+    NotOldBeforeRecheck,
+    RecheckFailed,
+    StillOld {
+        installed_hash: String,
+        remote_hash: String,
+    },
+    UpdatedDuringRecheck {
+        installed_hash: String,
+        remote_hash: String,
+    },
+}
+
+fn inspect_auto_update_after_recheck<Recheck>(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_install: Option<bool>,
+    recheck: Recheck,
+) -> AutoUpdateAfterRecheck
+where
+    Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
+{
+    if cargo_install != Some(false) {
+        return AutoUpdateAfterRecheck::NotOldBeforeRecheck;
+    }
+
+    match recheck(owner, repo_name, base_dir) {
+        Some((false, installed_hash, _local_hash, remote_hash)) => {
+            AutoUpdateAfterRecheck::StillOld {
+                installed_hash,
+                remote_hash,
+            }
+        }
+        Some((true, installed_hash, _local_hash, remote_hash)) => {
+            AutoUpdateAfterRecheck::UpdatedDuringRecheck {
+                installed_hash,
+                remote_hash,
+            }
+        }
+        None => AutoUpdateAfterRecheck::RecheckFailed,
+    }
+}
+
 fn should_spawn_auto_update_after_recheck<Recheck>(
     owner: &str,
     repo_name: &str,
@@ -50,8 +95,10 @@ fn should_spawn_auto_update_after_recheck<Recheck>(
 where
     Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
 {
-    cargo_install == Some(false)
-        && matches!(recheck(owner, repo_name, base_dir), Some((false, _, _, _)))
+    matches!(
+        inspect_auto_update_after_recheck(owner, repo_name, base_dir, cargo_install, recheck),
+        AutoUpdateAfterRecheck::StillOld { .. }
+    )
 }
 
 fn compact_log_detail(detail: &str) -> String {

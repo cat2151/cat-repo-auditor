@@ -28,16 +28,17 @@ fn get_cargo_home() -> String {
     })
 }
 
-/// Append one or more timestamped log messages to the unified local log file.
-pub(super) fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
-    let log_path = crate::config::Config::log_path();
+fn append_log_messages_to_path(
+    log_path: &Path,
+    messages: impl IntoIterator<Item = impl AsRef<str>>,
+) {
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log_path)
+        .open(log_path)
     {
         // 同一 batch 内のログは同じタイムスタンプで記録し、一連の処理として識別しやすくする。
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -45,6 +46,11 @@ pub(super) fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<
             let _ = writeln!(f, "[{now}] {}", msg.as_ref());
         }
     }
+}
+
+/// Append one or more timestamped log messages to the unified local log file.
+pub(super) fn append_log_messages(messages: impl IntoIterator<Item = impl AsRef<str>>) {
+    append_log_messages_to_path(&crate::config::Config::log_path(), messages);
 }
 
 pub(super) fn append_log_message(msg: &str) {
@@ -55,6 +61,31 @@ pub(crate) fn append_cargo_check_results(owner: &str, results: &[(String, String
     append_log_messages(results.iter().map(|(repo_name, result)| {
         format!("cargo check: リポジトリ={owner}/{repo_name} 結果={result}")
     }));
+}
+
+pub(crate) fn append_cargo_check_after_auto_update_log(
+    repo_full_name: &str,
+    messages: impl IntoIterator<Item = impl AsRef<str>>,
+) {
+    append_cargo_check_after_auto_update_log_for_path(
+        &crate::config::Config::cargo_check_after_auto_update_log_path(),
+        repo_full_name,
+        messages,
+    );
+}
+
+pub(super) fn append_cargo_check_after_auto_update_log_for_path(
+    path: &Path,
+    repo_full_name: &str,
+    messages: impl IntoIterator<Item = impl AsRef<str>>,
+) {
+    let mut lines = vec![format!("========== {repo_full_name} ==========")];
+    lines.extend(
+        messages
+            .into_iter()
+            .map(|message| message.as_ref().to_string()),
+    );
+    append_log_messages_to_path(path, lines);
 }
 
 fn log_cargo_check_path_result(

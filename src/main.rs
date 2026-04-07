@@ -38,7 +38,7 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::{FetchProgress, RepoInfo},
-    github_local::check_cargo_git_install,
+    github_local::{append_cargo_check_after_auto_update_log, check_cargo_git_install},
     history::History,
     main_cli::{parse_subcommand, Subcommand},
     main_fetch::drain_fetch_channel,
@@ -100,16 +100,52 @@ fn persist_repo_cargo_state(repo: &RepoInfo) {
     .ok();
 }
 
+fn append_auto_update_cargo_poll_log(
+    repo_full_name: &str,
+    messages: impl IntoIterator<Item = impl AsRef<str>>,
+) {
+    append_cargo_check_after_auto_update_log(repo_full_name, messages);
+}
+
+fn format_installed_hash_check_log(installed_hash: &str, remote_hash: &str) -> String {
+    format!("installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}")
+}
+
+fn append_auto_update_cargo_poll_timeout_log(
+    repo_full_name: &str,
+    installed_hash: &str,
+    remote_hash: &str,
+) {
+    append_auto_update_cargo_poll_log(
+        repo_full_name,
+        [
+            format_installed_hash_check_log(installed_hash, remote_hash),
+            String::from(
+                "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。",
+            ),
+        ],
+    );
+}
+
 fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPollEvent>) {
     while let Ok(event) = rx.try_recv() {
         match event {
             CargoHashPollEvent::Checked { name, result } => {
                 let now = SystemTime::now();
+                let auto_update_poll = app.cargo_hash_poll_after_auto_update(&name);
+                let check_succeeded = result.is_some();
                 let mut repo_full_name = None;
+                let mut latest_hashes = None;
                 let matched_remote =
                     if let Some(repo) = app.repos.iter_mut().find(|repo| repo.name == name) {
                         repo_full_name = Some(repo.full_name.clone());
                         let matched_remote = apply_cargo_hash_poll_result(repo, result);
+                        if auto_update_poll && check_succeeded {
+                            latest_hashes = Some((
+                                repo.cargo_installed_hash.clone(),
+                                repo.cargo_remote_hash.clone(),
+                            ));
+                        }
                         persist_repo_cargo_state(repo);
                         matched_remote
                     } else {
@@ -125,6 +161,18 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                                 "cargo hash polling completed: {repo_full_name} installed==remote"
                             )),
                         );
+                        if auto_update_poll {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
+                            append_auto_update_cargo_poll_log(
+                                &repo_full_name,
+                                [
+                                    format_installed_hash_check_log(&installed_hash, &remote_hash),
+                                    String::from(
+                                        "installed hash が remote hash と一致したので、この repo の polling を終了します。",
+                                    ),
+                                ],
+                            );
+                        }
                     }
                 } else if app.finish_cargo_hash_poll_attempt_at(&name, now) {
                     if let Some(repo_full_name) = repo_full_name {
@@ -134,6 +182,39 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                                 "cargo hash polling timed out after 30m: {repo_full_name}"
                             )),
                         );
+                        if auto_update_poll {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
+                            append_auto_update_cargo_poll_timeout_log(
+                                &repo_full_name,
+                                &installed_hash,
+                                &remote_hash,
+                            );
+                        }
+                    }
+                } else if auto_update_poll {
+                    if let Some(repo_full_name) = repo_full_name {
+                        if check_succeeded {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
+                            append_auto_update_cargo_poll_log(
+                                &repo_full_name,
+                                [
+                                    format_installed_hash_check_log(
+                                        &installed_hash,
+                                        &remote_hash,
+                                    ),
+                                    String::from(
+                                        "まだ remote hash と相違していますので、1分後にまた installed hash を確認します。",
+                                    ),
+                                ],
+                            );
+                        } else {
+                            append_auto_update_cargo_poll_log(
+                                &repo_full_name,
+                                [String::from(
+                                    "installed hash を確認しましたが結果を取得できませんでした。1分後にまた installed hash を確認します。",
+                                )],
+                            );
+                        }
                     }
                 }
             }
@@ -143,19 +224,25 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
 
 fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEvent>) {
     let now = SystemTime::now();
-    for repo_name in app.expire_cargo_hash_polls_at(now) {
-        if let Some(repo_full_name) = app
-            .repos
-            .iter()
-            .find(|repo| repo.name == repo_name)
-            .map(|repo| repo.full_name.clone())
-        {
+    for expired_poll in app.take_expired_cargo_hash_polls_at(now) {
+        let repo_name = expired_poll.repo_name;
+        if let Some(repo) = app.repos.iter().find(|repo| repo.name == repo_name) {
+            let repo_full_name = repo.full_name.clone();
+            let installed_hash = repo.cargo_installed_hash.clone();
+            let remote_hash = repo.cargo_remote_hash.clone();
             persist_log_line(
                 app,
                 make_log_line(&format!(
                     "cargo hash polling timed out after 30m: {repo_full_name}"
                 )),
             );
+            if expired_poll.after_auto_update {
+                append_auto_update_cargo_poll_timeout_log(
+                    &repo_full_name,
+                    &installed_hash,
+                    &remote_hash,
+                );
+            }
         }
     }
     for repo_name in app.due_cargo_hash_polls_at(now) {
