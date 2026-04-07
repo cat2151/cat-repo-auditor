@@ -24,6 +24,12 @@ pub(crate) struct CargoHashPoll {
     pub after_auto_update: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExpiredCargoHashPoll {
+    pub repo_name: String,
+    pub after_auto_update: bool,
+}
+
 // ── App ──────────────────────────────────────────────────────────────────────
 
 pub struct App {
@@ -396,7 +402,17 @@ impl App {
     }
 
     pub(crate) fn expire_cargo_hash_polls_at(&mut self, now: SystemTime) -> Vec<String> {
-        let expired: Vec<String> = self
+        self.take_expired_cargo_hash_polls_at(now)
+            .into_iter()
+            .map(|poll| poll.repo_name)
+            .collect()
+    }
+
+    pub(crate) fn take_expired_cargo_hash_polls_at(
+        &mut self,
+        now: SystemTime,
+    ) -> Vec<ExpiredCargoHashPoll> {
+        let expired: Vec<ExpiredCargoHashPoll> = self
             .cargo_hash_polls
             .iter()
             .filter(|poll| {
@@ -404,10 +420,13 @@ impl App {
                     .unwrap_or(Duration::ZERO)
                     >= CARGO_HASH_POLL_TIMEOUT
             })
-            .map(|poll| poll.repo_name.clone())
+            .map(|poll| ExpiredCargoHashPoll {
+                repo_name: poll.repo_name.clone(),
+                after_auto_update: poll.after_auto_update,
+            })
             .collect();
-        for repo_name in &expired {
-            self.stop_cargo_hash_polling(repo_name);
+        for poll in &expired {
+            self.stop_cargo_hash_polling(&poll.repo_name);
         }
         expired
     }

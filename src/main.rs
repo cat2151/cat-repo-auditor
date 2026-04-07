@@ -224,19 +224,8 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
 
 fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEvent>) {
     let now = SystemTime::now();
-    let expired_auto_update_repos: Vec<String> = app
-        .cargo_hash_polls
-        .iter()
-        .filter(|poll| {
-            poll.after_auto_update
-                && now
-                    .duration_since(poll.started_at)
-                    .unwrap_or(std::time::Duration::ZERO)
-                    >= crate::app::CARGO_HASH_POLL_TIMEOUT
-        })
-        .map(|poll| poll.repo_name.clone())
-        .collect();
-    for repo_name in app.expire_cargo_hash_polls_at(now) {
+    for expired_poll in app.take_expired_cargo_hash_polls_at(now) {
+        let repo_name = expired_poll.repo_name;
         if let Some(repo) = app.repos.iter().find(|repo| repo.name == repo_name) {
             let repo_full_name = repo.full_name.clone();
             let installed_hash = repo.cargo_installed_hash.clone();
@@ -247,7 +236,7 @@ fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEven
                     "cargo hash polling timed out after 30m: {repo_full_name}"
                 )),
             );
-            if expired_auto_update_repos.contains(&repo_name) {
+            if expired_poll.after_auto_update {
                 append_auto_update_cargo_poll_timeout_log(
                     &repo_full_name,
                     &installed_hash,
