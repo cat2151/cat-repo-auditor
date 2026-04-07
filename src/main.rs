@@ -115,14 +115,15 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                 let auto_update_poll = app.cargo_hash_poll_after_auto_update(&name);
                 let attempt_result = result.clone();
                 let mut repo_full_name = None;
-                let mut latest_installed_hash = String::new();
-                let mut latest_remote_hash = String::new();
+                let mut latest_hashes = None;
                 let matched_remote =
                     if let Some(repo) = app.repos.iter_mut().find(|repo| repo.name == name) {
                         repo_full_name = Some(repo.full_name.clone());
                         let matched_remote = apply_cargo_hash_poll_result(repo, result);
-                        latest_installed_hash = repo.cargo_installed_hash.clone();
-                        latest_remote_hash = repo.cargo_remote_hash.clone();
+                        latest_hashes = Some((
+                            repo.cargo_installed_hash.clone(),
+                            repo.cargo_remote_hash.clone(),
+                        ));
                         persist_repo_cargo_state(repo);
                         matched_remote
                     } else {
@@ -139,12 +140,13 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                             )),
                         );
                         if auto_update_poll {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
                             append_auto_update_cargo_poll_log(
                                 &repo_full_name,
                                 [
                                     format!(
                                         "installed hash 確認結果: installed_hash={} remote_hash={}",
-                                        latest_installed_hash, latest_remote_hash
+                                        installed_hash, remote_hash
                                     ),
                                     String::from(
                                         "installed hash が remote hash と一致したので、この repo の polling を終了します。",
@@ -162,12 +164,13 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                             )),
                         );
                         if auto_update_poll {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
                             append_auto_update_cargo_poll_log(
                                 &repo_full_name,
                                 [
                                     format!(
                                         "installed hash 確認結果: installed_hash={} remote_hash={}",
-                                        latest_installed_hash, latest_remote_hash
+                                        installed_hash, remote_hash
                                     ),
                                     String::from(
                                         "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。",

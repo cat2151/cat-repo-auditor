@@ -41,7 +41,7 @@ fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum AutoUpdateAfterRecheck {
+pub(super) enum AutoUpdateAfterRecheck {
     NotOldBeforeRecheck,
     RecheckFailed,
     StillOld {
