@@ -323,7 +323,7 @@ pub(super) fn spawn_background_cargo_checks(
                                     "この repo は cargo check で old でしたので、recheck でも old のままか確認しました。",
                                 ),
                                 format!(
-                                    "recheck 結果: installed_hash={installed_hash} remote_hash={remote_hash}"
+                                    "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
                                 ),
                                 format!("update 実行: {}", feedback.log_msg),
                             ];
@@ -354,7 +354,7 @@ pub(super) fn spawn_background_cargo_checks(
                                 [
                                     "この repo は cargo check で old でしたが、recheck 時点では update 実行前に installed hash が更新されていました。".to_string(),
                                     format!(
-                                        "recheck 結果: installed_hash={installed_hash} remote_hash={remote_hash}"
+                                        "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
                                     ),
                                     String::from(
                                         "remote hash と一致したため update サブコマンドは実行しません。",

@@ -62,18 +62,21 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
 }
 
 fn contains_human_readable_timestamp(log_line: &str) -> bool {
+    fn is_supported_timestamp(value: &str) -> bool {
+        chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S").is_ok()
+            || chrono::DateTime::parse_from_rfc3339(value).is_ok()
+    }
+
     let has_bracketed_timestamp = log_line
         .strip_prefix('[')
         .and_then(|rest| rest.split_once(']'))
         .map(|(timestamp, _)| timestamp)
-        .is_some_and(|timestamp| {
-            chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S").is_ok()
-        });
+        .is_some_and(is_supported_timestamp);
     has_bracketed_timestamp
         || log_line.split_whitespace().any(|token| {
             let trimmed = token.trim_matches(|ch: char| matches!(ch, '[' | ']' | '(' | ')' | ','));
             let value = trimmed.strip_prefix("更新日時=").unwrap_or(trimmed);
-            chrono::DateTime::parse_from_rfc3339(value).is_ok()
+            is_supported_timestamp(value)
         })
 }
 

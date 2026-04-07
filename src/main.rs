@@ -145,8 +145,7 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                                 &repo_full_name,
                                 [
                                     format!(
-                                        "installed hash 確認結果: installed_hash={} remote_hash={}",
-                                        installed_hash, remote_hash
+                                        "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
                                     ),
                                     String::from(
                                         "installed hash が remote hash と一致したので、この repo の polling を終了します。",
@@ -169,8 +168,7 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                                 &repo_full_name,
                                 [
                                     format!(
-                                        "installed hash 確認結果: installed_hash={} remote_hash={}",
-                                        installed_hash, remote_hash
+                                        "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
                                     ),
                                     String::from(
                                         "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。",
