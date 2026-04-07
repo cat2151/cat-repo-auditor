@@ -14,6 +14,16 @@ fn log_path_ends_with_log_txt() {
 }
 
 #[test]
+fn cargo_check_after_auto_update_log_path_ends_with_expected_file_name() {
+    let path = Config::cargo_check_after_auto_update_log_path();
+    assert_eq!(
+        path.file_name().unwrap(),
+        "cargo_check_after_auto_update.log"
+    );
+    assert_eq!(path.parent().and_then(|p| p.file_name()).unwrap(), "logs");
+}
+
+#[test]
 fn config_path_ends_with_config_toml() {
     let path = Config::config_path();
     assert_eq!(path.file_name().unwrap(), "config.toml");

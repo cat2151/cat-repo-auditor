@@ -154,5 +154,8 @@ pub enum FetchProgress {
         cargo_remote_hash_cat: String,
         cargo_installed_hash: String,
     },
+    StartAutoUpdateCargoHashPolling {
+        name: String,
+    },
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }

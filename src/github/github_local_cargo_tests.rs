@@ -1,5 +1,6 @@
 use super::{
-    check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
+    append_cargo_check_after_auto_update_log_for_path, check_cargo_git_install_inner,
+    check_cargo_git_install_inner_with_remote_hash,
     check_cargo_git_install_with_remote_hash_and_logger, get_cargo_bins_inner,
 };
 use std::process::Command as Cmd;
@@ -61,11 +62,45 @@ fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
 }
 
 fn contains_human_readable_timestamp(log_line: &str) -> bool {
-    log_line.split_whitespace().any(|token| {
-        let trimmed = token.trim_matches(|ch: char| matches!(ch, '[' | ']' | '(' | ')' | ','));
-        let value = trimmed.strip_prefix("更新日時=").unwrap_or(trimmed);
-        chrono::DateTime::parse_from_rfc3339(value).is_ok()
-    })
+    let bracketed = log_line
+        .strip_prefix('[')
+        .and_then(|rest| rest.split_once(']'))
+        .map(|(timestamp, _)| timestamp)
+        .is_some_and(|timestamp| {
+            chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S").is_ok()
+        });
+    bracketed
+        || log_line.split_whitespace().any(|token| {
+            let trimmed =
+                token.trim_matches(|ch: char| matches!(ch, '[' | ']' | '(' | ')' | ','));
+            let value = trimmed.strip_prefix("更新日時=").unwrap_or(trimmed);
+            chrono::DateTime::parse_from_rfc3339(value).is_ok()
+        })
+}
+
+#[test]
+fn append_cargo_check_after_auto_update_log_writes_repo_section_and_messages() {
+    let tmp = unique_temp_dir("cargo_after_auto_update_log");
+    let log_path = tmp.join("logs").join("cargo_check_after_auto_update.log");
+
+    append_cargo_check_after_auto_update_log_for_path(
+        &log_path,
+        "owner/myrepo",
+        [
+            "この repo は cargo check で old でしたので、update サブコマンドを実行しました。",
+            "1分後から、1分間隔で installed hash を確認します。",
+        ],
+    );
+
+    let persisted = std::fs::read_to_string(&log_path).unwrap();
+    std::fs::remove_dir_all(&tmp).ok();
+
+    let lines: Vec<_> = persisted.lines().collect();
+    assert_eq!(lines.len(), 3);
+    assert!(contains_human_readable_timestamp(lines[0]));
+    assert!(lines[0].contains("========== owner/myrepo =========="));
+    assert!(lines[1].contains("update サブコマンドを実行しました"));
+    assert!(lines[2].contains("1分後から、1分間隔で installed hash を確認します"));
 }
 
 #[test]
