@@ -299,9 +299,8 @@ fn test_auto_update_timeout_logged_to_dedicated_file() {
     let persisted =
         fs::read_to_string(temp_config_dir.auto_update_log_path()).expect("should write log");
     assert!(persisted.contains("========== owner/repo =========="));
-    assert!(persisted.contains(
-        "installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"
-    ));
+    assert!(persisted
+        .contains("installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"));
     assert!(persisted.contains(
         "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。"
     ));
