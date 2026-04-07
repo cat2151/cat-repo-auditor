@@ -133,14 +133,14 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
             CargoHashPollEvent::Checked { name, result } => {
                 let now = SystemTime::now();
                 let auto_update_poll = app.cargo_hash_poll_after_auto_update(&name);
-                let attempt_result = if auto_update_poll { result.clone() } else { None };
+                let check_succeeded = result.is_some();
                 let mut repo_full_name = None;
                 let mut latest_hashes = None;
                 let matched_remote =
                     if let Some(repo) = app.repos.iter_mut().find(|repo| repo.name == name) {
                         repo_full_name = Some(repo.full_name.clone());
                         let matched_remote = apply_cargo_hash_poll_result(repo, result);
-                        if auto_update_poll {
+                        if auto_update_poll && check_succeeded {
                             latest_hashes = Some((
                                 repo.cargo_installed_hash.clone(),
                                 repo.cargo_remote_hash.clone(),
@@ -193,29 +193,27 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
                     }
                 } else if auto_update_poll {
                     if let Some(repo_full_name) = repo_full_name {
-                        match attempt_result {
-                            Some((_ok, installed_hash, _local_hash, remote_hash)) => {
-                                append_auto_update_cargo_poll_log(
-                                    &repo_full_name,
-                                    [
-                                        format_installed_hash_check_log(
-                                            &installed_hash,
-                                            &remote_hash,
-                                        ),
-                                        String::from(
-                                            "まだ remote hash と相違していますので、1分後にまた installed hash を確認します。",
-                                        ),
-                                    ],
-                                );
-                            }
-                            None => {
-                                append_auto_update_cargo_poll_log(
-                                    &repo_full_name,
-                                    [String::from(
-                                        "installed hash を確認しましたが結果を取得できませんでした。1分後にまた installed hash を確認します。",
-                                    )],
-                                );
-                            }
+                        if check_succeeded {
+                            let (installed_hash, remote_hash) = latest_hashes.unwrap_or_default();
+                            append_auto_update_cargo_poll_log(
+                                &repo_full_name,
+                                [
+                                    format_installed_hash_check_log(
+                                        &installed_hash,
+                                        &remote_hash,
+                                    ),
+                                    String::from(
+                                        "まだ remote hash と相違していますので、1分後にまた installed hash を確認します。",
+                                    ),
+                                ],
+                            );
+                        } else {
+                            append_auto_update_cargo_poll_log(
+                                &repo_full_name,
+                                [String::from(
+                                    "installed hash を確認しましたが結果を取得できませんでした。1分後にまた installed hash を確認します。",
+                                )],
+                            );
                         }
                     }
                 }

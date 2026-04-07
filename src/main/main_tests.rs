@@ -268,7 +268,7 @@ fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
 }
 
 #[test]
-fn start_due_cargo_hash_polls_logs_auto_update_timeout_to_dedicated_log() {
+fn test_auto_update_timeout_logged_to_dedicated_file() {
     let _guard = AUTO_UPDATE_LOG_TEST_MUTEX
         .lock()
         .unwrap_or_else(|e| e.into_inner());
