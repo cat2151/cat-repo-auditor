@@ -401,6 +401,7 @@ impl App {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn expire_cargo_hash_polls_at(&mut self, now: SystemTime) -> Vec<String> {
         self.take_expired_cargo_hash_polls_at(now)
             .into_iter()

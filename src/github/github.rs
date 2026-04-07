@@ -85,6 +85,7 @@ where
     }
 }
 
+#[cfg(test)]
 fn should_spawn_auto_update_after_recheck<Recheck>(
     owner: &str,
     repo_name: &str,
