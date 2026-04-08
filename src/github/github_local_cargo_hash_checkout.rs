@@ -13,6 +13,13 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
     DateTime::<Utc>::from(timestamp).to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
+fn matches_checkout_dir_name(dir_name: &str, app_name: &str) -> bool {
+    dir_name == app_name
+        || dir_name
+            .rsplit_once('-')
+            .is_some_and(|(base_name, suffix)| base_name == app_name && !suffix.is_empty())
+}
+
 /// Resolve the newest cargo git checkout sub-directory for the matched crate name.
 ///
 /// Returns `Some(path)` only when exactly one checkout base directory matches `app_name`
@@ -27,7 +34,6 @@ pub(super) fn resolve_checkout_subdir(
     app_name: &str,
 ) -> Option<PathBuf> {
     let checkouts_dir = Path::new(cargo_home).join("git").join("checkouts");
-    let prefix_with_dash = format!("{app_name}-");
     let matches: Vec<PathBuf> = match std::fs::read_dir(&checkouts_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
@@ -35,7 +41,7 @@ pub(super) fn resolve_checkout_subdir(
             .filter(|e| {
                 let name = e.file_name();
                 let s = name.to_string_lossy();
-                s.as_ref() == app_name || s.starts_with(prefix_with_dash.as_str())
+                matches_checkout_dir_name(s.as_ref(), app_name)
             })
             .map(|e| e.path())
             .collect(),
