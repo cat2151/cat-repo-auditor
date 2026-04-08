@@ -13,6 +13,16 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
     DateTime::<Utc>::from(timestamp).to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
+fn matches_checkout_dir_name(dir_name: &str, app_name: &str) -> bool {
+    dir_name == app_name
+        || dir_name
+            .strip_prefix(app_name)
+            .and_then(|rest| rest.strip_prefix('-'))
+            .is_some_and(|suffix| {
+                !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_hexdigit())
+            })
+}
+
 /// Resolve the newest cargo git checkout sub-directory for the matched crate name.
 ///
 /// Returns `Some(path)` only when exactly one checkout base directory matches `app_name`
@@ -27,7 +37,6 @@ pub(super) fn resolve_checkout_subdir(
     app_name: &str,
 ) -> Option<PathBuf> {
     let checkouts_dir = Path::new(cargo_home).join("git").join("checkouts");
-    let prefix_with_dash = format!("{app_name}-");
     let matches: Vec<PathBuf> = match std::fs::read_dir(&checkouts_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
@@ -35,7 +44,7 @@ pub(super) fn resolve_checkout_subdir(
             .filter(|e| {
                 let name = e.file_name();
                 let s = name.to_string_lossy();
-                s.as_ref() == app_name || s.starts_with(prefix_with_dash.as_str())
+                matches_checkout_dir_name(s.as_ref(), app_name)
             })
             .map(|e| e.path())
             .collect(),
@@ -179,4 +188,41 @@ pub(super) fn resolve_checkout_subdir(
     );
 
     Some(sub_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matches_checkout_dir_name;
+
+    #[test]
+    fn matches_checkout_dir_name_accepts_exact_name() {
+        assert!(matches_checkout_dir_name(
+            "own-repos-curator",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_accepts_hash_suffix() {
+        assert!(matches_checkout_dir_name(
+            "own-repos-curator-deadbeef",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_rejects_similar_repo_name() {
+        assert!(!matches_checkout_dir_name(
+            "own-repos-curator-to-hatena-deadbeef",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_rejects_non_hash_suffix() {
+        assert!(!matches_checkout_dir_name(
+            "own-repos-curator-to",
+            "own-repos-curator"
+        ));
+    }
 }

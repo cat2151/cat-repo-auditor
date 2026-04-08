@@ -10,7 +10,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
     let installed_sub = cargo_home
         .join("git")
         .join("checkouts")
-        .join("myrepo-xyz99999")
+        .join("myrepo-deadbeef")
         .join("head1234");
     let out = Cmd::new("git")
         .args([
@@ -58,7 +58,7 @@ fn cargo_install_logs_hash_source_details() {
     let installed_checkout_path = cargo_home
         .join("git")
         .join("checkouts")
-        .join("myrepo-xyz99999")
+        .join("myrepo-deadbeef")
         .join("head1234");
     let out = Cmd::new("git")
         .args([
@@ -111,7 +111,7 @@ fn cargo_install_logs_hash_source_details() {
         )
     }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"myrepo-xyz99999\"]")
+        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"myrepo-deadbeef\"]")
     }));
     assert!(logs
         .iter()
@@ -169,4 +169,65 @@ fn cargo_install_logs_hash_source_details() {
         msg.contains("終了: cargo check を完了しました")
             && msg.contains("cargo install と remote の比較結果=不一致")
     }));
+}
+
+#[test]
+fn cargo_install_ignores_similar_checkout_dir_names() {
+    let tmp = unique_temp_dir("cargo_test_similar_checkout_names");
+    let local_repo = tmp.join("repos").join("own-repos-curator");
+    let local_hash = init_git_repo(&local_repo);
+
+    let cargo_home = tmp.join("cargo_home");
+    let installed_sub = cargo_home
+        .join("git")
+        .join("checkouts")
+        .join("own-repos-curator-deadbeef")
+        .join("head1234");
+    let out = Cmd::new("git")
+        .args([
+            "clone",
+            "--local",
+            local_repo.to_str().unwrap(),
+            installed_sub.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git clone failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let similar_repo = cargo_home
+        .join("git")
+        .join("checkouts")
+        .join("own-repos-curator-to-hatena-abc88888")
+        .join("head5678");
+    init_git_repo_with_content(&similar_repo, "similar-repo-content");
+
+    let json = make_crates2_json("owner", "own-repos-curator", "own-repos-curator");
+    std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_with_remote_hash_and_logger(
+        "owner",
+        "own-repos-curator",
+        tmp.join("repos").to_str().unwrap(),
+        cargo_home.to_str().unwrap(),
+        &local_hash,
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    let (matches, installed_hash, local_head, remote_hash) = result.expect("should return Some");
+    assert!(matches);
+    assert_eq!(installed_hash, local_hash);
+    assert_eq!(local_head, local_hash);
+    assert_eq!(remote_hash, local_hash);
+    assert!(logs.iter().any(|msg| {
+        msg.contains(
+            "checkouts 配下の hash 取得候補 dir 名一覧=[\"own-repos-curator-deadbeef\"]",
+        )
+    }));
+    assert!(!logs.iter().any(|msg| msg.contains("checkout ディレクトリが複数見つかりました")));
 }
