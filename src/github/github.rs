@@ -6,6 +6,7 @@ use crate::{
         check_workflows, git_pull, local_head_matches_upstream,
     },
     history::History,
+    self_update,
 };
 
 #[path = "github_cargo_worker.rs"]
@@ -85,6 +86,11 @@ where
     }
 }
 
+pub(super) fn should_skip_auto_update_for_repo(owner: &str, repo_name: &str) -> bool {
+    owner.eq_ignore_ascii_case(self_update::REPO_OWNER)
+        && repo_name.eq_ignore_ascii_case(self_update::REPO_NAME)
+}
+
 #[cfg(test)]
 fn should_spawn_auto_update_after_recheck<Recheck>(
     owner: &str,
@@ -96,10 +102,11 @@ fn should_spawn_auto_update_after_recheck<Recheck>(
 where
     Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
 {
-    matches!(
-        inspect_auto_update_after_recheck(owner, repo_name, base_dir, cargo_install, recheck),
-        AutoUpdateAfterRecheck::StillOld { .. }
-    )
+    !should_skip_auto_update_for_repo(owner, repo_name)
+        && matches!(
+            inspect_auto_update_after_recheck(owner, repo_name, base_dir, cargo_install, recheck),
+            AutoUpdateAfterRecheck::StillOld { .. }
+        )
 }
 
 fn compact_log_detail(detail: &str) -> String {

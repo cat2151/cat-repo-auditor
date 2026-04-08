@@ -251,6 +251,35 @@ fn should_spawn_auto_update_after_recheck_requires_repo_to_still_be_old() {
 }
 
 #[test]
+fn should_skip_auto_update_for_repo_when_target_is_cat_repo_auditor_itself() {
+    assert!(should_skip_auto_update_for_repo(
+        crate::self_update::REPO_OWNER,
+        crate::self_update::REPO_NAME,
+    ));
+    assert!(should_skip_auto_update_for_repo(
+        "Cat2151",
+        "Cat-Repo-Auditor"
+    ));
+    assert!(!should_skip_auto_update_for_repo(
+        crate::self_update::REPO_OWNER,
+        "another-repo",
+    ));
+}
+
+#[test]
+fn should_spawn_auto_update_after_recheck_skips_cat_repo_auditor_itself() {
+    assert!(!should_spawn_auto_update_after_recheck(
+        crate::self_update::REPO_OWNER,
+        crate::self_update::REPO_NAME,
+        "/base",
+        Some(false),
+        |_owner, _repo_name, _base_dir| {
+            panic!("recheck should not run for cat-repo-auditor itself")
+        },
+    ));
+}
+
+#[test]
 fn inspect_auto_update_after_recheck_reports_updated_and_failed_cases() {
     assert_eq!(
         inspect_auto_update_after_recheck("owner", "repo", "/base", Some(false), |_o, _r, _b| {
