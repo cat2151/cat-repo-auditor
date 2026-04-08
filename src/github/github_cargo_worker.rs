@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    inspect_auto_update_after_recheck, phase3_worker_count, AutoUpdateAfterRecheck, FetchProgress,
-    RepoInfo,
+    inspect_auto_update_after_recheck, phase3_worker_count, should_skip_auto_update_for_repo,
+    AutoUpdateAfterRecheck, FetchProgress, RepoInfo,
 };
 
 /// Cargo check の状態とログ用の説明材料を保持する。
@@ -301,6 +301,25 @@ pub(super) fn spawn_background_cargo_checks(
                 });
 
                 if let Some(run_dir) = auto_update_run_dir.as_deref() {
+                    if should_skip_auto_update_for_repo(&owner, &result.name) {
+                        append_auto_update_recheck_log(
+                            &result.full_name,
+                            [
+                                "この repo は cat-repo-auditor 自身なので、自動 update は起動しません。"
+                                    .to_string(),
+                                String::from(
+                                    "手動で `catrepo update` を実行してください。",
+                                ),
+                            ],
+                        );
+                        let _ = tx.send(FetchProgress::Log(format!(
+                            "x {} not run: self auto-update is disabled; run `catrepo update` manually",
+                            result.full_name
+                        )));
+                        collected.push(result);
+                        continue;
+                    }
+
                     match inspect_auto_update_after_recheck(
                         &owner,
                         &result.name,
