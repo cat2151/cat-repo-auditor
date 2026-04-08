@@ -225,9 +225,9 @@ fn cargo_install_ignores_similar_checkout_dir_names() {
     assert_eq!(local_head, local_hash);
     assert_eq!(remote_hash, local_hash);
     assert!(logs.iter().any(|msg| {
-        msg.contains(
-            "checkouts 配下の hash 取得候補 dir 名一覧=[\"own-repos-curator-deadbeef\"]",
-        )
+        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"own-repos-curator-deadbeef\"]")
     }));
-    assert!(!logs.iter().any(|msg| msg.contains("checkout ディレクトリが複数見つかりました")));
+    assert!(!logs
+        .iter()
+        .any(|msg| msg.contains("checkout ディレクトリが複数見つかりました")));
 }
