@@ -10,7 +10,7 @@ fn cargo_install_returns_some_true_when_hashes_match() {
     let installed_sub = cargo_home
         .join("git")
         .join("checkouts")
-        .join("myrepo-xyz99999")
+        .join("myrepo-deadbeef")
         .join("head1234");
     let out = Cmd::new("git")
         .args([
@@ -58,7 +58,7 @@ fn cargo_install_logs_hash_source_details() {
     let installed_checkout_path = cargo_home
         .join("git")
         .join("checkouts")
-        .join("myrepo-xyz99999")
+        .join("myrepo-deadbeef")
         .join("head1234");
     let out = Cmd::new("git")
         .args([
@@ -111,7 +111,7 @@ fn cargo_install_logs_hash_source_details() {
         )
     }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"myrepo-xyz99999\"]")
+        msg.contains("checkouts 配下の hash 取得候補 dir 名一覧=[\"myrepo-deadbeef\"]")
     }));
     assert!(logs
         .iter()
@@ -181,7 +181,7 @@ fn cargo_install_ignores_similar_checkout_dir_names() {
     let installed_sub = cargo_home
         .join("git")
         .join("checkouts")
-        .join("own-repos-curator-xyz99999")
+        .join("own-repos-curator-deadbeef")
         .join("head1234");
     let out = Cmd::new("git")
         .args([
@@ -226,7 +226,7 @@ fn cargo_install_ignores_similar_checkout_dir_names() {
     assert_eq!(remote_hash, local_hash);
     assert!(logs.iter().any(|msg| {
         msg.contains(
-            "checkouts 配下の hash 取得候補 dir 名一覧=[\"own-repos-curator-xyz99999\"]",
+            "checkouts 配下の hash 取得候補 dir 名一覧=[\"own-repos-curator-deadbeef\"]",
         )
     }));
     assert!(!logs.iter().any(|msg| msg.contains("checkout ディレクトリが複数見つかりました")));

@@ -16,8 +16,11 @@ fn format_checkout_dir_modified_at(timestamp: SystemTime) -> String {
 fn matches_checkout_dir_name(dir_name: &str, app_name: &str) -> bool {
     dir_name == app_name
         || dir_name
-            .rsplit_once('-')
-            .is_some_and(|(base_name, suffix)| base_name == app_name && !suffix.is_empty())
+            .strip_prefix(app_name)
+            .and_then(|rest| rest.strip_prefix('-'))
+            .is_some_and(|suffix| {
+                !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_hexdigit())
+            })
 }
 
 /// Resolve the newest cargo git checkout sub-directory for the matched crate name.
@@ -185,4 +188,41 @@ pub(super) fn resolve_checkout_subdir(
     );
 
     Some(sub_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matches_checkout_dir_name;
+
+    #[test]
+    fn matches_checkout_dir_name_accepts_exact_name() {
+        assert!(matches_checkout_dir_name(
+            "own-repos-curator",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_accepts_hash_suffix() {
+        assert!(matches_checkout_dir_name(
+            "own-repos-curator-deadbeef",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_rejects_similar_repo_name() {
+        assert!(!matches_checkout_dir_name(
+            "own-repos-curator-to-hatena-deadbeef",
+            "own-repos-curator"
+        ));
+    }
+
+    #[test]
+    fn matches_checkout_dir_name_rejects_non_hash_suffix() {
+        assert!(!matches_checkout_dir_name(
+            "own-repos-curator-to",
+            "own-repos-curator"
+        ));
+    }
 }
