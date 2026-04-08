@@ -256,6 +256,10 @@ fn should_skip_auto_update_for_repo_when_target_is_cat_repo_auditor_itself() {
         crate::self_update::REPO_OWNER,
         crate::self_update::REPO_NAME,
     ));
+    assert!(should_skip_auto_update_for_repo(
+        "Cat2151",
+        "Cat-Repo-Auditor"
+    ));
     assert!(!should_skip_auto_update_for_repo(
         crate::self_update::REPO_OWNER,
         "another-repo",

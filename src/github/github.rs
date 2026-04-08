@@ -87,7 +87,8 @@ where
 }
 
 pub(super) fn should_skip_auto_update_for_repo(owner: &str, repo_name: &str) -> bool {
-    owner == self_update::REPO_OWNER && repo_name == self_update::REPO_NAME
+    owner.eq_ignore_ascii_case(self_update::REPO_OWNER)
+        && repo_name.eq_ignore_ascii_case(self_update::REPO_NAME)
 }
 
 #[cfg(test)]

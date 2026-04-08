@@ -305,11 +305,8 @@ pub(super) fn spawn_background_cargo_checks(
                         append_auto_update_recheck_log(
                             &result.full_name,
                             [
-                                "この repo は cat-repo-auditor 自身なので、自動 update は起動しません。"
-                                    .to_string(),
-                                String::from(
-                                    "手動で `catrepo update` を実行してください。",
-                                ),
+                                "この repo は cat-repo-auditor 自身なので、自動 update は起動しません。",
+                                "手動で `catrepo update` を実行してください。",
                             ],
                         );
                         let _ = tx.send(FetchProgress::Log(format!(
