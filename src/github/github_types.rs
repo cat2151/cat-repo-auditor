@@ -148,6 +148,9 @@ pub enum FetchProgress {
     /// Incremental cargo-only update that can arrive independently of other checks.
     CargoUpdate {
         name: String,
+        local_status: LocalStatus,
+        has_local_git: bool,
+        staging_files: Vec<String>,
         cargo_install: Option<bool>,
         cargo_cat: String,
         cargo_remote_hash: String,

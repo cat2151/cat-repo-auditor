@@ -89,7 +89,10 @@ fn bottom_right_boxes_order_staging_only() {
 #[test]
 fn bottom_right_boxes_order_cargo_old_only() {
     let boxes = bottom_right_boxes(false, true);
-    assert_eq!(boxes, vec![BottomRightBox::CargoHash]);
+    assert_eq!(
+        boxes,
+        vec![BottomRightBox::CargoHash, BottomRightBox::LocalHash]
+    );
 }
 
 #[test]
@@ -97,12 +100,16 @@ fn bottom_right_boxes_order_both() {
     let boxes = bottom_right_boxes(true, true);
     assert_eq!(
         boxes,
-        vec![BottomRightBox::CargoHash, BottomRightBox::LocalChanges]
+        vec![
+            BottomRightBox::CargoHash,
+            BottomRightBox::LocalHash,
+            BottomRightBox::LocalChanges
+        ]
     );
 }
 
 #[test]
-fn draw_ui_shows_cargo_hash_box_with_local_remote_installed_order() {
+fn draw_ui_separates_local_hash_from_cargo_hash_box() {
     let backend = TestBackend::new(80, 20);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = make_test_app_with_focus(true);
@@ -128,6 +135,7 @@ fn draw_ui_shows_cargo_hash_box_with_local_remote_installed_order() {
     let installed_idx = rendered.find("installed789").unwrap();
 
     assert!(rendered.contains("cgo: commit hash"));
-    assert!(local_idx < remote_idx);
+    assert!(rendered.contains("local: commit hash"));
+    assert!(local_idx < rendered.find("cgo: commit hash").unwrap());
     assert!(remote_idx < installed_idx);
 }

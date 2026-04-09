@@ -10,12 +10,18 @@ use std::path::Path;
 
 fn apply_cargo_update(
     repo: &mut crate::github::RepoInfo,
+    local_status: crate::github::LocalStatus,
+    has_local_git: bool,
+    staging_files: Vec<String>,
     cargo_install: Option<bool>,
     cargo_cat: String,
     cargo_remote_hash: String,
     cargo_remote_hash_cat: String,
     cargo_installed_hash: String,
 ) {
+    repo.local_status = local_status;
+    repo.has_local_git = has_local_git;
+    repo.staging_files = staging_files;
     repo.cargo_install = cargo_install;
     repo.cargo_checked_at = cargo_cat;
     repo.cargo_remote_hash = cargo_remote_hash;
@@ -36,6 +42,12 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
         || !repo.cargo_installed_hash.is_empty()
 }
 
+fn has_live_local_state(repo: &crate::github::RepoInfo) -> bool {
+    !matches!(repo.local_status, crate::github::LocalStatus::Clean)
+        || !repo.has_local_git
+        || !repo.staging_files.is_empty()
+}
+
 /// Merge cargo fields that were updated live after the previous `Done`.
 ///
 /// `fetch_repos_with_progress()` can now send an initial `Done` after phase 1 and a second `Done`
@@ -52,12 +64,19 @@ fn merge_live_repo_state(
             .find(|repo| repo.name == incoming.name)
         {
             if has_live_cargo_state(existing) {
+                incoming.local_status = existing.local_status.clone();
+                incoming.has_local_git = existing.has_local_git;
+                incoming.staging_files = existing.staging_files.clone();
                 incoming.cargo_install = existing.cargo_install;
                 incoming.cargo_checked_at = existing.cargo_checked_at.clone();
                 incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
                 incoming.cargo_remote_hash_checked_at =
                     existing.cargo_remote_hash_checked_at.clone();
                 incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
+            } else if has_live_local_state(existing) {
+                incoming.local_status = existing.local_status.clone();
+                incoming.has_local_git = existing.has_local_git;
+                incoming.staging_files = existing.staging_files.clone();
             }
         }
     }
@@ -136,6 +155,9 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             }
             Ok(FetchProgress::CargoUpdate {
                 name,
+                local_status,
+                has_local_git,
+                staging_files,
                 cargo_install,
                 cargo_cat,
                 cargo_remote_hash,
@@ -145,6 +167,9 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
                     apply_cargo_update(
                         r,
+                        local_status,
+                        has_local_git,
+                        staging_files,
                         cargo_install,
                         cargo_cat,
                         cargo_remote_hash,
