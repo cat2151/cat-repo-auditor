@@ -236,7 +236,7 @@ fn drain_fetch_channel_done_preserves_live_cargo_state() {
 }
 
 #[test]
-fn drain_fetch_channel_existence_update_refreshes_local_state_independently_of_cargo() {
+fn drain_fetch_channel_existence_update_refreshes_local_state_without_touching_cargo_cache() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo")];
     app.repos[0].cargo_checked_at = String::from("cargo-cache-local");

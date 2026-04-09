@@ -61,13 +61,23 @@ pub(crate) fn local_head_hash_no_fetch(base_dir: &str, repo_name: &str) -> Strin
     if !std::path::Path::new(&git_dir).exists() {
         return String::new();
     }
-    Command::new("git")
+    match Command::new("git")
         .args(["-C", &path, "rev-parse", "HEAD"])
         .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
-        .unwrap_or_default()
+    {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            eprintln!(
+                "local_head_hash_no_fetch failed: repo={repo_name} path={path} stderr={stderr}"
+            );
+            String::new()
+        }
+        Err(err) => {
+            eprintln!("local_head_hash_no_fetch failed: repo={repo_name} path={path} error={err}");
+            String::new()
+        }
+    }
 }
 
 pub(crate) fn local_head_matches_upstream(base_dir: &str, repo_name: &str) -> bool {
