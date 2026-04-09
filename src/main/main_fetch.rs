@@ -42,18 +42,12 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
         || !repo.cargo_installed_hash.is_empty()
 }
 
-fn has_live_local_state(repo: &crate::github::RepoInfo) -> bool {
-    !matches!(repo.local_status, crate::github::LocalStatus::Clean)
-        || !repo.has_local_git
-        || !repo.staging_files.is_empty()
-}
-
 /// Merge cargo fields that were updated live after the previous `Done`.
 ///
 /// `fetch_repos_with_progress()` can now send an initial `Done` after phase 1 and a second `Done`
 /// after auto-pull refresh. If cargo checks finished in between those two snapshots, the incoming
-/// refreshed repos would otherwise overwrite newer cargo state with older history-backed values.
-/// This merge preserves only the live cargo fields for repos that already have such state.
+/// refreshed repos would otherwise overwrite newer cargo/local state with older history-backed
+/// values. This merge preserves the live state only for repos that already have such cargo updates.
 fn merge_live_repo_state(
     existing_repos: &[crate::github::RepoInfo],
     incoming_repos: &mut [crate::github::RepoInfo],
@@ -73,10 +67,6 @@ fn merge_live_repo_state(
                 incoming.cargo_remote_hash_checked_at =
                     existing.cargo_remote_hash_checked_at.clone();
                 incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
-            } else if has_live_local_state(existing) {
-                incoming.local_status = existing.local_status.clone();
-                incoming.has_local_git = existing.has_local_git;
-                incoming.staging_files = existing.staging_files.clone();
             }
         }
     }
