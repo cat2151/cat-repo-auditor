@@ -41,7 +41,7 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
 /// `fetch_repos_with_progress()` can now send an initial `Done` after phase 1 and a second `Done`
 /// after auto-pull refresh. If cargo checks finished in between those two snapshots, the incoming
 /// refreshed repos would otherwise overwrite newer cargo state with older history-backed values.
-/// This merge preserves only the live cargo fields for repos that already have such state.
+/// This merge preserves the live cargo state only for repos that already have such cargo updates.
 fn merge_live_repo_state(
     existing_repos: &[crate::github::RepoInfo],
     incoming_repos: &mut [crate::github::RepoInfo],
@@ -109,6 +109,10 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             }
             Ok(FetchProgress::ExistenceUpdate {
                 name,
+                local_status,
+                has_local_git,
+                staging_files,
+                local_head_hash,
                 readme_ja,
                 readme_ja_cat,
                 readme_ja_badge,
@@ -121,6 +125,10 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 wf_cat,
             }) => {
                 if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
+                    r.local_status = local_status;
+                    r.has_local_git = has_local_git;
+                    r.staging_files = staging_files;
+                    r.local_head_hash = local_head_hash;
                     r.readme_ja = readme_ja;
                     r.readme_ja_checked_at = readme_ja_cat;
                     r.readme_ja_badge = readme_ja_badge;

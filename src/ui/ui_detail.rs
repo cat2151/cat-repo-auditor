@@ -17,8 +17,8 @@ use ratatui::{
 mod boxes;
 use boxes::c;
 pub(crate) use boxes::{
-    draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_workflow_repo_exist_overlay,
-    CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H,
+    draw_cargo_old_box, draw_help_dialog, draw_local_hash_box, draw_local_staging_box,
+    draw_workflow_repo_exist_overlay, CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H, LOCAL_HASH_BOX_H,
 };
 
 // ── right pane ───────────────────────────────────────────────────────────────

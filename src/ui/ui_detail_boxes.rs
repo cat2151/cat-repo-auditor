@@ -19,7 +19,8 @@ mod help;
 
 pub(crate) use help::draw_help_dialog;
 
-pub(crate) const CARGO_OLD_BOX_H: u16 = 5;
+pub(crate) const LOCAL_HASH_BOX_H: u16 = 3;
+pub(crate) const CARGO_OLD_BOX_H: u16 = 4;
 pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
 
 fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
@@ -37,7 +38,50 @@ pub(super) fn c(app: &App, color: ratatui::style::Color) -> ratatui::style::Colo
     window_color(app.window_focused, color)
 }
 
-// ── cargo old comparison box ──────────────────────────────────────────────────
+// ── commit hash boxes ─────────────────────────────────────────────────────────
+
+pub(crate) fn draw_local_hash_box(
+    f: &mut Frame,
+    app: &App,
+    repo_idx: usize,
+    area: Rect,
+    bottom_offset: u16,
+) {
+    let repo = &app.repos[repo_idx];
+    let local = if repo.local_head_hash.is_empty() {
+        "?"
+    } else {
+        &repo.local_head_hash
+    };
+
+    let content_w: u16 = 53;
+    let box_w = content_w + 2;
+    let box_h: u16 = LOCAL_HASH_BOX_H;
+
+    let x = area.x + area.width.saturating_sub(box_w + 1);
+    let y = area.y + area.height.saturating_sub(box_h + 1 + bottom_offset);
+    let rect = Rect {
+        x,
+        y,
+        width: box_w.min(area.width),
+        height: box_h.min(area.height),
+    };
+
+    f.render_widget(Clear, rect);
+    let block = Block::default()
+        .title(" local: commit hash ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(c(app, MK_GREEN)))
+        .style(Style::default().bg(c(app, MK_BG)));
+    let inner = block.inner(rect);
+    f.render_widget(block, rect);
+
+    f.render_widget(
+        Paragraph::new(truncate(local, inner.width as usize))
+            .style(Style::default().fg(c(app, MK_GREEN)).bg(c(app, MK_BG))),
+        inner,
+    );
+}
 
 pub(crate) fn draw_cargo_old_box(
     f: &mut Frame,
@@ -51,11 +95,6 @@ pub(crate) fn draw_cargo_old_box(
         "?"
     } else {
         &repo.cargo_remote_hash
-    };
-    let local = if repo.cargo_checked_at.is_empty() {
-        "?"
-    } else {
-        &repo.cargo_checked_at
     };
     let inst = if repo.cargo_installed_hash.is_empty() {
         "?"
@@ -88,13 +127,6 @@ pub(crate) fn draw_cargo_old_box(
     let label_w: u16 = 12;
     let max_w = inner.width.saturating_sub(label_w) as usize;
     let lines = vec![
-        Line::from(vec![
-            Span::styled("     local: ", Style::default().fg(c(app, MK_COMMENT))),
-            Span::styled(
-                truncate(local, max_w),
-                Style::default().fg(c(app, MK_GREEN)),
-            ),
-        ]),
         Line::from(vec![
             Span::styled("    remote: ", Style::default().fg(c(app, MK_COMMENT))),
             Span::styled(

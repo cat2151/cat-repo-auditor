@@ -4,8 +4,9 @@ use crate::{
     github::LocalStatus,
     main_helpers::refresh_log_lines_if_changed_for_path,
     ui_detail::{
-        draw_cargo_old_box, draw_help_dialog, draw_local_staging_box, draw_right,
-        draw_workflow_repo_exist_overlay, CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H,
+        draw_cargo_old_box, draw_help_dialog, draw_local_hash_box, draw_local_staging_box,
+        draw_right, draw_workflow_repo_exist_overlay, CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H,
+        LOCAL_HASH_BOX_H,
     },
 };
 #[path = "ui_draw_left.rs"]
@@ -65,6 +66,7 @@ fn bottom_right_stack_offsets(box_heights: &[u16]) -> Vec<u16> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BottomRightBox {
     CargoHash,
+    LocalHash,
     LocalChanges,
 }
 
@@ -72,6 +74,7 @@ fn bottom_right_boxes(show_staging: bool, show_cargo_hash: bool) -> Vec<BottomRi
     let mut boxes = Vec::new();
     if show_cargo_hash {
         boxes.push(BottomRightBox::CargoHash);
+        boxes.push(BottomRightBox::LocalHash);
     }
     if show_staging {
         boxes.push(BottomRightBox::LocalChanges);
@@ -82,6 +85,7 @@ fn bottom_right_boxes(show_staging: bool, show_cargo_hash: bool) -> Vec<BottomRi
 fn bottom_right_box_height(b: BottomRightBox) -> u16 {
     match b {
         BottomRightBox::CargoHash => CARGO_OLD_BOX_H,
+        BottomRightBox::LocalHash => LOCAL_HASH_BOX_H,
         BottomRightBox::LocalChanges => LOCAL_CHANGES_BOX_H,
     }
 }
@@ -236,6 +240,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         for (b, offset) in boxes.into_iter().zip(offsets.into_iter()) {
             match b {
                 BottomRightBox::CargoHash => draw_cargo_old_box(f, app, idx, area, offset),
+                BottomRightBox::LocalHash => draw_local_hash_box(f, app, idx, area, offset),
                 BottomRightBox::LocalChanges => draw_local_staging_box(f, app, idx, area, offset),
             }
         }

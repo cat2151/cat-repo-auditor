@@ -16,7 +16,8 @@ pub(crate) use checks::{
     check_workflows, collect_workflow_repo_exist_checks,
 };
 pub(crate) use git::{
-    check_local_status_no_fetch, git_pull, local_head_matches_upstream, WORKFLOW_SOURCE_REPO,
+    check_local_status_no_fetch, git_pull, local_head_hash_no_fetch, local_head_matches_upstream,
+    WORKFLOW_SOURCE_REPO,
 };
 pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url, spawn_app_with_args};
 

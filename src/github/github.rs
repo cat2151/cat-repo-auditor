@@ -2,8 +2,8 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_deepwiki_exists, check_file_exists, check_pages_exists, check_readme_ja_badge,
-        check_workflows, git_pull, local_head_matches_upstream,
+        check_deepwiki_exists, check_file_exists, check_local_status_no_fetch, check_pages_exists,
+        check_readme_ja_badge, check_workflows, git_pull, local_head_matches_upstream,
     },
     history::History,
     self_update,
@@ -143,6 +143,10 @@ struct Phase3RepoTask {
 
 struct Phase3RepoResult {
     name: String,
+    local_status: LocalStatus,
+    has_local_git: bool,
+    staging_files: Vec<String>,
+    local_head_hash: String,
     readme_ja: Option<bool>,
     readme_ja_cat: String,
     readme_ja_badge: Option<bool>,
@@ -209,6 +213,7 @@ fn run_phase3_repo_task(task: Phase3RepoTask, owner: &str, base_dir: &str) -> Ph
     let name = repo.name.clone();
     let cat = repo.updated_at_raw.clone();
     let local_head = task.local_head;
+    let (local_status, has_local_git, staging_files) = check_local_status_no_fetch(base_dir, &name);
 
     let needs_readme = repo.readme_ja_checked_at != cat;
     let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
@@ -263,6 +268,10 @@ fn run_phase3_repo_task(task: Phase3RepoTask, owner: &str, base_dir: &str) -> Ph
 
     Phase3RepoResult {
         name,
+        local_status,
+        has_local_git,
+        staging_files,
+        local_head_hash: local_head,
         readme_ja,
         readme_ja_cat,
         readme_ja_badge,
@@ -396,6 +405,10 @@ pub fn fetch_repos_with_progress(
                         });
 
                         if let Some(r) = history.repos.iter_mut().find(|r| r.name == result.name) {
+                            r.local_status = result.local_status.clone();
+                            r.has_local_git = result.has_local_git;
+                            r.staging_files = result.staging_files.clone();
+                            r.local_head_hash = result.local_head_hash.clone();
                             r.readme_ja = result.readme_ja;
                             r.readme_ja_checked_at = result.readme_ja_cat.clone();
                             r.readme_ja_badge = result.readme_ja_badge;
@@ -410,6 +423,10 @@ pub fn fetch_repos_with_progress(
 
                         let _ = tx.send(FetchProgress::ExistenceUpdate {
                             name: result.name.clone(),
+                            local_status: result.local_status,
+                            has_local_git: result.has_local_git,
+                            staging_files: result.staging_files.clone(),
+                            local_head_hash: result.local_head_hash.clone(),
                             readme_ja: result.readme_ja,
                             readme_ja_cat: result.readme_ja_cat.clone(),
                             readme_ja_badge: result.readme_ja_badge,

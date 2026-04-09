@@ -53,6 +53,7 @@ fn make_repo(name: &str) -> RepoInfo {
         local_status: LocalStatus::Clean,
         has_local_git: true,
         staging_files: vec![],
+        local_head_hash: String::new(),
         issues: vec![],
         prs: vec![],
         readme_ja: None,
@@ -124,6 +125,10 @@ fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives(
         .unwrap();
     tx.send(FetchProgress::ExistenceUpdate {
         name: String::from("repo-a"),
+        local_status: LocalStatus::Pullable,
+        has_local_git: true,
+        staging_files: vec![String::from(" M Cargo.toml")],
+        local_head_hash: String::from("local-a"),
         readme_ja: None,
         readme_ja_cat: String::new(),
         readme_ja_badge: None,
@@ -147,6 +152,9 @@ fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives(
 fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo")];
+    app.repos[0].local_status = LocalStatus::Pullable;
+    app.repos[0].staging_files = vec![String::from(" M src/main.rs")];
+    app.repos[0].local_head_hash = String::from("local-live");
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::CargoUpdate {
@@ -164,6 +172,9 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     drain_fetch_channel(&mut app, &mut fetch_rx);
 
     let repo = &app.repos[0];
+    assert_eq!(repo.local_status, LocalStatus::Pullable);
+    assert_eq!(repo.staging_files, vec![String::from(" M src/main.rs")]);
+    assert_eq!(repo.local_head_hash, "local-live");
     assert_eq!(repo.cargo_checked_at, "local123");
     assert_eq!(repo.cargo_remote_hash, "remote456");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
@@ -222,6 +233,43 @@ fn drain_fetch_channel_done_preserves_live_cargo_state() {
     assert_eq!(repo.cargo_remote_hash, "remote-live");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-03T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed-live");
+}
+
+#[test]
+fn drain_fetch_channel_existence_update_refreshes_local_state_without_touching_cargo_cache() {
+    let mut app = App::new(make_config());
+    app.repos = vec![make_repo("repo")];
+    app.repos[0].cargo_checked_at = String::from("cargo-cache-local");
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::ExistenceUpdate {
+        name: String::from("repo"),
+        local_status: LocalStatus::Pullable,
+        has_local_git: true,
+        staging_files: vec![String::from(" M src/main.rs")],
+        local_head_hash: String::from("local-live"),
+        readme_ja: None,
+        readme_ja_cat: String::new(),
+        readme_ja_badge: None,
+        readme_ja_badge_cat: String::new(),
+        pages: None,
+        pages_cat: String::new(),
+        deepwiki: None,
+        deepwiki_cat: String::new(),
+        wf_workflows: None,
+        wf_cat: String::new(),
+    })
+    .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    let repo = &app.repos[0];
+    assert_eq!(repo.local_status, LocalStatus::Pullable);
+    assert_eq!(repo.staging_files, vec![String::from(" M src/main.rs")]);
+    assert_eq!(repo.local_head_hash, "local-live");
+    assert_eq!(repo.cargo_checked_at, "cargo-cache-local");
 }
 
 #[test]

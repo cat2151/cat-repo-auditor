@@ -28,6 +28,7 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
         local_status: crate::github::LocalStatus::Clean,
         has_local_git: true,
         staging_files: vec![],
+        local_head_hash: String::new(),
         issues: vec![],
         prs: vec![],
         readme_ja: None,

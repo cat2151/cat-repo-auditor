@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     github::{FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo},
-    github_local::check_local_status_no_fetch,
+    github_local::{check_local_status_no_fetch, local_head_hash_no_fetch},
     history::History,
 };
 use anyhow::{bail, Context, Result};
@@ -218,6 +218,7 @@ pub(crate) fn do_fetch(
         let full_name = r.name_with_owner.clone();
         let (local_status, has_local_git, staging_files) =
             check_local_status_no_fetch(&config.local_base_dir, &r.name);
+        let local_head_hash = local_head_hash_no_fetch(&config.local_base_dir, &r.name);
         let raw = r.updated_at.clone();
         let updated_at_raw = format_date_iso(&raw);
 
@@ -290,6 +291,7 @@ pub(crate) fn do_fetch(
             local_status,
             has_local_git,
             staging_files,
+            local_head_hash,
             readme_ja,
             readme_ja_checked_at,
             readme_ja_badge,
