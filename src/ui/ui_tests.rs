@@ -17,6 +17,7 @@ fn make_repo(name: &str) -> RepoInfo {
         local_status: LocalStatus::Clean,
         has_local_git: true,
         staging_files: vec![],
+        local_head_hash: String::new(),
         issues: vec![],
         prs: vec![],
         readme_ja: None,

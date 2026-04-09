@@ -55,6 +55,21 @@ pub(crate) fn check_local_status_no_fetch(
     }
 }
 
+pub(crate) fn local_head_hash_no_fetch(base_dir: &str, repo_name: &str) -> String {
+    let path = build_repo_path(base_dir, repo_name);
+    let git_dir = format!("{}/.git", path);
+    if !std::path::Path::new(&git_dir).exists() {
+        return String::new();
+    }
+    Command::new("git")
+        .args(["-C", &path, "rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
 pub(crate) fn local_head_matches_upstream(base_dir: &str, repo_name: &str) -> bool {
     local_head_matches_upstream_with_logger(base_dir, repo_name, |msg| {
         super::cargo::append_log_message(msg)

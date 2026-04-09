@@ -114,7 +114,8 @@ fn draw_ui_separates_local_hash_from_cargo_hash_box() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = make_test_app_with_focus(true);
     app.repos[0].cargo_install = Some(true);
-    app.repos[0].cargo_checked_at = "localhash123".to_string();
+    app.repos[0].local_head_hash = "localhash123".to_string();
+    app.repos[0].cargo_checked_at = "cargo-cache-local".to_string();
     app.repos[0].cargo_remote_hash = "remotehash456".to_string();
     app.repos[0].cargo_installed_hash = "installed789".to_string();
 
@@ -136,6 +137,7 @@ fn draw_ui_separates_local_hash_from_cargo_hash_box() {
 
     assert!(rendered.contains("cgo: commit hash"));
     assert!(rendered.contains("local: commit hash"));
+    assert!(!rendered.contains("cargo-cache-local"));
     assert!(local_idx < rendered.find("cgo: commit hash").unwrap());
     assert!(remote_idx < installed_idx);
 }

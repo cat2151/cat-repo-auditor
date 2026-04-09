@@ -123,6 +123,7 @@ pub(super) fn make_repo(name: &str, updated_at: &str, updated_at_raw: &str) -> R
         local_status: LocalStatus::Clean,
         has_local_git: true,
         staging_files: vec![],
+        local_head_hash: String::new(),
         issues: vec![],
         prs: vec![],
         readme_ja: None,

@@ -1,7 +1,7 @@
 use crate::{
     github_local::{
         append_cargo_check_after_auto_update_log, append_cargo_check_results,
-        check_cargo_git_install, check_local_status_no_fetch,
+        check_cargo_git_install,
     },
     history::History,
     main_launch::spawn_cargo_app_for_repo,
@@ -148,9 +148,6 @@ struct CargoRepoTask {
 pub(super) struct CargoRepoResult {
     pub(super) name: String,
     pub(super) full_name: String,
-    pub(super) local_status: super::LocalStatus,
-    pub(super) has_local_git: bool,
-    pub(super) staging_files: Vec<String>,
     pub(super) cargo_install: Option<bool>,
     pub(super) cargo_cat: String,
     pub(super) cargo_remote_hash: String,
@@ -183,7 +180,6 @@ fn build_cargo_tasks(repos: &[RepoInfo]) -> Vec<CargoRepoTask> {
 fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> CargoRepoResult {
     let repo = task.repo;
     let name = repo.name.clone();
-    let (local_status, has_local_git, staging_files) = check_local_status_no_fetch(base_dir, &name);
     let (cargo_install, cargo_cat, cargo_remote_hash, cargo_remote_hash_cat, cargo_installed_hash) =
         resolve_cargo_check_fields(
             &repo,
@@ -194,9 +190,6 @@ fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> Carg
     CargoRepoResult {
         name,
         full_name: repo.full_name,
-        local_status,
-        has_local_git,
-        staging_files,
         cargo_install,
         cargo_cat,
         cargo_remote_hash,
@@ -207,9 +200,6 @@ fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> Carg
 
 pub(super) fn apply_cargo_result_to_history(history: &mut History, result: &CargoRepoResult) {
     if let Some(r) = history.repos.iter_mut().find(|r| r.name == result.name) {
-        r.local_status = result.local_status.clone();
-        r.has_local_git = result.has_local_git;
-        r.staging_files = result.staging_files.clone();
         r.cargo_install = result.cargo_install;
         r.cargo_checked_at = result.cargo_cat.clone();
         r.cargo_remote_hash = result.cargo_remote_hash.clone();
@@ -303,9 +293,6 @@ pub(super) fn spawn_background_cargo_checks(
                 });
                 let _ = tx.send(FetchProgress::CargoUpdate {
                     name: result.name.clone(),
-                    local_status: result.local_status.clone(),
-                    has_local_git: result.has_local_git,
-                    staging_files: result.staging_files.clone(),
                     cargo_install: result.cargo_install,
                     cargo_cat: result.cargo_cat.clone(),
                     cargo_remote_hash: result.cargo_remote_hash.clone(),

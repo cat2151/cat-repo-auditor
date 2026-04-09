@@ -48,10 +48,10 @@ pub(crate) fn draw_local_hash_box(
     bottom_offset: u16,
 ) {
     let repo = &app.repos[repo_idx];
-    let local = if repo.cargo_checked_at.is_empty() {
+    let local = if repo.local_head_hash.is_empty() {
         "?"
     } else {
-        &repo.cargo_checked_at
+        &repo.local_head_hash
     };
 
     let content_w: u16 = 53;

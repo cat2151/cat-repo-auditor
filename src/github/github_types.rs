@@ -33,6 +33,8 @@ pub struct RepoInfo {
     pub local_status: LocalStatus,
     pub has_local_git: bool,
     pub staging_files: Vec<String>,
+    #[serde(default)]
+    pub local_head_hash: String,
     pub issues: Vec<IssueOrPr>,
     pub prs: Vec<IssueOrPr>,
     /// README.ja.md existence. None = unchecked.
@@ -63,7 +65,7 @@ pub struct RepoInfo {
     /// Some(true) = installed hash == remote main HEAD, Some(false) = stale against upstream
     #[serde(default)]
     pub cargo_install: Option<bool>,
-    /// local git HEAD hash when cargo_install was last checked (doubles as display value for local hash)
+    /// local git HEAD hash when cargo_install was last checked (cargo cache only)
     #[serde(default)]
     pub cargo_checked_at: String,
     /// remote main branch HEAD hash from GitHub (used for cargo hash display/comparison)
@@ -134,6 +136,10 @@ pub enum FetchProgress {
     /// Incremental update per repo after phase-3 checks
     ExistenceUpdate {
         name: String,
+        local_status: LocalStatus,
+        has_local_git: bool,
+        staging_files: Vec<String>,
+        local_head_hash: String,
         readme_ja: Option<bool>,
         readme_ja_cat: String,
         readme_ja_badge: Option<bool>,
@@ -148,9 +154,6 @@ pub enum FetchProgress {
     /// Incremental cargo-only update that can arrive independently of other checks.
     CargoUpdate {
         name: String,
-        local_status: LocalStatus,
-        has_local_git: bool,
-        staging_files: Vec<String>,
         cargo_install: Option<bool>,
         cargo_cat: String,
         cargo_remote_hash: String,
