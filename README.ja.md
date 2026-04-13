@@ -26,6 +26,8 @@ catrepo
 catrepo update
 ```
 
+これは updater helper を起動して `catrepo` 自体は終了します。update 完了後は手動で `catrepo` を再起動してください。`catrepo update` には `PATH` 上の Python が必要です。
+
 もし失敗したら以下を実行（installコマンドと同じ）：
 
 ```
