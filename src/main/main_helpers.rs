@@ -1,4 +1,6 @@
+use anyhow::Result;
 use chrono::Local;
+use ratatui::{backend::Backend, Terminal};
 use std::{
     fs::OpenOptions,
     io::{self, BufRead, BufReader, Write},
@@ -12,6 +14,7 @@ use crate::{
     config::Config,
     github::{fetch_repos_with_progress, FetchProgress},
     history::History,
+    ui::draw_ui,
 };
 
 pub(crate) fn start_fetch(config: Config, history: History) -> mpsc::Receiver<FetchProgress> {
@@ -89,4 +92,15 @@ pub(crate) fn persist_log_line_for_path(app: &mut App, path: &Path, line: String
 
 pub(crate) fn persist_log_line(app: &mut App, line: String) {
     persist_log_line_for_path(app, &Config::log_path(), line);
+}
+
+pub(crate) fn rerender_terminal<B: Backend>(
+    app: &mut App,
+    terminal: &mut Terminal<B>,
+) -> Result<()> {
+    terminal.draw(|f| {
+        app.term_height = f.area().height as usize;
+        draw_ui(f, app);
+    })?;
+    Ok(())
 }

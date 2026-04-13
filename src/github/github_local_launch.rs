@@ -30,18 +30,6 @@ pub(crate) fn launch_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> R
     }
 }
 
-pub(crate) fn spawn_app_with_args(bin: &str, args: &[&str], run_dir: &str) -> Result<()> {
-    Command::new(bin)
-        .args(args)
-        .current_dir(run_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("launch failed")?;
-    Ok(())
-}
-
 pub(crate) fn launch_lazygit(base_dir: &str, repo_name: &str) -> Result<()> {
     let repo_path = format!("{}/{}", base_dir.trim_end_matches(['/', '\\']), repo_name);
     crossterm::terminal::disable_raw_mode()?;

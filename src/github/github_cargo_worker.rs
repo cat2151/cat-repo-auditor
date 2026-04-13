@@ -4,12 +4,11 @@ use crate::{
         check_cargo_git_install,
     },
     history::History,
-    main_launch::spawn_cargo_app_for_repo,
 };
 
 use super::{
     inspect_auto_update_after_recheck, phase3_worker_count, should_skip_auto_update_for_repo,
-    AutoUpdateAfterRecheck, FetchProgress, RepoInfo,
+    AutoUpdateAfterRecheck, AutoUpdateLaunchRequest, FetchProgress, RepoInfo,
 };
 
 /// Cargo check の状態とログ用の説明材料を保持する。
@@ -212,7 +211,7 @@ pub(super) fn apply_cargo_result_to_history(history: &mut History, result: &Carg
 ///
 /// Each completed repo sends a `FetchProgress::CargoUpdate` immediately, so the UI can reflect
 /// cargo state without waiting for README / Pages / DeepWiki / workflow checks.
-/// When auto update is enabled, this worker also performs the recheck-and-spawn flow for stale
+/// When auto update is enabled, this worker also performs the recheck-and-request flow for stale
 /// cargo installs as soon as each cargo result is available.
 ///
 /// The returned join handle yields all completed cargo results so the caller can merge them back
@@ -300,7 +299,7 @@ pub(super) fn spawn_background_cargo_checks(
                     cargo_installed_hash: result.cargo_installed_hash.clone(),
                 });
 
-                if let Some(run_dir) = auto_update_run_dir.as_deref() {
+                if auto_update_run_dir.is_some() {
                     if should_skip_auto_update_for_repo(&owner, &result.name) {
                         append_auto_update_recheck_log(
                             &result.full_name,
@@ -328,38 +327,15 @@ pub(super) fn spawn_background_cargo_checks(
                             installed_hash,
                             remote_hash,
                         } => {
-                            let feedback = spawn_cargo_app_for_repo(
-                                &owner,
-                                &result.name,
-                                result.cargo_install,
-                                run_dir,
-                            );
-                            let mut messages = vec![
-                                String::from(
-                                    "この repo は cargo check で old でしたので、recheck でも old のままか確認しました。",
-                                ),
-                                format!(
-                                    "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
-                                ),
-                                format!("update 実行: {}", feedback.log_msg),
-                            ];
-                            if feedback.launched {
-                                messages.push(String::from(
-                                    "1分後から、1分間隔で installed hash を確認し、remote hash と一致したかをこのログに追記します。",
-                                ));
-                                let _ = tx.send(FetchProgress::StartAutoUpdateCargoHashPolling {
+                            let _ = tx.send(FetchProgress::RequestAutoUpdateLaunch(
+                                AutoUpdateLaunchRequest {
                                     name: result.name.clone(),
-                                });
-                            } else {
-                                messages.push(String::from(
-                                    "update の起動に失敗したため、1分後の installed hash 確認は開始しません。",
-                                ));
-                            }
-                            append_auto_update_recheck_log(&result.full_name, messages);
-                            let _ = tx.send(FetchProgress::Log(format!(
-                                "x {} {}",
-                                result.full_name, feedback.log_msg
-                            )));
+                                    full_name: result.full_name.clone(),
+                                    cargo_install: result.cargo_install,
+                                    installed_hash,
+                                    remote_hash,
+                                },
+                            ));
                         }
                         AutoUpdateAfterRecheck::UpdatedDuringRecheck {
                             installed_hash,

@@ -1,6 +1,6 @@
 use super::*;
 use crate::config::Config;
-use crate::github::{FetchProgress, LocalStatus, RateLimit, RepoInfo};
+use crate::github::{AutoUpdateLaunchRequest, FetchProgress, LocalStatus, RateLimit, RepoInfo};
 use crate::main_helpers::BACKGROUND_CHECKS_COMPLETED_MSG;
 use std::{
     collections::HashSet,
@@ -199,6 +199,29 @@ fn drain_fetch_channel_starts_auto_update_cargo_hash_polling() {
     assert_eq!(app.cargo_hash_polls.len(), 1);
     assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
     assert!(app.cargo_hash_polls[0].after_auto_update);
+}
+
+#[test]
+fn drain_fetch_channel_queues_auto_update_launch_request() {
+    let mut app = App::new(make_config());
+
+    let request = AutoUpdateLaunchRequest {
+        name: String::from("repo"),
+        full_name: String::from("owner/repo"),
+        cargo_install: Some(false),
+        installed_hash: String::from("installed123"),
+        remote_hash: String::from("remote456"),
+    };
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::RequestAutoUpdateLaunch(request.clone()))
+        .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(app.pending_auto_update_launches.len(), 1);
+    assert_eq!(app.pending_auto_update_launches.front(), Some(&request));
 }
 
 #[test]

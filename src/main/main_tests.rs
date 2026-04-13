@@ -4,9 +4,11 @@ use crate::main_cli::command as cli_command;
 use crate::main_helpers::{make_log_line, make_x_log_line, STARTUP_LOG_MSG, STARTUP_LOG_SEPARATOR};
 use crate::main_launch::{
     cargo_status_to_launch_args, format_launch_command, launch_cargo_app_for_repo_with,
-    x_not_run_feedback_no_cargo_install,
+    x_not_run_feedback_no_cargo_install, LaunchFeedback,
 };
 use clap::error::ErrorKind;
+use ratatui::{backend::TestBackend, Terminal};
+use std::cell::RefCell;
 use std::{
     fs,
     path::PathBuf,
@@ -244,6 +246,120 @@ fn launch_cargo_app_for_repo_with_skips_when_repo_has_no_cargo_install() {
     assert_eq!(feedback.transient_msg, X_NOT_RUN_MSG_NO_CARGO_INSTALLED_APP);
     assert_eq!(feedback.log_msg, X_NOT_RUN_LOG_NO_CARGO_INSTALLED_APP);
     assert!(!feedback.launched);
+}
+
+fn make_auto_update_request(name: &str) -> crate::github::AutoUpdateLaunchRequest {
+    crate::github::AutoUpdateLaunchRequest {
+        name: name.to_string(),
+        full_name: format!("owner/{name}"),
+        cargo_install: Some(false),
+        installed_hash: String::from("installed123"),
+        remote_hash: String::from("remote456"),
+    }
+}
+
+#[test]
+fn run_auto_update_launch_request_with_starts_polling_and_logs() {
+    let mut app = App::new(crate::config::Config {
+        owner: String::from("owner"),
+        local_base_dir: String::from("/base"),
+        app_run_dir: Some(String::from("/run")),
+        auto_pull: false,
+        auto_update: true,
+    });
+    app.repos = vec![make_poll_repo("repo")];
+    app.rebuild_rows();
+    app.term_height = 0;
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let appended = RefCell::new(Vec::<String>::new());
+    let persisted = RefCell::new(Vec::<String>::new());
+
+    run_auto_update_launch_request_with(
+        &mut app,
+        &mut terminal,
+        make_auto_update_request("repo"),
+        |owner, repo_name, cargo_install, run_dir| {
+            assert_eq!(owner, "owner");
+            assert_eq!(repo_name, "repo");
+            assert_eq!(cargo_install, Some(false));
+            assert_eq!(run_dir, "/run");
+            LaunchFeedback {
+                transient_msg: String::from("launched: repo-bin update"),
+                log_msg: String::from("run: `repo-bin update` cwd=`/run`"),
+                launched: true,
+            }
+        },
+        |repo_full_name, messages| {
+            assert_eq!(repo_full_name, "owner/repo");
+            *appended.borrow_mut() = messages;
+        },
+        |app, line| {
+            persisted.borrow_mut().push(line.clone());
+            app.append_log_line(line);
+        },
+    )
+    .unwrap();
+
+    assert_eq!(app.term_height, 20);
+    assert_eq!(app.cargo_hash_polls.len(), 1);
+    assert_eq!(app.cargo_hash_polls[0].repo_name, "repo");
+    assert!(app.cargo_hash_polls[0].after_auto_update);
+    assert_eq!(persisted.borrow().len(), 1);
+    assert!(persisted.borrow()[0].contains("x owner/repo run: `repo-bin update` cwd=`/run`"));
+    assert_eq!(
+        appended.borrow().as_slice(),
+        &[
+            String::from("この repo は cargo check で old でしたので、recheck でも old のままか確認しました。"),
+            String::from(
+                "installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"
+            ),
+            String::from("update 実行: run: `repo-bin update` cwd=`/run`"),
+            String::from(
+                "1分後から、1分間隔で installed hash を確認し、remote hash と一致したかをこのログに追記します。"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn run_auto_update_launch_request_with_failure_skips_polling() {
+    let mut app = App::new(crate::config::Config {
+        owner: String::from("owner"),
+        local_base_dir: String::from("/base"),
+        app_run_dir: Some(String::from("/run")),
+        auto_pull: false,
+        auto_update: true,
+    });
+    app.repos = vec![make_poll_repo("repo")];
+    app.rebuild_rows();
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let appended = RefCell::new(Vec::<String>::new());
+
+    run_auto_update_launch_request_with(
+        &mut app,
+        &mut terminal,
+        make_auto_update_request("repo"),
+        |_owner, _repo_name, _cargo_install, _run_dir| LaunchFeedback {
+            transient_msg: String::from("run failed: boom"),
+            log_msg: String::from("run: `repo-bin update` cwd=`/run` => failed: boom"),
+            launched: false,
+        },
+        |_repo_full_name, messages| {
+            *appended.borrow_mut() = messages;
+        },
+        |app, line| app.append_log_line(line),
+    )
+    .unwrap();
+
+    assert!(app.cargo_hash_polls.is_empty());
+    assert_eq!(
+        appended.borrow().last(),
+        Some(&String::from(
+            "update の起動に失敗したため、1分後の installed hash 確認は開始しません。"
+        ))
+    );
 }
 
 #[test]

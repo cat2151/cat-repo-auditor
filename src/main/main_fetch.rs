@@ -164,6 +164,9 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::StartAutoUpdateCargoHashPolling { name }) => {
                 app.start_auto_update_cargo_hash_polling(&name);
             }
+            Ok(FetchProgress::RequestAutoUpdateLaunch(request)) => {
+                app.queue_auto_update_launch(request);
+            }
             Ok(FetchProgress::Done(Ok((repos, rl)))) => {
                 let mut repos = repos;
                 merge_live_repo_state(&app.repos, &mut repos);

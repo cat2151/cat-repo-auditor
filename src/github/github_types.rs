@@ -120,6 +120,15 @@ pub struct RateLimit {
     pub reset_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoUpdateLaunchRequest {
+    pub name: String,
+    pub full_name: String,
+    pub cargo_install: Option<bool>,
+    pub installed_hash: String,
+    pub remote_hash: String,
+}
+
 pub enum FetchProgress {
     Status(String),
     Log(String),
@@ -163,5 +172,6 @@ pub enum FetchProgress {
     StartAutoUpdateCargoHashPolling {
         name: String,
     },
+    RequestAutoUpdateLaunch(AutoUpdateLaunchRequest),
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),
 }

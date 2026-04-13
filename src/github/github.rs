@@ -17,7 +17,9 @@ mod types;
 
 use cargo_worker::{apply_cargo_result_to_history, spawn_background_cargo_checks};
 
-pub use types::{FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo};
+pub use types::{
+    AutoUpdateLaunchRequest, FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo,
+};
 
 // ──────────────────────────────────────────────
 // Public types

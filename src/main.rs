@@ -31,22 +31,26 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{
+    backend::{Backend, CrosstermBackend},
+    Terminal,
+};
 use std::{io, sync::mpsc, time::SystemTime};
 
 use crate::{
     app::{App, READY_MSG},
     config::Config,
-    github::{FetchProgress, RepoInfo},
+    github::{AutoUpdateLaunchRequest, FetchProgress, RepoInfo},
     github_local::{append_cargo_check_after_auto_update_log, check_cargo_git_install},
     history::History,
     main_cli::{parse_subcommand, Subcommand},
     main_fetch::drain_fetch_channel,
     main_helpers::{
-        make_log_line, make_startup_log_line, persist_log_line, refresh_log_lines_if_changed,
-        start_fetch, STARTUP_LOG_SEPARATOR,
+        make_log_line, make_startup_log_line, make_x_log_line, persist_log_line,
+        refresh_log_lines_if_changed, rerender_terminal, start_fetch, STARTUP_LOG_SEPARATOR,
     },
     main_input::{handle_terminal_input, InputState},
+    main_launch::{launch_cargo_app_for_repo, LaunchFeedback},
     self_update::{build_commit_hash, run_self_check, run_self_update},
     ui::draw_ui,
 };
@@ -260,6 +264,69 @@ fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEven
     }
 }
 
+fn run_auto_update_launch_request_with<B, Launch, Append, Persist>(
+    app: &mut App,
+    terminal: &mut Terminal<B>,
+    request: AutoUpdateLaunchRequest,
+    launch_repo: Launch,
+    append_auto_update_log: Append,
+    persist_log: Persist,
+) -> Result<()>
+where
+    B: Backend,
+    Launch: FnOnce(&str, &str, Option<bool>, &str) -> LaunchFeedback,
+    Append: FnOnce(&str, Vec<String>),
+    Persist: Fn(&mut App, String),
+{
+    let run_dir = app.config.resolved_app_run_dir();
+    let feedback = launch_repo(
+        &app.config.owner,
+        &request.name,
+        request.cargo_install,
+        &run_dir,
+    );
+    let mut messages = vec![
+        String::from(
+            "この repo は cargo check で old でしたので、recheck でも old のままか確認しました。",
+        ),
+        format_installed_hash_check_log(&request.installed_hash, &request.remote_hash),
+        format!("update 実行: {}", feedback.log_msg),
+    ];
+    if feedback.launched {
+        messages.push(String::from(
+            "1分後から、1分間隔で installed hash を確認し、remote hash と一致したかをこのログに追記します。",
+        ));
+        app.start_auto_update_cargo_hash_polling(&request.name);
+    } else {
+        messages.push(String::from(
+            "update の起動に失敗したため、1分後の installed hash 確認は開始しません。",
+        ));
+    }
+    append_auto_update_log(&request.full_name, messages);
+    persist_log(app, make_x_log_line(&request.full_name, &feedback.log_msg));
+    terminal.clear().ok();
+    rerender_terminal(app, terminal)?;
+    Ok(())
+}
+
+fn run_next_pending_auto_update_launch(
+    app: &mut App,
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+) -> Result<bool> {
+    let Some(request) = app.pop_pending_auto_update_launch() else {
+        return Ok(false);
+    };
+    run_auto_update_launch_request_with(
+        app,
+        terminal,
+        request,
+        launch_cargo_app_for_repo,
+        |repo_full_name, messages| append_auto_update_cargo_poll_log(repo_full_name, messages),
+        persist_log_line,
+    )?;
+    Ok(true)
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match parse_subcommand(&args) {
@@ -325,6 +392,9 @@ fn main() -> Result<()> {
             draw_ui(f, &mut app);
         })?;
 
+        if run_next_pending_auto_update_launch(&mut app, &mut terminal)? {
+            continue;
+        }
         if !handle_terminal_input(&mut app, &mut terminal, &mut fetch_rx, &mut input_state)? {
             break;
         }

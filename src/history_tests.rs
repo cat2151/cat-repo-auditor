@@ -1,17 +1,46 @@
 use super::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn sanitize_path_component(value: &str) -> String {
+    let sanitized: String = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if sanitized.is_empty() {
+        String::from("unnamed")
+    } else {
+        sanitized
+    }
+}
+
 fn unique_history_test_path(prefix: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
+    let current_thread = std::thread::current();
+    let thread_name = current_thread.name().unwrap_or("unnamed");
+    let safe_thread_name = sanitize_path_component(thread_name);
     std::env::temp_dir().join(format!(
         "{prefix}_{}_{}_{}.json",
         std::process::id(),
-        std::thread::current().name().unwrap_or("名前なし"),
+        safe_thread_name,
         nanos
     ))
+}
+
+#[test]
+fn sanitize_path_component_replaces_windows_invalid_characters() {
+    assert_eq!(
+        sanitize_path_component("history::tests/save_and_load_roundtrip"),
+        "history__tests_save_and_load_roundtrip"
+    );
 }
 
 #[test]

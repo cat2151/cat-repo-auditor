@@ -18,9 +18,9 @@ use crate::{
         check_local_status_no_fetch, collect_workflow_repo_exist_checks, launch_lazygit, open_url,
     },
     history::History,
-    main_helpers::{make_x_log_line, persist_log_line, start_fetch},
+    main_helpers::{make_x_log_line, persist_log_line, rerender_terminal, start_fetch},
     main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback},
-    ui::{draw_ui, Focus, RepoRow, SearchState},
+    ui::{Focus, RepoRow, SearchState},
 };
 
 /// Tracks keyboard input state to implement 50ms key debouncing.
@@ -433,17 +433,6 @@ where
 
     Ok(())
 }
-
-/// Re-renders the TUI right after returning from an external command so the terminal is restored
-/// immediately instead of waiting for the next main-loop draw.
-fn rerender_terminal<B: Backend>(app: &mut App, terminal: &mut Terminal<B>) -> Result<()> {
-    terminal.draw(|f| {
-        app.term_height = f.area().height as usize;
-        draw_ui(f, app);
-    })?;
-    Ok(())
-}
-
 fn copy_to_clipboard(text: &str) -> io::Result<()> {
     let mut child = std::process::Command::new("clip")
         .stdin(std::process::Stdio::piped())
