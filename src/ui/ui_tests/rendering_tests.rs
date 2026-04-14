@@ -20,6 +20,19 @@ fn find_text_x(buffer: &ratatui::buffer::Buffer, needle: &str) -> Option<u16> {
     None
 }
 
+fn rendered_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
+    let area = terminal.backend().buffer().area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    rendered
+}
+
 // ── local_check_cell ──────────────────────────────────────────────────────────
 
 #[test]
@@ -201,6 +214,54 @@ fn build_tasks_display_spinner_wraps_after_full_cycle() {
     let a = build_tasks_display(&tasks, 0);
     let b = build_tasks_display(&tasks, (SPINNER_FRAMES.len() as u64) * SPINNER_FRAME_MS);
     assert_eq!(a, b);
+}
+
+#[test]
+fn draw_ui_shows_spinner_in_repo_name_for_stale_checking_row_when_columns_hidden() {
+    let backend = TestBackend::new(100, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.show_columns = false;
+    app.repos[0].readme_ja = Some(true);
+    app.repos[0].readme_ja_checked_at = String::from("2023-12-31T00:00:00Z");
+    app.checking_repos.insert(String::from("focus-test"));
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| rendered
+            .iter()
+            .any(|line| line.contains(&format!("▶{frame}focus-test")))),
+        "repo list should show a spinner in the repo name while stale checks are pending"
+    );
+}
+
+#[test]
+fn draw_ui_replaces_stale_cached_checkmark_with_spinner_while_repo_is_checking() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.repos[0].readme_ja = Some(true);
+    app.repos[0].readme_ja_checked_at = String::from("2023-12-31T00:00:00Z");
+    app.checking_repos.insert(String::from("focus-test"));
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| repo_line.contains(frame)),
+        "repo line should show a spinner while pending: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains('✔'),
+        "stale cached checkmark should be hidden until the recheck completes: {repo_line}"
+    );
 }
 
 #[test]

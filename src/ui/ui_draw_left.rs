@@ -1,6 +1,6 @@
 use super::{
-    c, local_check_cell, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE,
-    MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
+    c, local_check_cell, spinner_frame, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL,
+    MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
 };
 use crate::{app::App, github::LocalStatus};
 use ratatui::{
@@ -10,7 +10,25 @@ use ratatui::{
     Frame,
 };
 
-pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
+fn repo_has_pending_phase3_checks(repo: &crate::github::RepoInfo, is_checking: bool) -> bool {
+    is_checking
+        && (repo.readme_ja_checked_at != repo.updated_at_raw
+            || repo.pages_checked_at != repo.updated_at_raw
+            || repo.readme_ja_badge_checked_at != repo.local_head_hash
+            || repo.deepwiki_checked_at != repo.local_head_hash
+            || repo.wf_checked_at != repo.local_head_hash)
+}
+
+fn repo_has_pending_cargo_check(app: &App, repo: &crate::github::RepoInfo) -> bool {
+    app.bg_tasks
+        .iter()
+        .any(|(tag, _cur, total)| *tag == "cgo" && *total > 0)
+        && (repo.cargo_checked_at != repo.local_head_hash
+            || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
+            || repo.cargo_remote_hash.is_empty())
+}
+
+pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u64) {
     let active = app.window_focused && app.focus == Focus::Repos;
     let searching = app.search_state == SearchState::Active;
     let border_col = if active { MK_CYAN } else { MK_COMMENT };
@@ -205,57 +223,67 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect) {
                     MK_COMMENT
                 };
 
-                let cursor_char = if is_cursor { "▶ " } else { "  " };
+                let pending = (spinner_frame(unix_millis), MK_ORANGE);
+                let row_pending =
+                    repo_has_pending_phase3_checks(repo, app.checking_repos.contains(&repo.name))
+                        || repo_has_pending_cargo_check(app, repo);
+                let cursor_char = if is_cursor { "▶" } else { " " };
+                let pending_char = if row_pending { pending.0 } else { " " };
                 let lock_char = if repo.is_private { "🔒" } else { "" };
-                let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
+                let name_str = format!("{}{}{}{}", cursor_char, pending_char, lock_char, repo.name);
 
                 let is_checking = app.checking_repos.contains(&repo.name);
-                let pending = ("…", MK_ORANGE);
 
-                let (doc_str, doc_col) = if is_checking && repo.readme_ja_checked_at.is_empty() {
-                    pending
-                } else {
-                    match repo.readme_ja {
-                        Some(true) => ("✔", MK_GREEN),
-                        Some(false) => ("✘", MK_COMMENT),
-                        None => ("?", MK_ORANGE),
-                    }
-                };
-                let (pg_str, pg_col) = if is_checking && repo.pages_checked_at.is_empty() {
-                    pending
-                } else {
-                    match repo.pages {
-                        Some(true) => ("✔", MK_CYAN),
-                        Some(false) => ("✘", MK_COMMENT),
-                        None => ("?", MK_ORANGE),
-                    }
-                };
+                let (doc_str, doc_col) =
+                    if is_checking && repo.readme_ja_checked_at != repo.updated_at_raw {
+                        pending
+                    } else {
+                        match repo.readme_ja {
+                            Some(true) => ("✔", MK_GREEN),
+                            Some(false) => ("✘", MK_COMMENT),
+                            None => ("?", MK_ORANGE),
+                        }
+                    };
+                let (pg_str, pg_col) =
+                    if is_checking && repo.pages_checked_at != repo.updated_at_raw {
+                        pending
+                    } else {
+                        match repo.pages {
+                            Some(true) => ("✔", MK_CYAN),
+                            Some(false) => ("✘", MK_COMMENT),
+                            None => ("?", MK_ORANGE),
+                        }
+                    };
                 let local_no_git = matches!(
                     repo.local_status,
                     LocalStatus::NotFound | LocalStatus::NoGit
                 );
 
-                let (ja_str, ja_col) =
-                    if is_checking && !local_no_git && repo.readme_ja_badge_checked_at.is_empty() {
-                        pending
-                    } else {
-                        local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
-                    };
+                let (ja_str, ja_col) = if is_checking
+                    && !local_no_git
+                    && repo.readme_ja_badge_checked_at != repo.local_head_hash
+                {
+                    pending
+                } else {
+                    local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
+                };
 
-                let (wki_str, wki_col) =
-                    if is_checking && !local_no_git && repo.deepwiki_checked_at.is_empty() {
-                        pending
-                    } else {
-                        local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
-                    };
+                let (wki_str, wki_col) = if is_checking
+                    && !local_no_git
+                    && repo.deepwiki_checked_at != repo.local_head_hash
+                {
+                    pending
+                } else {
+                    local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
+                };
                 let (wf_str, wf_col) =
-                    if is_checking && !local_no_git && repo.wf_checked_at.is_empty() {
+                    if is_checking && !local_no_git && repo.wf_checked_at != repo.local_head_hash {
                         pending
                     } else {
                         local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
                     };
 
-                let (cgo_str, cgo_col) = if is_checking && repo.cargo_checked_at.is_empty() {
+                let (cgo_str, cgo_col) = if repo_has_pending_cargo_check(app, repo) {
                     pending
                 } else {
                     match repo.cargo_install {

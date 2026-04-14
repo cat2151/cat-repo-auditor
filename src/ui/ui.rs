@@ -224,7 +224,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
         .split(main_chunks[0]);
 
-    draw_left(f, app, panes[0]);
+    draw_left(f, app, panes[0], unix_millis);
     draw_right(f, app, panes[1]);
     if app.show_log {
         draw_log(f, app, main_chunks[1]);
