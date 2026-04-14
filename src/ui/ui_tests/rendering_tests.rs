@@ -303,16 +303,7 @@ fn draw_ui_shows_workflow_repo_exist_overlay() {
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
-    let area = terminal.backend().buffer().area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
     assert!(rendered.contains("call-a.yml"));
@@ -332,16 +323,7 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
-    let area = terminal.backend().buffer().area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
     assert!(rendered.contains("no call-* workflows"));
@@ -381,15 +363,6 @@ fn test_workflow_repo_column_alignment_with_wide_chars() {
         two_days_x + UnicodeWidthStr::width("2d")
     );
 
-    let area = buffer.area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(buffer[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
     assert!(rendered.contains('…'));
 }

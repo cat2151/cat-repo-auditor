@@ -19,10 +19,8 @@ fn repo_has_pending_phase3_checks(repo: &crate::github::RepoInfo, is_checking: b
             || repo.wf_checked_at != repo.local_head_hash)
 }
 
-fn repo_has_pending_cargo_check(app: &App, repo: &crate::github::RepoInfo) -> bool {
-    app.bg_tasks
-        .iter()
-        .any(|(tag, _cur, total)| *tag == "cgo" && *total > 0)
+fn repo_has_pending_cargo_check(cargo_check_active: bool, repo: &crate::github::RepoInfo) -> bool {
+    cargo_check_active
         && (repo.cargo_checked_at != repo.local_head_hash
             || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
             || repo.cargo_remote_hash.is_empty())
@@ -158,6 +156,10 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
     app.adjust_row_scroll(visible);
     let scroll = app.row_scroll;
     let cursor = app.row_cursor;
+    let cargo_check_active = app
+        .bg_tasks
+        .iter()
+        .any(|(tag, _cur, total)| *tag == "cgo" && *total > 0);
 
     let rows: Vec<Row> = app
         .filtered_rows
@@ -224,15 +226,15 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                 };
 
                 let pending = (spinner_frame(unix_millis), MK_ORANGE);
+                let is_checking = app.checking_repos.contains(&repo.name);
+                let has_pending_cargo_check =
+                    repo_has_pending_cargo_check(cargo_check_active, repo);
                 let row_pending =
-                    repo_has_pending_phase3_checks(repo, app.checking_repos.contains(&repo.name))
-                        || repo_has_pending_cargo_check(app, repo);
+                    repo_has_pending_phase3_checks(repo, is_checking) || has_pending_cargo_check;
                 let cursor_char = if is_cursor { "▶" } else { " " };
                 let pending_char = if row_pending { pending.0 } else { " " };
                 let lock_char = if repo.is_private { "🔒" } else { "" };
                 let name_str = format!("{}{}{}{}", cursor_char, pending_char, lock_char, repo.name);
-
-                let is_checking = app.checking_repos.contains(&repo.name);
 
                 let (doc_str, doc_col) =
                     if is_checking && repo.readme_ja_checked_at != repo.updated_at_raw {
@@ -283,7 +285,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
                     };
 
-                let (cgo_str, cgo_col) = if repo_has_pending_cargo_check(app, repo) {
+                let (cgo_str, cgo_col) = if has_pending_cargo_check {
                     pending
                 } else {
                     match repo.cargo_install {
