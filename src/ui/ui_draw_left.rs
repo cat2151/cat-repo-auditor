@@ -19,8 +19,11 @@ fn repo_has_pending_phase3_checks(repo: &crate::github::RepoInfo, is_checking: b
             || repo.wf_checked_at != repo.local_head_hash)
 }
 
-fn repo_has_pending_cargo_check(cargo_check_active: bool, repo: &crate::github::RepoInfo) -> bool {
-    cargo_check_active
+fn repo_has_pending_cargo_check(
+    has_active_cargo_tasks: bool,
+    repo: &crate::github::RepoInfo,
+) -> bool {
+    has_active_cargo_tasks
         && (repo.cargo_checked_at != repo.local_head_hash
             || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
             || repo.cargo_remote_hash.is_empty())
