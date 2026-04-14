@@ -10,15 +10,6 @@ use ratatui::{
     Frame,
 };
 
-fn repo_has_pending_phase3_checks(repo: &crate::github::RepoInfo, is_checking: bool) -> bool {
-    is_checking
-        && (repo.readme_ja_checked_at != repo.updated_at_raw
-            || repo.pages_checked_at != repo.updated_at_raw
-            || repo.readme_ja_badge_checked_at != repo.local_head_hash
-            || repo.deepwiki_checked_at != repo.local_head_hash
-            || repo.wf_checked_at != repo.local_head_hash)
-}
-
 fn repo_has_pending_cargo_check(
     has_active_cargo_tasks: bool,
     repo: &crate::github::RepoInfo,
@@ -217,27 +208,31 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                     LocalStatus::NotFound => MK_COMMENT,
                     LocalStatus::NoGit => MK_COMMENT,
                 };
-                let pr_col = if repo.open_prs > 0 {
-                    MK_PURPLE
-                } else {
-                    MK_COMMENT
-                };
-                let iss_col = if repo.open_issues > 0 {
-                    MK_RED
-                } else {
-                    MK_COMMENT
-                };
 
                 let pending = (spinner_frame(unix_millis), MK_ORANGE);
                 let is_checking = app.checking_repos.contains(&repo.name);
                 let has_pending_cargo_check =
                     repo_has_pending_cargo_check(cargo_check_active, repo);
-                let row_pending =
-                    repo_has_pending_phase3_checks(repo, is_checking) || has_pending_cargo_check;
                 let cursor_char = if is_cursor { "▶" } else { " " };
-                let pending_char = if row_pending { pending.0 } else { " " };
                 let lock_char = if repo.is_private { "🔒" } else { "" };
-                let name_str = format!("{}{}{}{}", cursor_char, pending_char, lock_char, repo.name);
+                let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
+                let pr_pending = app.loading;
+                let iss_pending = app.loading;
+
+                let (pr_str, pr_col) = if pr_pending {
+                    (pending.0.to_string(), pending.1)
+                } else if repo.open_prs > 0 {
+                    (format!("{:>3}", repo.open_prs), MK_PURPLE)
+                } else {
+                    (format!("{:>3}", repo.open_prs), MK_COMMENT)
+                };
+                let (iss_str, iss_col) = if iss_pending {
+                    (pending.0.to_string(), pending.1)
+                } else if repo.open_issues > 0 {
+                    (format!("{:>3}", repo.open_issues), MK_RED)
+                } else {
+                    (format!("{:>3}", repo.open_issues), MK_COMMENT)
+                };
 
                 let (doc_str, doc_col) =
                     if is_checking && repo.readme_ja_checked_at != repo.updated_at_raw {
@@ -288,6 +283,12 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
                     };
 
+                let (local_str, local_col) = if is_checking {
+                    (pending.0.to_string(), pending.1)
+                } else {
+                    (repo.local_status.to_string(), local_col)
+                };
+
                 let (cgo_str, cgo_col) = if has_pending_cargo_check {
                     pending
                 } else {
@@ -306,12 +307,12 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         } else {
                             Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(format!("{:>3}", repo.open_prs)).style(if sel || dim {
+                        Cell::from(pr_str).style(if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(format!("{:>3}", repo.open_issues)).style(if sel || dim {
+                        Cell::from(iss_str).style(if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG))
@@ -335,12 +336,12 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         } else {
                             Style::default().fg(c(app, MK_COMMENT)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(format!("{:>3}", repo.open_prs)).style(if sel || dim {
+                        Cell::from(pr_str).style(if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, pr_col)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(format!("{:>3}", repo.open_issues)).style(if sel || dim {
+                        Cell::from(iss_str).style(if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, iss_col)).bg(c(app, MK_BG))
@@ -370,7 +371,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         } else {
                             Style::default().fg(c(app, wf_col)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(repo.local_status.to_string()).style(if sel || dim {
+                        Cell::from(local_str).style(if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, local_col)).bg(c(app, MK_BG))
