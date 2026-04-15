@@ -2,22 +2,38 @@ use super::{
     c, local_check_cell, spinner_frame, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL,
     MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
 };
-use crate::{app::App, github::LocalStatus};
+use crate::{
+    app::App,
+    github::{LocalStatus, RepoInfo},
+};
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
+use std::collections::HashSet;
 
 fn repo_has_pending_cargo_check(
     has_active_cargo_tasks: bool,
-    repo: &crate::github::RepoInfo,
+    has_active_cargo_poll: bool,
+    repo: &RepoInfo,
 ) -> bool {
-    has_active_cargo_tasks
-        && (repo.cargo_checked_at != repo.local_head_hash
-            || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
-            || repo.cargo_remote_hash.is_empty())
+    has_active_cargo_poll
+        || (has_active_cargo_tasks
+            && (repo.cargo_checked_at != repo.local_head_hash
+                || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
+                || repo.cargo_remote_hash.is_empty()))
+}
+
+fn cargo_check_status_cell(repo: &RepoInfo) -> Option<(&'static str, ratatui::style::Color)> {
+    if repo.cargo_installed_hash.is_empty() || repo.cargo_remote_hash.is_empty() {
+        None
+    } else if repo.cargo_installed_hash == repo.cargo_remote_hash {
+        Some(("ok", MK_GREEN))
+    } else {
+        Some(("old", MK_ORANGE))
+    }
 }
 
 pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u64) {
@@ -154,6 +170,11 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
         .bg_tasks
         .iter()
         .any(|(tag, _cur, total)| *tag == "cgo" && *total > 0);
+    let active_cargo_poll_repos: HashSet<&str> = app
+        .cargo_hash_polls
+        .iter()
+        .map(|poll| poll.repo_name.as_str())
+        .collect();
 
     let rows: Vec<Row> = app
         .filtered_rows
@@ -211,8 +232,9 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
 
                 let pending = (spinner_frame(unix_millis), MK_ORANGE);
                 let is_checking = app.checking_repos.contains(&repo.name);
+                let has_active_cargo_poll = active_cargo_poll_repos.contains(repo.name.as_str());
                 let has_pending_cargo_check =
-                    repo_has_pending_cargo_check(cargo_check_active, repo);
+                    repo_has_pending_cargo_check(cargo_check_active, has_active_cargo_poll, repo);
                 let cursor_char = if is_cursor { "▶" } else { " " };
                 let lock_char = if repo.is_private { "🔒" } else { "" };
                 let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
@@ -291,12 +313,10 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
 
                 let (cgo_str, cgo_col) = if has_pending_cargo_check {
                     pending
+                } else if let Some((status, color)) = cargo_check_status_cell(repo) {
+                    (status, color)
                 } else {
-                    match repo.cargo_install {
-                        Some(true) => ("ok", MK_GREEN),
-                        Some(false) => ("old", MK_ORANGE),
-                        None => ("", MK_COMMENT),
-                    }
+                    ("", MK_COMMENT)
                 };
 
                 if !app.show_columns {

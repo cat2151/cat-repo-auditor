@@ -303,7 +303,9 @@ fn draw_ui_restores_local_status_text_after_repo_check_completes() {
         "local column should show the resolved local status after pending ends: {repo_line}"
     );
     assert!(
-        SPINNER_FRAMES.iter().all(|frame| !repo_line.contains(frame)),
+        SPINNER_FRAMES
+            .iter()
+            .all(|frame| !repo_line.contains(frame)),
         "local column should stop showing a spinner after pending ends: {repo_line}"
     );
 }
@@ -333,6 +335,91 @@ fn draw_ui_shows_pr_and_issue_pending_in_visible_columns_while_loading() {
     assert!(
         !repo_line.contains("  7") && !repo_line.contains("  4"),
         "stale PR/ISS counts should be hidden while loading: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_spinner_while_post_update_polling_is_active() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(false);
+    app.repos[0].cargo_installed_hash = String::from("installed-old");
+    app.repos[0].cargo_remote_hash = String::from("remote-new");
+    app.start_auto_update_cargo_hash_polling("focus-test");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| repo_line.contains(frame)),
+        "cgo column should show a spinner while cargo hash polling is active: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("old"),
+        "stale cargo status should be hidden while polling is active: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_old_from_hash_mismatch_even_if_cached_flag_is_ok() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(true);
+    app.repos[0].cargo_installed_hash = String::from("installed-old");
+    app.repos[0].cargo_remote_hash = String::from("remote-new");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("old"),
+        "cgo column should show old when installed and remote hashes differ: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains(" ok"),
+        "cgo column should not rely on cached cargo_install=true when hashes differ: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_ok_from_hash_match_even_if_cached_flag_is_old() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(false);
+    app.repos[0].cargo_installed_hash = String::from("same-hash");
+    app.repos[0].cargo_remote_hash = String::from("same-hash");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("ok"),
+        "cgo column should show ok when installed and remote hashes match: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("old"),
+        "cgo column should not rely on cached cargo_install=false when hashes match: {repo_line}"
     );
 }
 
