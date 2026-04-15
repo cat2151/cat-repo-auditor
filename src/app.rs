@@ -10,8 +10,10 @@ mod app_search;
 #[path = "app_cargo_polls.rs"]
 mod cargo_polls;
 
+pub(crate) use cargo_polls::CargoHashPoll;
+#[cfg(test)]
 pub(crate) use cargo_polls::{
-    CargoHashPoll, ExpiredCargoHashPoll, CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT,
+    ExpiredCargoHashPoll, CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT,
 };
 
 const MAX_LOG_LINES: usize = 2_000;

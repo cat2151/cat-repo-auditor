@@ -321,7 +321,7 @@ fn run_next_pending_auto_update_launch(
         terminal,
         request,
         launch_cargo_app_for_repo,
-        |repo_full_name, messages| append_auto_update_cargo_poll_log(repo_full_name, messages),
+        append_auto_update_cargo_poll_log,
         persist_log_line,
     )?;
     Ok(true)
