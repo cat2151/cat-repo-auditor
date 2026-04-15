@@ -2,12 +2,14 @@ use super::{
     c, local_check_cell, spinner_frame, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL,
     MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
 };
+#[path = "ui_draw_left_columns.rs"]
+mod columns;
 use crate::{
     app::App,
     github::{LocalStatus, RepoInfo},
 };
 use ratatui::{
-    layout::{Constraint, Rect},
+    layout::Rect,
     style::{Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
@@ -86,90 +88,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
         return;
     }
 
-    let header = if app.show_columns {
-        Row::new(vec![
-            Cell::from("Repository").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("Updated").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("PR").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("ISS").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("doc").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("pg").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("ja").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("wki").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("wf").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("Local").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("cgo").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-        ])
-        .style(Style::default().bg(c(app, MK_BG)))
-    } else {
-        Row::new(vec![
-            Cell::from("Repository").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("Updated").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("PR").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-            Cell::from("ISS").style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(c(app, MK_YELLOW)),
-            ),
-        ])
-        .style(Style::default().bg(c(app, MK_BG)))
-    };
+    let header = columns::build_header(app);
 
     let visible = inner.height.saturating_sub(1) as usize;
     app.left_visible = visible;
@@ -427,33 +346,8 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
         })
         .collect();
 
-    let widths_full: &[Constraint] = &[
-        Constraint::Min(18),
-        Constraint::Length(7),
-        Constraint::Length(4),
-        Constraint::Length(4),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(8),
-        Constraint::Length(4),
-    ];
-    let widths_slim: &[Constraint] = &[
-        Constraint::Min(0),
-        Constraint::Length(7),
-        Constraint::Length(4),
-        Constraint::Length(4),
-    ];
-    let widths = if app.show_columns {
-        widths_full
-    } else {
-        widths_slim
-    };
-
     let mut ts = TableState::default();
-    let table = Table::new(rows, widths.to_vec())
+    let table = Table::new(rows, columns::column_widths(app.show_columns))
         .header(header)
         .row_highlight_style(Style::default())
         .style(Style::default().bg(c(app, MK_BG)));

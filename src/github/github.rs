@@ -1,21 +1,21 @@
 use crate::{
     config::Config,
     github_fetch::do_fetch,
-    github_local::{
-        check_deepwiki_exists, check_file_exists, check_local_status_no_fetch, check_pages_exists,
-        check_readme_ja_badge, check_workflows, git_pull, local_head_matches_upstream,
-    },
+    github_local::{git_pull, local_head_matches_upstream},
     history::History,
     self_update,
 };
 
 #[path = "github_cargo_worker.rs"]
 mod cargo_worker;
+#[path = "github_phase3.rs"]
+mod phase3;
 
 #[path = "github_types.rs"]
 mod types;
 
 use cargo_worker::{apply_cargo_result_to_history, spawn_background_cargo_checks};
+use phase3::{build_phase3_tasks, collect_local_heads, phase3_worker_count, run_phase3_repo_task};
 
 pub use types::{
     AutoUpdateLaunchRequest, FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo,
@@ -134,156 +134,6 @@ fn format_pull_log(repo_full_name: &str, pull_result: &anyhow::Result<String>) -
             "pull {repo_full_name} failed: {}",
             compact_log_detail(&format!("{err:#}"))
         ),
-    }
-}
-
-#[derive(Clone)]
-struct Phase3RepoTask {
-    repo: RepoInfo,
-    local_head: String,
-}
-
-struct Phase3RepoResult {
-    name: String,
-    local_status: LocalStatus,
-    has_local_git: bool,
-    staging_files: Vec<String>,
-    local_head_hash: String,
-    readme_ja: Option<bool>,
-    readme_ja_cat: String,
-    readme_ja_badge: Option<bool>,
-    readme_ja_badge_cat: String,
-    pages: Option<bool>,
-    pages_cat: String,
-    deepwiki: Option<bool>,
-    deepwiki_cat: String,
-    wf_workflows: Option<bool>,
-    wf_cat: String,
-}
-
-fn build_phase3_tasks(
-    repos: &[RepoInfo],
-    local_heads: &std::collections::HashMap<String, String>,
-) -> Vec<Phase3RepoTask> {
-    repos
-        .iter()
-        .map(|repo| Phase3RepoTask {
-            repo: repo.clone(),
-            local_head: local_heads.get(&repo.name).cloned().unwrap_or_default(),
-        })
-        .collect()
-}
-
-fn phase3_worker_count(total_check: usize) -> usize {
-    debug_assert!(total_check > 0);
-    std::thread::available_parallelism()
-        .map(std::num::NonZeroUsize::get)
-        .unwrap_or(4)
-        .min(total_check)
-}
-
-fn collect_local_heads(
-    repos: &[RepoInfo],
-    local_base_dir: &str,
-) -> std::collections::HashMap<String, String> {
-    repos
-        .iter()
-        .filter(|r| r.has_local_git)
-        .filter_map(|r| {
-            let path = format!(
-                "{}/{}",
-                local_base_dir.trim_end_matches(['/', '\\']),
-                r.name
-            );
-            let out = std::process::Command::new("git")
-                .args(["-C", &path, "rev-parse", "HEAD"])
-                .output()
-                .ok()?;
-            if !out.status.success() {
-                return None;
-            }
-            Some((
-                r.name.clone(),
-                String::from_utf8_lossy(&out.stdout).trim().to_string(),
-            ))
-        })
-        .collect()
-}
-
-fn run_phase3_repo_task(task: Phase3RepoTask, owner: &str, base_dir: &str) -> Phase3RepoResult {
-    let repo = task.repo;
-    let name = repo.name.clone();
-    let cat = repo.updated_at_raw.clone();
-    let local_head = task.local_head;
-    let (local_status, has_local_git, staging_files) = check_local_status_no_fetch(base_dir, &name);
-
-    let needs_readme = repo.readme_ja_checked_at != cat;
-    let needs_ja_badge = repo.readme_ja_badge_checked_at != local_head;
-    let needs_pages = repo.pages_checked_at != cat;
-    let needs_deepwiki = repo.deepwiki_checked_at != local_head;
-    let needs_wf = repo.wf_checked_at != local_head;
-
-    let (readme_ja, readme_ja_cat) = if needs_readme {
-        (
-            Some(check_file_exists(owner, &name, "README.ja.md")),
-            cat.clone(),
-        )
-    } else {
-        (repo.readme_ja, repo.readme_ja_checked_at.clone())
-    };
-
-    let (readme_ja_badge, readme_ja_badge_cat) = if needs_ja_badge {
-        (
-            Some(check_readme_ja_badge(base_dir, &name)),
-            local_head.clone(),
-        )
-    } else {
-        (
-            repo.readme_ja_badge,
-            repo.readme_ja_badge_checked_at.clone(),
-        )
-    };
-
-    let (pages, pages_cat) = if needs_pages {
-        (Some(check_pages_exists(owner, &name)), cat.clone())
-    } else {
-        (repo.pages, repo.pages_checked_at.clone())
-    };
-
-    let (deepwiki, deepwiki_cat) = if needs_deepwiki {
-        (
-            Some(check_deepwiki_exists(base_dir, &name)),
-            local_head.clone(),
-        )
-    } else {
-        (repo.deepwiki, repo.deepwiki_checked_at.clone())
-    };
-
-    let (wf_workflows, wf_cat) = if needs_wf {
-        (
-            Some(check_workflows(base_dir, &name, repo.cargo_install)),
-            local_head.clone(),
-        )
-    } else {
-        (repo.wf_workflows, repo.wf_checked_at.clone())
-    };
-
-    Phase3RepoResult {
-        name,
-        local_status,
-        has_local_git,
-        staging_files,
-        local_head_hash: local_head,
-        readme_ja,
-        readme_ja_cat,
-        readme_ja_badge,
-        readme_ja_badge_cat,
-        pages,
-        pages_cat,
-        deepwiki,
-        deepwiki_cat,
-        wf_workflows,
-        wf_cat,
     }
 }
 

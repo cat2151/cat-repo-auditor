@@ -5,10 +5,13 @@ use ratatui::{
     Terminal,
 };
 use std::{
-    io::{self, Write},
+    io,
     sync::mpsc,
     time::{Duration, Instant},
 };
+
+#[path = "main_input_clipboard.rs"]
+mod clipboard;
 
 use crate::{
     app::{App, READY_MSG},
@@ -22,6 +25,8 @@ use crate::{
     main_launch::{launch_cargo_app_for_repo, x_not_run_feedback_no_cargo_install, LaunchFeedback},
     ui::{Focus, RepoRow, SearchState},
 };
+
+use clipboard::copy_to_clipboard;
 
 /// Tracks keyboard input state to implement 50ms key debouncing.
 #[derive(Default)]
@@ -432,25 +437,6 @@ where
     }
 
     Ok(())
-}
-fn copy_to_clipboard(text: &str) -> io::Result<()> {
-    let mut child = std::process::Command::new("clip")
-        .stdin(std::process::Stdio::piped())
-        .spawn()?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(text.as_bytes())?;
-        drop(stdin);
-    }
-
-    let status = child.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!(
-            "clip exited with status {status}"
-        )))
-    }
 }
 
 #[cfg(test)]
