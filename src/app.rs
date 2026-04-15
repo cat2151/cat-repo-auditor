@@ -8,13 +8,13 @@ use std::time::SystemTime;
 #[path = "app_search.rs"]
 mod app_search;
 #[path = "app_cargo_polls.rs"]
-mod cargo_polls;
+pub(crate) mod cargo_polls;
 
 pub(crate) use cargo_polls::CargoHashPoll;
 #[cfg(test)]
-pub(crate) use cargo_polls::{
-    ExpiredCargoHashPoll, CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT,
-};
+pub(crate) use cargo_polls::{CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT};
+#[cfg(test)]
+pub(crate) use cargo_polls::ExpiredCargoHashPoll;
 
 const MAX_LOG_LINES: usize = 2_000;
 pub const READY_MSG: &str =
