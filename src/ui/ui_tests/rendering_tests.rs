@@ -20,6 +20,19 @@ fn find_text_x(buffer: &ratatui::buffer::Buffer, needle: &str) -> Option<u16> {
     None
 }
 
+fn rendered_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
+    let area = terminal.backend().buffer().area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    rendered
+}
+
 // ── local_check_cell ──────────────────────────────────────────────────────────
 
 #[test]
@@ -204,6 +217,213 @@ fn build_tasks_display_spinner_wraps_after_full_cycle() {
 }
 
 #[test]
+fn draw_ui_does_not_leak_hidden_background_progress_into_repo_name_when_columns_hidden() {
+    let backend = TestBackend::new(100, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.show_columns = false;
+    app.repos[0].readme_ja = Some(true);
+    app.repos[0].readme_ja_checked_at = String::from("2023-12-31T00:00:00Z");
+    app.checking_repos.insert(String::from("focus-test"));
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("▶focus-test"),
+        "repo name should stay plain when hidden columns have pending checks: {repo_line}"
+    );
+    assert!(
+        SPINNER_FRAMES
+            .iter()
+            .all(|frame| !repo_line.contains(&format!("▶{frame}focus-test"))),
+        "hidden-column progress should not be surfaced through the repo name: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_individual_cell_spinners_without_repo_name_spinner_while_repo_is_checking() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.repos[0].readme_ja = Some(true);
+    app.repos[0].readme_ja_checked_at = String::from("2023-12-31T00:00:00Z");
+    app.repos[0].local_status = crate::github::LocalStatus::Clean;
+    app.checking_repos.insert(String::from("focus-test"));
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| repo_line.contains(frame)),
+        "visible cells should show spinners while pending: {repo_line}"
+    );
+    assert!(
+        repo_line.contains("▶focus-test"),
+        "repo name should no longer show an aggregate spinner: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("clean"),
+        "local column should show pending instead of stale local status: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains('✔'),
+        "stale cached checkmark should be hidden until the recheck completes: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_restores_local_status_text_after_repo_check_completes() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].local_status = crate::github::LocalStatus::Clean;
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("cle"),
+        "local column should show the resolved local status after pending ends: {repo_line}"
+    );
+    assert!(
+        SPINNER_FRAMES
+            .iter()
+            .all(|frame| !repo_line.contains(frame)),
+        "local column should stop showing a spinner after pending ends: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_pr_and_issue_pending_in_visible_columns_while_loading() {
+    let backend = TestBackend::new(100, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.show_columns = false;
+    app.loading = true;
+    app.repos[0].open_prs = 7;
+    app.repos[0].open_issues = 4;
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| repo_line.contains(frame)),
+        "visible PR/ISS columns should show pending while loading: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("  7") && !repo_line.contains("  4"),
+        "stale PR/ISS counts should be hidden while loading: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_spinner_while_post_update_polling_is_active() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(false);
+    app.repos[0].cargo_installed_hash = String::from("installed-old");
+    app.repos[0].cargo_remote_hash = String::from("remote-new");
+    app.start_auto_update_cargo_hash_polling("focus-test");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        SPINNER_FRAMES.iter().any(|frame| repo_line.contains(frame)),
+        "cgo column should show a spinner while cargo hash polling is active: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("old"),
+        "stale cargo status should be hidden while polling is active: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_old_from_hash_mismatch_even_if_cached_flag_is_ok() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(true);
+    app.repos[0].cargo_installed_hash = String::from("installed-old");
+    app.repos[0].cargo_remote_hash = String::from("remote-new");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("old"),
+        "cgo column should show old when installed and remote hashes differ: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains(" ok"),
+        "cgo column should not rely on cached cargo_install=true when hashes differ: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_ok_from_hash_match_even_if_cached_flag_is_old() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(false);
+    app.repos[0].cargo_installed_hash = String::from("same-hash");
+    app.repos[0].cargo_remote_hash = String::from("same-hash");
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("ok"),
+        "cgo column should show ok when installed and remote hashes match: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("old"),
+        "cgo column should not rely on cached cargo_install=false when hashes match: {repo_line}"
+    );
+}
+
+#[test]
 fn draw_ui_shows_workflow_repo_exist_overlay() {
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -242,16 +462,7 @@ fn draw_ui_shows_workflow_repo_exist_overlay() {
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
-    let area = terminal.backend().buffer().area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
     assert!(rendered.contains("call-a.yml"));
@@ -271,16 +482,7 @@ fn draw_ui_shows_empty_workflow_repo_exist_overlay_message() {
 
     terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
 
-    let area = terminal.backend().buffer().area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
 
     assert!(rendered.contains("workflow repo exist check"));
     assert!(rendered.contains("no call-* workflows"));
@@ -320,15 +522,6 @@ fn test_workflow_repo_column_alignment_with_wide_chars() {
         two_days_x + UnicodeWidthStr::width("2d")
     );
 
-    let area = buffer.area;
-    let mut rendered = Vec::new();
-    for y in 0..area.height {
-        let mut line = String::new();
-        for x in 0..area.width {
-            line.push_str(buffer[(x, y)].symbol());
-        }
-        rendered.push(line);
-    }
-    let rendered = rendered.join("\n");
+    let rendered = rendered_lines(&terminal).join("\n");
     assert!(rendered.contains('…'));
 }
