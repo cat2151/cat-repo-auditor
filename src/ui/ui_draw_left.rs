@@ -198,7 +198,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                     Style::default().fg(c(app, MK_FG)).bg(c(app, MK_BG))
                 };
 
-                let local_col = match repo.local_status {
+                let local_status_col = match repo.local_status {
                     LocalStatus::Conflict => MK_RED,
                     LocalStatus::Modified => MK_ORANGE,
                     LocalStatus::Clean => MK_GREEN,
@@ -286,7 +286,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                 let (local_str, local_col) = if is_checking {
                     (pending.0.to_string(), pending.1)
                 } else {
-                    (repo.local_status.to_string(), local_col)
+                    (repo.local_status.to_string(), local_status_col)
                 };
 
                 let (cgo_str, cgo_col) = if has_pending_cargo_check {

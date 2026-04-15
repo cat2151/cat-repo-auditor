@@ -283,6 +283,32 @@ fn draw_ui_shows_individual_cell_spinners_without_repo_name_spinner_while_repo_i
 }
 
 #[test]
+fn draw_ui_restores_local_status_text_after_repo_check_completes() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].local_status = crate::github::LocalStatus::Clean;
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("cle"),
+        "local column should show the resolved local status after pending ends: {repo_line}"
+    );
+    assert!(
+        SPINNER_FRAMES.iter().all(|frame| !repo_line.contains(frame)),
+        "local column should stop showing a spinner after pending ends: {repo_line}"
+    );
+}
+
+#[test]
 fn draw_ui_shows_pr_and_issue_pending_in_visible_columns_while_loading() {
     let backend = TestBackend::new(100, 20);
     let mut terminal = Terminal::new(backend).unwrap();
