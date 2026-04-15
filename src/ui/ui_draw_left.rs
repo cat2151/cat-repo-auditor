@@ -14,6 +14,12 @@ use ratatui::{
 };
 use std::collections::HashSet;
 
+/// Returns whether the `cgo` cell should stay in pending state for this repo.
+///
+/// `has_active_cargo_tasks` covers the initial background cargo check phase, where
+/// freshness is determined from the stored local/remote check markers.
+/// `has_active_cargo_poll` covers post-update cargo hash polling, which should
+/// keep the cell spinning until the poll completes or times out.
 fn repo_has_pending_cargo_check(
     has_active_cargo_tasks: bool,
     has_active_cargo_poll: bool,
@@ -26,6 +32,10 @@ fn repo_has_pending_cargo_check(
                 || repo.cargo_remote_hash.is_empty()))
 }
 
+/// Returns the rendered `cgo` status from the installed/remote hash comparison.
+///
+/// When either hash is unavailable, the left pane leaves the cell blank.
+/// Otherwise, matching hashes render `ok` and mismatched hashes render `old`.
 fn cargo_check_status_cell(repo: &RepoInfo) -> Option<(&'static str, ratatui::style::Color)> {
     if repo.cargo_installed_hash.is_empty() || repo.cargo_remote_hash.is_empty() {
         None
