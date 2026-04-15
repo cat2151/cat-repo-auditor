@@ -110,6 +110,166 @@ struct GqlRateLimit {
 // Fetch
 // ──────────────────────────────────────────────
 
+fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<RepoInfo> {
+    let GqlRepo {
+        name,
+        name_with_owner,
+        updated_at,
+        is_fork,
+        is_archived,
+        is_private,
+        issues,
+        pull_requests,
+    } = repo;
+
+    if is_fork || is_archived {
+        return None;
+    }
+
+    let full_name = name_with_owner.clone();
+    let history_repo = history.repos.iter().find(|h| h.name == name);
+    let (local_status, has_local_git, staging_files, local_head_hash) = history_repo
+        .map(|repo| {
+            (
+                repo.local_status.clone(),
+                repo.has_local_git,
+                repo.staging_files.clone(),
+                repo.local_head_hash.clone(),
+            )
+        })
+        .unwrap_or_else(|| {
+            let (local_status, has_local_git, staging_files) =
+                check_local_status_no_fetch(&config.local_base_dir, &name);
+            let local_head_hash = if has_local_git {
+                local_head_hash_no_fetch(&config.local_base_dir, &name)
+            } else {
+                String::new()
+            };
+            (local_status, has_local_git, staging_files, local_head_hash)
+        });
+    let updated_at_raw = format_date_iso(&updated_at);
+
+    let (
+        readme_ja,
+        readme_ja_checked_at,
+        readme_ja_badge,
+        readme_ja_badge_checked_at,
+        pages,
+        pages_checked_at,
+        deepwiki,
+        deepwiki_checked_at,
+        cargo_install,
+        cargo_checked_at,
+        cargo_remote_hash,
+        cargo_remote_hash_checked_at,
+        cargo_installed_hash,
+        wf_workflows,
+        wf_checked_at,
+    ) = history_repo
+        .map(|h| {
+            (
+                h.readme_ja,
+                h.readme_ja_checked_at.clone(),
+                h.readme_ja_badge,
+                h.readme_ja_badge_checked_at.clone(),
+                h.pages,
+                h.pages_checked_at.clone(),
+                h.deepwiki,
+                h.deepwiki_checked_at.clone(),
+                h.cargo_install,
+                h.cargo_checked_at.clone(),
+                h.cargo_remote_hash.clone(),
+                h.cargo_remote_hash_checked_at.clone(),
+                h.cargo_installed_hash.clone(),
+                h.wf_workflows,
+                h.wf_checked_at.clone(),
+            )
+        })
+        .unwrap_or((
+            None,
+            String::new(),
+            None,
+            String::new(),
+            None,
+            String::new(),
+            None,
+            String::new(),
+            None,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            None,
+            String::new(),
+        ));
+
+    Some(RepoInfo {
+        name,
+        full_name: full_name.clone(),
+        updated_at: relative_date(&updated_at),
+        updated_at_raw,
+        open_issues: issues.total_count,
+        open_prs: pull_requests.total_count,
+        is_private,
+        local_status,
+        has_local_git,
+        staging_files,
+        local_head_hash,
+        readme_ja,
+        readme_ja_checked_at,
+        readme_ja_badge,
+        readme_ja_badge_checked_at,
+        pages,
+        pages_checked_at,
+        deepwiki,
+        deepwiki_checked_at,
+        cargo_install,
+        cargo_checked_at,
+        cargo_remote_hash,
+        cargo_remote_hash_checked_at,
+        cargo_installed_hash,
+        wf_workflows,
+        wf_checked_at,
+        issues: issues
+            .nodes
+            .into_iter()
+            .map(|issue| {
+                let raw_issue_updated_at = issue.updated_at.clone();
+                IssueOrPr {
+                    title: issue.title,
+                    number: issue.number,
+                    updated_at: relative_date(&raw_issue_updated_at),
+                    updated_at_raw: format_date_iso(&raw_issue_updated_at),
+                    repo_full: full_name.clone(),
+                    is_pr: false,
+                    closes_issue: None,
+                }
+            })
+            .collect(),
+        prs: pull_requests
+            .nodes
+            .into_iter()
+            .map(|pr| {
+                let closes_issue = if pr.closing_issues_references.nodes.len() == 1 {
+                    Some(pr.closing_issues_references.nodes[0].number)
+                } else {
+                    None
+                };
+                let raw_pr_updated_at = pr.updated_at.clone();
+                IssueOrPr {
+                    title: pr.title,
+                    number: pr.number,
+                    updated_at: relative_date(&raw_pr_updated_at),
+                    updated_at_raw: format_date_iso(&raw_pr_updated_at),
+                    repo_full: full_name.clone(),
+                    is_pr: true,
+                    closes_issue,
+                }
+            })
+            .collect(),
+    })
+}
+
 pub(crate) fn do_fetch(
     config: &Config,
     history: &mut History,
@@ -118,11 +278,16 @@ pub(crate) fn do_fetch(
     let owner = &config.owner;
     let etag_key = format!("repos:{owner}");
 
-    let mut all_repos: Vec<GqlRepo> = vec![];
+    let _ = tx.send(FetchProgress::BeginRepoRefresh(
+        history.repos.iter().map(|repo| repo.name.clone()).collect(),
+    ));
+
+    let mut repo_infos: Vec<RepoInfo> = vec![];
     let mut cursor: Option<String> = None;
     #[allow(unused_assignments)]
     let mut rate_limit_info: Option<RateLimit> = None;
     let mut page_num = 0u32;
+    let mut scan_i = 0usize;
 
     loop {
         page_num += 1;
@@ -194,160 +359,24 @@ pub(crate) fn do_fetch(
         let page_info = &gql.data.repository_owner.repositories.page_info;
         let has_next = page_info.has_next_page;
         let end_cursor = page_info.end_cursor.clone();
-        all_repos.extend(gql.data.repository_owner.repositories.nodes);
+        for repo in gql.data.repository_owner.repositories.nodes {
+            if let Some(repo_info) = build_repo_info(config, history, repo) {
+                scan_i += 1;
+                let _ = tx.send(FetchProgress::PhaseProgress {
+                    tag: "scan",
+                    cur: scan_i,
+                    total: 0,
+                });
+                let _ = tx.send(FetchProgress::RepoUpdate(repo_info.clone()));
+                repo_infos.push(repo_info);
+            }
+        }
         if has_next {
             cursor = end_cursor;
         } else {
             break;
         }
     }
-
-    let filtered: Vec<GqlRepo> = all_repos
-        .into_iter()
-        .filter(|r| !r.is_fork && !r.is_archived)
-        .collect();
-
-    let total = filtered.len();
-    let mut repo_infos: Vec<RepoInfo> = Vec::with_capacity(total);
-    for (scan_i, r) in filtered.into_iter().enumerate() {
-        let _ = tx.send(FetchProgress::PhaseProgress {
-            tag: "scan",
-            cur: scan_i + 1,
-            total,
-        });
-        let full_name = r.name_with_owner.clone();
-        let (local_status, has_local_git, staging_files) =
-            check_local_status_no_fetch(&config.local_base_dir, &r.name);
-        let local_head_hash = local_head_hash_no_fetch(&config.local_base_dir, &r.name);
-        let raw = r.updated_at.clone();
-        let updated_at_raw = format_date_iso(&raw);
-
-        // Carry over cached existence fields from history (each has its own checked_at)
-        let (
-            readme_ja,
-            readme_ja_checked_at,
-            readme_ja_badge,
-            readme_ja_badge_checked_at,
-            pages,
-            pages_checked_at,
-            deepwiki,
-            deepwiki_checked_at,
-            cargo_install,
-            cargo_checked_at,
-            cargo_remote_hash,
-            cargo_remote_hash_checked_at,
-            cargo_installed_hash,
-            wf_workflows,
-            wf_checked_at,
-        ) = history
-            .repos
-            .iter()
-            .find(|h| h.name == r.name)
-            .map(|h| {
-                (
-                    h.readme_ja,
-                    h.readme_ja_checked_at.clone(),
-                    h.readme_ja_badge,
-                    h.readme_ja_badge_checked_at.clone(),
-                    h.pages,
-                    h.pages_checked_at.clone(),
-                    h.deepwiki,
-                    h.deepwiki_checked_at.clone(),
-                    h.cargo_install,
-                    h.cargo_checked_at.clone(),
-                    h.cargo_remote_hash.clone(),
-                    h.cargo_remote_hash_checked_at.clone(),
-                    h.cargo_installed_hash.clone(),
-                    h.wf_workflows,
-                    h.wf_checked_at.clone(),
-                )
-            })
-            .unwrap_or((
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                None,
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                None,
-                String::new(),
-            ));
-
-        repo_infos.push(RepoInfo {
-            name: r.name.clone(),
-            full_name: full_name.clone(),
-            updated_at: relative_date(&raw),
-            updated_at_raw,
-            open_issues: r.issues.total_count,
-            open_prs: r.pull_requests.total_count,
-            is_private: r.is_private,
-            local_status,
-            has_local_git,
-            staging_files,
-            local_head_hash,
-            readme_ja,
-            readme_ja_checked_at,
-            readme_ja_badge,
-            readme_ja_badge_checked_at,
-            pages,
-            pages_checked_at,
-            deepwiki,
-            deepwiki_checked_at,
-            cargo_install,
-            cargo_checked_at,
-            cargo_remote_hash,
-            cargo_remote_hash_checked_at,
-            cargo_installed_hash,
-            wf_workflows,
-            wf_checked_at,
-            issues: r
-                .issues
-                .nodes
-                .into_iter()
-                .map(|i| {
-                    let raw_i = i.updated_at.clone();
-                    IssueOrPr {
-                        title: i.title,
-                        number: i.number,
-                        updated_at: relative_date(&raw_i),
-                        updated_at_raw: format_date_iso(&raw_i),
-                        repo_full: full_name.clone(),
-                        is_pr: false,
-                        closes_issue: None,
-                    }
-                })
-                .collect(),
-            prs: r
-                .pull_requests
-                .nodes
-                .into_iter()
-                .map(|p| {
-                    let closes_issue = if p.closing_issues_references.nodes.len() == 1 {
-                        Some(p.closing_issues_references.nodes[0].number)
-                    } else {
-                        None
-                    };
-                    let raw_p = p.updated_at.clone();
-                    IssueOrPr {
-                        title: p.title,
-                        number: p.number,
-                        updated_at: relative_date(&raw_p),
-                        updated_at_raw: format_date_iso(&raw_p),
-                        repo_full: full_name.clone(),
-                        is_pr: true,
-                        closes_issue,
-                    }
-                })
-                .collect(),
-        });
-    } // end for scan loop
 
     fn group_key(r: &RepoInfo) -> u8 {
         if r.is_private {

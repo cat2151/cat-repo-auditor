@@ -89,6 +89,8 @@ fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     let mut app = App::new(make_config());
     app.bg_tasks.push(("chk", 1, 1));
     app.checking_repos.insert(String::from("repo"));
+    app.pending_local_repos.insert(String::from("repo"));
+    app.pending_cargo_repos.insert(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::Done(Ok((
@@ -111,6 +113,8 @@ fn drain_fetch_channel_applies_done_ok_and_disconnect_cleanup() {
     assert!(fetch_rx.is_none());
     assert!(app.bg_tasks.is_empty());
     assert!(app.checking_repos.is_empty());
+    assert!(app.pending_local_repos.is_empty());
+    assert!(app.pending_cargo_repos.is_empty());
 }
 
 #[test]
@@ -149,12 +153,164 @@ fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives(
 }
 
 #[test]
+fn drain_fetch_channel_repo_update_refreshes_issue_pr_state_per_repo() {
+    let mut app = App::new(make_config());
+    let mut repo = make_repo("repo");
+    repo.cargo_checked_at = String::from("cargo-live");
+    repo.cargo_remote_hash = String::from("remote-live");
+    repo.cargo_remote_hash_checked_at = String::from("2024-01-02T00:00:00Z");
+    repo.cargo_installed_hash = String::from("installed-live");
+    app.repos = vec![repo];
+    app.issue_pr_pending_repos.insert(String::from("repo"));
+
+    let mut updated_repo = make_repo("repo");
+    updated_repo.open_prs = 7;
+    updated_repo.open_issues = 4;
+    updated_repo.prs = vec![crate::github::IssueOrPr {
+        title: String::from("Update PR"),
+        updated_at: String::from("today"),
+        updated_at_raw: String::from("2024-01-03T00:00:00Z"),
+        number: 12,
+        repo_full: String::from("owner/repo"),
+        is_pr: true,
+        closes_issue: None,
+    }];
+    updated_repo.issues = vec![crate::github::IssueOrPr {
+        title: String::from("Update issue"),
+        updated_at: String::from("today"),
+        updated_at_raw: String::from("2024-01-03T00:00:00Z"),
+        number: 34,
+        repo_full: String::from("owner/repo"),
+        is_pr: false,
+        closes_issue: None,
+    }];
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::RepoUpdate(updated_repo)).unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    let repo = &app.repos[0];
+    assert_eq!(repo.open_prs, 7);
+    assert_eq!(repo.open_issues, 4);
+    assert_eq!(repo.prs.len(), 1);
+    assert_eq!(repo.issues.len(), 1);
+    assert_eq!(repo.cargo_checked_at, "cargo-live");
+    assert_eq!(repo.cargo_remote_hash, "remote-live");
+    assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
+    assert_eq!(repo.cargo_installed_hash, "installed-live");
+    assert!(!app.issue_pr_pending_repos.contains("repo"));
+}
+
+#[test]
+fn drain_fetch_channel_begin_repo_refresh_replaces_pending_issue_pr_repos() {
+    let mut app = App::new(make_config());
+    app.issue_pr_pending_repos
+        .insert(String::from("stale-repo"));
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::BeginRepoRefresh(vec![
+        String::from("repo-a"),
+        String::from("repo-b"),
+    ]))
+    .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(
+        app.issue_pr_pending_repos,
+        HashSet::from([String::from("repo-a"), String::from("repo-b")])
+    );
+}
+
+#[test]
+fn drain_fetch_channel_begin_cargo_refresh_adds_pending_cargo_repos() {
+    let mut app = App::new(make_config());
+    app.pending_cargo_repos.insert(String::from("stale-repo"));
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::BeginCargoRefresh(vec![
+        String::from("repo-a"),
+        String::from("repo-b"),
+    ]))
+    .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(
+        app.pending_cargo_repos,
+        HashSet::from([
+            String::from("stale-repo"),
+            String::from("repo-a"),
+            String::from("repo-b"),
+        ])
+    );
+    assert!(app.bg_tasks.contains(&("cgo", 0, 3)));
+}
+
+#[test]
+fn drain_fetch_channel_begin_local_refresh_adds_pending_local_repos() {
+    let mut app = App::new(make_config());
+    app.pending_local_repos.insert(String::from("stale-repo"));
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::BeginLocalRefresh(vec![
+        String::from("repo-a"),
+        String::from("repo-b"),
+    ]))
+    .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert_eq!(
+        app.pending_local_repos,
+        HashSet::from([
+            String::from("stale-repo"),
+            String::from("repo-a"),
+            String::from("repo-b"),
+        ])
+    );
+    assert!(app.bg_tasks.contains(&("lcl", 0, 3)));
+}
+
+#[test]
+fn drain_fetch_channel_done_err_clears_background_state() {
+    let mut app = App::new(make_config());
+    app.bg_tasks.push(("cgo", 0, 2));
+    app.checking_repos.insert(String::from("repo"));
+    app.issue_pr_pending_repos.insert(String::from("repo"));
+    app.pending_local_repos.insert(String::from("repo"));
+    app.pending_cargo_repos.insert(String::from("repo"));
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::Done(Err(anyhow::anyhow!("boom"))))
+        .unwrap();
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    assert!(app.bg_tasks.is_empty());
+    assert!(app.checking_repos.is_empty());
+    assert!(app.issue_pr_pending_repos.is_empty());
+    assert!(app.pending_local_repos.is_empty());
+    assert!(app.pending_cargo_repos.is_empty());
+    assert_eq!(app.status_msg, "Error: boom");
+    assert!(fetch_rx.is_none());
+}
+
+#[test]
 fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo")];
     app.repos[0].local_status = LocalStatus::Pullable;
     app.repos[0].staging_files = vec![String::from(" M src/main.rs")];
     app.repos[0].local_head_hash = String::from("local-live");
+    app.pending_cargo_repos.insert(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::CargoUpdate {
@@ -179,6 +335,7 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     assert_eq!(repo.cargo_remote_hash, "remote456");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed789");
+    assert!(!app.pending_cargo_repos.contains("repo"));
 }
 
 #[test]
@@ -243,6 +400,7 @@ fn drain_fetch_channel_existence_update_refreshes_local_state_without_touching_c
     let mut app = App::new(make_config());
     app.repos = vec![make_repo("repo")];
     app.repos[0].cargo_checked_at = String::from("cargo-cache-local");
+    app.pending_local_repos.insert(String::from("repo"));
 
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::ExistenceUpdate {
@@ -273,6 +431,7 @@ fn drain_fetch_channel_existence_update_refreshes_local_state_without_touching_c
     assert_eq!(repo.staging_files, vec![String::from(" M src/main.rs")]);
     assert_eq!(repo.local_head_hash, "local-live");
     assert_eq!(repo.cargo_checked_at, "cargo-cache-local");
+    assert!(!app.pending_local_repos.contains("repo"));
 }
 
 #[test]

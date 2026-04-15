@@ -18,20 +18,12 @@ use std::collections::HashSet;
 
 /// Returns whether the `cgo` cell should stay in pending state for this repo.
 ///
-/// `has_active_cargo_tasks` covers the initial background cargo check phase, where
-/// freshness is determined from the stored local/remote check markers.
+/// `cargo_pending` covers the current fetch's per-repo cargo check lifecycle,
+/// including startup checks that rerun even when cached markers look current.
 /// `has_active_cargo_poll` covers post-update cargo hash polling, which should
 /// keep the cell spinning until the poll completes or times out.
-fn repo_has_pending_cargo_check(
-    has_active_cargo_tasks: bool,
-    has_active_cargo_poll: bool,
-    repo: &RepoInfo,
-) -> bool {
-    has_active_cargo_poll
-        || (has_active_cargo_tasks
-            && (repo.cargo_checked_at != repo.local_head_hash
-                || repo.cargo_remote_hash_checked_at != repo.updated_at_raw
-                || repo.cargo_remote_hash.is_empty()))
+fn repo_has_pending_cargo_check(cargo_pending: bool, has_active_cargo_poll: bool) -> bool {
+    cargo_pending || has_active_cargo_poll
 }
 
 /// Returns the rendered `cgo` status from the installed/remote hash comparison.
@@ -95,10 +87,6 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
     app.adjust_row_scroll(visible);
     let scroll = app.row_scroll;
     let cursor = app.row_cursor;
-    let cargo_check_active = app
-        .bg_tasks
-        .iter()
-        .any(|(tag, _cur, total)| *tag == "cgo" && *total > 0);
     let active_cargo_poll_repos: HashSet<&str> = app
         .cargo_hash_polls
         .iter()
@@ -161,14 +149,17 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
 
                 let pending = (spinner_frame(unix_millis), MK_ORANGE);
                 let is_checking = app.checking_repos.contains(&repo.name);
+                let local_pending = app.pending_local_repos.contains(&repo.name);
+                let issue_pr_pending = app.issue_pr_pending_repos.contains(&repo.name);
+                let cargo_pending = app.pending_cargo_repos.contains(&repo.name);
                 let has_active_cargo_poll = active_cargo_poll_repos.contains(repo.name.as_str());
                 let has_pending_cargo_check =
-                    repo_has_pending_cargo_check(cargo_check_active, has_active_cargo_poll, repo);
+                    repo_has_pending_cargo_check(cargo_pending, has_active_cargo_poll);
                 let cursor_char = if is_cursor { "▶" } else { " " };
                 let lock_char = if repo.is_private { "🔒" } else { "" };
                 let name_str = format!("{}{}{}", cursor_char, lock_char, repo.name);
-                let pr_pending = app.loading;
-                let iss_pending = app.loading;
+                let pr_pending = issue_pr_pending;
+                let iss_pending = issue_pr_pending;
 
                 let (pr_str, pr_col) = if pr_pending {
                     (pending.0.to_string(), pending.1)
@@ -186,7 +177,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                 };
 
                 let (doc_str, doc_col) =
-                    if is_checking && repo.readme_ja_checked_at != repo.updated_at_raw {
+                    if issue_pr_pending || (is_checking && repo.readme_ja_checked_at != repo.updated_at_raw) {
                         pending
                     } else {
                         match repo.readme_ja {
@@ -196,7 +187,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         }
                     };
                 let (pg_str, pg_col) =
-                    if is_checking && repo.pages_checked_at != repo.updated_at_raw {
+                    if issue_pr_pending || (is_checking && repo.pages_checked_at != repo.updated_at_raw) {
                         pending
                     } else {
                         match repo.pages {
@@ -210,31 +201,37 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                     LocalStatus::NotFound | LocalStatus::NoGit
                 );
 
-                let (ja_str, ja_col) = if is_checking
-                    && !local_no_git
-                    && repo.readme_ja_badge_checked_at != repo.local_head_hash
+                let (ja_str, ja_col) = if local_pending
+                    || (is_checking
+                        && !local_no_git
+                        && repo.readme_ja_badge_checked_at != repo.local_head_hash)
                 {
                     pending
                 } else {
                     local_check_cell(local_no_git, repo.readme_ja_badge, MK_YELLOW)
                 };
 
-                let (wki_str, wki_col) = if is_checking
-                    && !local_no_git
-                    && repo.deepwiki_checked_at != repo.local_head_hash
+                let (wki_str, wki_col) = if local_pending
+                    || (is_checking
+                        && !local_no_git
+                        && repo.deepwiki_checked_at != repo.local_head_hash)
                 {
                     pending
                 } else {
                     local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
                 };
                 let (wf_str, wf_col) =
-                    if is_checking && !local_no_git && repo.wf_checked_at != repo.local_head_hash {
+                    if local_pending
+                        || (is_checking
+                            && !local_no_git
+                            && repo.wf_checked_at != repo.local_head_hash)
+                {
                         pending
                     } else {
                         local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
                     };
 
-                let (local_str, local_col) = if is_checking {
+                let (local_str, local_col) = if local_pending {
                     (pending.0.to_string(), pending.1)
                 } else {
                     (repo.local_status.to_string(), local_status_col)

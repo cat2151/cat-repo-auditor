@@ -343,6 +343,7 @@ fn start_refresh_if_idle(app: &mut App, fetch_rx: &mut Option<mpsc::Receiver<Fet
         app.apply_filter();
         app.bg_tasks.clear();
         app.loading = true;
+        app.start_issue_pr_refresh();
         app.status_msg = String::from(READY_MSG);
         let history = History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
         *fetch_rx = Some(start_fetch(app.config.clone(), history));

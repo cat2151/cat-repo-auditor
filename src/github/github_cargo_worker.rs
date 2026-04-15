@@ -127,16 +127,8 @@ pub(super) fn resolve_cargo_check_fields(
 
 pub(super) fn cargo_check_order(repos: &[RepoInfo]) -> Vec<String> {
     let mut ordered: Vec<&RepoInfo> = repos.iter().collect();
-    ordered.sort_by_key(cargo_check_priority);
+    ordered.sort_by(|a, b| b.updated_at_raw.cmp(&a.updated_at_raw));
     ordered.into_iter().map(|repo| repo.name.clone()).collect()
-}
-
-fn cargo_check_priority(repo: &&RepoInfo) -> u8 {
-    if repo.cargo_install == Some(false) {
-        0
-    } else {
-        1
-    }
 }
 
 #[derive(Clone)]
@@ -259,6 +251,11 @@ pub(super) fn spawn_background_cargo_checks(
         }
 
         let total_check = tasks.len();
+        let _ = tx.send(FetchProgress::PhaseProgress {
+            tag: "cgo",
+            cur: 0,
+            total: total_check,
+        });
         let worker_count = phase3_worker_count(total_check);
         let (result_tx, result_rx) = std::sync::mpsc::channel();
         let work_queue = std::sync::Arc::new(std::sync::Mutex::new(

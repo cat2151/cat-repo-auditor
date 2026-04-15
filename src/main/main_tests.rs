@@ -172,6 +172,49 @@ fn startup_log_separator_matches_expected() {
 }
 
 #[test]
+fn apply_cached_history_to_startup_marks_cached_repos_pending_in_all_status_columns() {
+    let mut app = App::new(crate::config::Config {
+        owner: String::from("owner"),
+        local_base_dir: String::from("/base"),
+        app_run_dir: None,
+        auto_pull: false,
+        auto_update: false,
+    });
+    app.issue_pr_pending_repos.insert(String::from("stale-issue"));
+    app.pending_local_repos.insert(String::from("stale-local"));
+    app.pending_cargo_repos.insert(String::from("stale-cargo"));
+    let history = crate::history::History {
+        repos: vec![make_poll_repo("alpha"), make_poll_repo("beta")],
+        rate_limit: Some(crate::github::RateLimit {
+            remaining: 42,
+            limit: 60,
+            reset_at: String::from("2024-01-01T00:00:00Z"),
+        }),
+        ..crate::history::History::default()
+    };
+
+    apply_cached_history_to_startup(&mut app, history);
+
+    assert_eq!(app.repos.len(), 2);
+    assert_eq!(app.repos[0].name, "alpha");
+    assert_eq!(app.repos[1].name, "beta");
+    assert_eq!(app.rate_limit.as_ref().map(|rl| rl.remaining), Some(42));
+    assert_eq!(app.status_msg, READY_MSG);
+    assert!(app.loading);
+    assert_eq!(app.issue_pr_pending_repos.len(), 2);
+    assert!(app.issue_pr_pending_repos.contains("alpha"));
+    assert!(app.issue_pr_pending_repos.contains("beta"));
+    assert_eq!(app.pending_local_repos.len(), 2);
+    assert!(app.pending_local_repos.contains("alpha"));
+    assert!(app.pending_local_repos.contains("beta"));
+    assert_eq!(app.pending_cargo_repos.len(), 2);
+    assert!(app.pending_cargo_repos.contains("alpha"));
+    assert!(app.pending_cargo_repos.contains("beta"));
+    assert!(app.bg_tasks.contains(&("lcl", 0, 2)));
+    assert!(app.bg_tasks.contains(&("cgo", 0, 2)));
+}
+
+#[test]
 fn test_x_launch_args_cargo_ok_returns_empty_slice() {
     assert_eq!(cargo_status_to_launch_args(Some(true)), Some(&[][..]));
 }

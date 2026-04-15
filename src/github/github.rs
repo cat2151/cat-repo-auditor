@@ -1,7 +1,10 @@
 use crate::{
     config::Config,
     github_fetch::do_fetch,
-    github_local::{git_pull, local_head_matches_upstream},
+    github_local::{
+        check_local_status_no_fetch, git_pull, local_head_hash_no_fetch,
+        local_head_matches_upstream,
+    },
     history::History,
     self_update,
 };
@@ -15,7 +18,10 @@ mod phase3;
 mod types;
 
 use cargo_worker::{apply_cargo_result_to_history, spawn_background_cargo_checks};
-use phase3::{build_phase3_tasks, collect_local_heads, phase3_worker_count, run_phase3_repo_task};
+use phase3::{
+    apply_phase3_result, build_phase3_tasks, collect_local_heads, phase3_worker_count,
+    run_phase3_repo_task, spawn_background_local_checks,
+};
 
 pub use types::{
     AutoUpdateLaunchRequest, FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo,
@@ -26,6 +32,64 @@ pub use types::{
 // ──────────────────────────────────────────────
 
 type PullTarget = (String, String);
+
+fn split_startup_and_post_fetch_cargo_repos(
+    cached_repos: &[RepoInfo],
+    fetched_repos: &[RepoInfo],
+) -> (Vec<RepoInfo>, Vec<RepoInfo>) {
+    if cached_repos.is_empty() {
+        return (vec![], fetched_repos.to_vec());
+    }
+
+    let cached_repo_names: std::collections::HashSet<&str> =
+        cached_repos.iter().map(|repo| repo.name.as_str()).collect();
+    let post_fetch_repos = fetched_repos
+        .iter()
+        .filter(|repo| !cached_repo_names.contains(repo.name.as_str()))
+        .cloned()
+        .collect();
+
+    (cached_repos.to_vec(), post_fetch_repos)
+}
+
+fn refresh_repos_after_auto_pull_with<CheckLocalStatus, LocalHeadHash>(
+    repos: &mut [RepoInfo],
+    base_dir: &str,
+    refreshed_repo_names: &[String],
+    check_local_status: CheckLocalStatus,
+    local_head_hash: LocalHeadHash,
+) where
+    CheckLocalStatus: Fn(&str, &str) -> (LocalStatus, bool, Vec<String>),
+    LocalHeadHash: Fn(&str, &str) -> String,
+{
+    let refreshed_repo_names: std::collections::HashSet<&str> =
+        refreshed_repo_names.iter().map(String::as_str).collect();
+
+    for repo in repos
+        .iter_mut()
+        .filter(|repo| refreshed_repo_names.contains(repo.name.as_str()))
+    {
+        let (local_status, has_local_git, staging_files) = check_local_status(base_dir, &repo.name);
+        repo.local_status = local_status;
+        repo.has_local_git = has_local_git;
+        repo.staging_files = staging_files;
+        repo.local_head_hash = local_head_hash(base_dir, &repo.name);
+    }
+}
+
+fn refresh_repos_after_auto_pull(
+    repos: &mut [RepoInfo],
+    base_dir: &str,
+    refreshed_repo_names: &[String],
+) {
+    refresh_repos_after_auto_pull_with(
+        repos,
+        base_dir,
+        refreshed_repo_names,
+        check_local_status_no_fetch,
+        local_head_hash_no_fetch,
+    );
+}
 
 fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bool) -> bool {
     match local_status {
@@ -146,6 +210,66 @@ pub fn fetch_repos_with_progress(
     mut history: History,
     tx: std::sync::mpsc::Sender<FetchProgress>,
 ) {
+    let startup_local_repos = history.repos.clone();
+    let (startup_cargo_repos, _) = split_startup_and_post_fetch_cargo_repos(&history.repos, &[]);
+    let owner = config.owner.clone();
+    let auto_update_run_dir = if config.auto_update {
+        Some(config.resolved_app_run_dir())
+    } else {
+        None
+    };
+    let startup_cargo_handle = if startup_cargo_repos.is_empty() {
+        None
+    } else {
+        let _ = tx.send(FetchProgress::BeginCargoRefresh(
+            startup_cargo_repos
+                .iter()
+                .map(|repo| repo.name.clone())
+                .collect(),
+        ));
+        let local_heads = collect_local_heads(&startup_cargo_repos, &config.local_base_dir);
+        Some(spawn_background_cargo_checks(
+            &startup_cargo_repos,
+            &local_heads,
+            &owner,
+            &config.local_base_dir,
+            auto_update_run_dir.as_deref(),
+            &tx,
+        ))
+    };
+    let startup_local_handle = if startup_local_repos.is_empty() {
+        None
+    } else {
+        let _ = tx.send(FetchProgress::BeginLocalRefresh(
+            startup_local_repos
+                .iter()
+                .map(|repo| repo.name.clone())
+                .collect(),
+        ));
+        Some(spawn_background_local_checks(
+            &startup_local_repos,
+            &config.local_base_dir,
+            &tx,
+        ))
+    };
+
+    if let Some(cargo_handle) = startup_cargo_handle {
+        if let Ok(cargo_results) = cargo_handle.join() {
+            for result in &cargo_results {
+                apply_cargo_result_to_history(&mut history, result);
+            }
+        }
+    }
+    if let Some(local_handle) = startup_local_handle {
+        if let Ok(local_results) = local_handle.join() {
+            for result in &local_results {
+                if let Some(r) = history.repos.iter_mut().find(|r| r.name == result.name) {
+                    apply_phase3_result(r, result);
+                }
+            }
+        }
+    }
+
     // Phase 1: fetch repo list
     let result = do_fetch(&config, &mut history, &tx);
     match result {
@@ -155,21 +279,28 @@ pub fn fetch_repos_with_progress(
         Ok((mut repos, rl)) => {
             let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl))));
 
-            let owner = config.owner.clone();
-            let auto_update_run_dir = if config.auto_update {
-                Some(config.resolved_app_run_dir())
-            } else {
+            let (_, post_fetch_cargo_repos) =
+                split_startup_and_post_fetch_cargo_repos(&startup_cargo_repos, &repos);
+            let post_fetch_cargo_handle = if post_fetch_cargo_repos.is_empty() {
                 None
+            } else {
+                let _ = tx.send(FetchProgress::BeginCargoRefresh(
+                    post_fetch_cargo_repos
+                        .iter()
+                        .map(|repo| repo.name.clone())
+                        .collect(),
+                ));
+                let local_heads =
+                    collect_local_heads(&post_fetch_cargo_repos, &config.local_base_dir);
+                Some(spawn_background_cargo_checks(
+                    &post_fetch_cargo_repos,
+                    &local_heads,
+                    &owner,
+                    &config.local_base_dir,
+                    auto_update_run_dir.as_deref(),
+                    &tx,
+                ))
             };
-            let local_heads = collect_local_heads(&repos, &config.local_base_dir);
-            let cargo_handle = spawn_background_cargo_checks(
-                &repos,
-                &local_heads,
-                &owner,
-                &config.local_base_dir,
-                auto_update_run_dir.as_deref(),
-                &tx,
-            );
 
             // Phase 2: auto-pull repos that can be safely fast-forwarded.
             // Dirty repos are handled by stashing before pull and restoring after.
@@ -184,7 +315,9 @@ pub fn fetch_repos_with_progress(
             };
             if !pullable.is_empty() {
                 let total = pullable.len();
+                let mut refreshed_repo_names = Vec::with_capacity(total);
                 for (i, (name, repo_full_name)) in pullable.iter().enumerate() {
+                    refreshed_repo_names.push(name.clone());
                     let _ = tx.send(FetchProgress::PhaseProgress {
                         tag: "pull",
                         cur: i + 1,
@@ -196,26 +329,18 @@ pub fn fetch_repos_with_progress(
                         &pull_result,
                     )));
                 }
-                let _ = tx.send(FetchProgress::Status(String::from(
-                    "Refreshing after auto-pull…",
-                )));
-                match do_fetch(&config, &mut history, &tx) {
-                    Ok((r2, rl2)) => {
-                        repos = r2;
-                        let _ = tx.send(FetchProgress::Done(Ok((repos.clone(), rl2))));
-                    }
-                    Err(e) => {
-                        let _ = tx.send(FetchProgress::Done(Err(e)));
-                        return;
-                    }
-                }
+                refresh_repos_after_auto_pull(
+                    &mut repos,
+                    &config.local_base_dir,
+                    &refreshed_repo_names,
+                );
             }
 
             // Phase 3:
             // - README / Pages / DeepWiki / workflows は各 checked_at が古いときだけ再確認する。
+            // - local clean は startup background で先行実行し、ここでは残りの existence checks を行う。
             // - cargo install 状態の確認は auto-pull / existence check とは独立して先行実行する。
-            let local_heads = collect_local_heads(&repos, &config.local_base_dir);
-            let phase3_tasks = build_phase3_tasks(&repos, &local_heads);
+            let phase3_tasks = build_phase3_tasks(&repos);
 
             if !phase3_tasks.is_empty() {
                 let total_check = phase3_tasks.len();
@@ -257,20 +382,7 @@ pub fn fetch_repos_with_progress(
                         });
 
                         if let Some(r) = history.repos.iter_mut().find(|r| r.name == result.name) {
-                            r.local_status = result.local_status.clone();
-                            r.has_local_git = result.has_local_git;
-                            r.staging_files = result.staging_files.clone();
-                            r.local_head_hash = result.local_head_hash.clone();
-                            r.readme_ja = result.readme_ja;
-                            r.readme_ja_checked_at = result.readme_ja_cat.clone();
-                            r.readme_ja_badge = result.readme_ja_badge;
-                            r.readme_ja_badge_checked_at = result.readme_ja_badge_cat.clone();
-                            r.pages = result.pages;
-                            r.pages_checked_at = result.pages_cat.clone();
-                            r.deepwiki = result.deepwiki;
-                            r.deepwiki_checked_at = result.deepwiki_cat.clone();
-                            r.wf_workflows = result.wf_workflows;
-                            r.wf_checked_at = result.wf_cat.clone();
+                            apply_phase3_result(r, &result);
                         }
 
                         let _ = tx.send(FetchProgress::ExistenceUpdate {
@@ -294,9 +406,11 @@ pub fn fetch_repos_with_progress(
                 });
             }
 
-            if let Ok(cargo_results) = cargo_handle.join() {
-                for result in &cargo_results {
-                    apply_cargo_result_to_history(&mut history, result);
+            for cargo_handle in post_fetch_cargo_handle.into_iter() {
+                if let Ok(cargo_results) = cargo_handle.join() {
+                    for result in &cargo_results {
+                        apply_cargo_result_to_history(&mut history, result);
+                    }
                 }
             }
 

@@ -36,12 +36,25 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
         || !repo.cargo_installed_hash.is_empty()
 }
 
-/// Merge cargo fields that were updated live after the previous `Done`.
+fn merge_live_repo_state_from(
+    existing: &crate::github::RepoInfo,
+    incoming: &mut crate::github::RepoInfo,
+) {
+    if has_live_cargo_state(existing) {
+        incoming.cargo_install = existing.cargo_install;
+        incoming.cargo_checked_at = existing.cargo_checked_at.clone();
+        incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
+        incoming.cargo_remote_hash_checked_at = existing.cargo_remote_hash_checked_at.clone();
+        incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
+    }
+}
+
+/// Merge cargo fields that were updated live after the current refresh started.
 ///
-/// `fetch_repos_with_progress()` can now send an initial `Done` after phase 1 and a second `Done`
-/// after auto-pull refresh. If cargo checks finished in between those two snapshots, the incoming
-/// refreshed repos would otherwise overwrite newer cargo state with older history-backed values.
-/// This merge preserves the live cargo state only for repos that already have such cargo updates.
+/// The incoming `Done` snapshot is built from history loaded at refresh start. If cargo checks or
+/// cargo polling update the live app state before that snapshot is applied, the older history-backed
+/// values would otherwise overwrite newer cargo fields. This merge preserves only the cargo fields
+/// that already became live in the current app state.
 fn merge_live_repo_state(
     existing_repos: &[crate::github::RepoInfo],
     incoming_repos: &mut [crate::github::RepoInfo],
@@ -51,14 +64,7 @@ fn merge_live_repo_state(
             .iter()
             .find(|repo| repo.name == incoming.name)
         {
-            if has_live_cargo_state(existing) {
-                incoming.cargo_install = existing.cargo_install;
-                incoming.cargo_checked_at = existing.cargo_checked_at.clone();
-                incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
-                incoming.cargo_remote_hash_checked_at =
-                    existing.cargo_remote_hash_checked_at.clone();
-                incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
-            }
+            merge_live_repo_state_from(existing, incoming);
         }
     }
 }
@@ -77,9 +83,6 @@ pub(crate) fn drain_fetch_channel_for_log_path(
 ) {
     while let Some(result) = fetch_rx.as_ref().map(mpsc::Receiver::try_recv) {
         match result {
-            Ok(FetchProgress::Status(_msg)) => {
-                // status_msg stays as operation help.
-            }
             Ok(FetchProgress::Log(msg)) => {
                 persist_log_line_for_path(app, log_path, make_log_line(&msg))
             }
@@ -88,17 +91,32 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 log_path,
                 make_log_line(BACKGROUND_CHECKS_COMPLETED_MSG),
             ),
+            Ok(FetchProgress::BeginRepoRefresh(repo_names)) => {
+                app.set_issue_pr_pending_repos(repo_names);
+            }
+            Ok(FetchProgress::BeginLocalRefresh(repo_names)) => {
+                app.add_pending_local_repos(repo_names);
+                app.set_bg_task_progress("lcl", 0, app.pending_local_repos.len());
+            }
+            Ok(FetchProgress::BeginCargoRefresh(repo_names)) => {
+                app.add_pending_cargo_repos(repo_names);
+                app.set_bg_task_progress("cgo", 0, app.pending_cargo_repos.len());
+            }
             Ok(FetchProgress::PhaseProgress { tag, cur, total }) => {
-                if cur == 0 && total == 0 {
-                    // Clear signal
-                    app.bg_tasks.retain(|t| t.0 != tag);
-                } else if let Some(entry) = app.bg_tasks.iter_mut().find(|t| t.0 == tag) {
-                    // Upsert
-                    entry.1 = cur;
-                    entry.2 = total;
-                } else {
-                    app.bg_tasks.push((tag, cur, total));
+                app.set_bg_task_progress(tag, cur, total);
+            }
+            Ok(FetchProgress::RepoUpdate(mut repo)) => {
+                let repo_name = repo.name.clone();
+                if let Some(repo_idx) = app
+                    .repos
+                    .iter()
+                    .position(|existing| existing.name == repo_name)
+                {
+                    let existing = app.repos[repo_idx].clone();
+                    merge_live_repo_state_from(&existing, &mut repo);
+                    app.repos[repo_idx] = repo;
                 }
+                app.finish_issue_pr_refresh(&repo_name);
             }
             Ok(FetchProgress::CheckingRepo(name)) => {
                 if name.is_empty() {
@@ -140,6 +158,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                     r.wf_workflows = wf_workflows;
                     r.wf_checked_at = wf_cat;
                 }
+                app.finish_pending_local_repo(&name);
                 app.checking_repos.remove(&name);
             }
             Ok(FetchProgress::CargoUpdate {
@@ -160,6 +179,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                         cargo_installed_hash,
                     );
                 }
+                app.finish_pending_cargo_repo(&name);
             }
             Ok(FetchProgress::RequestAutoUpdateLaunch(request)) => {
                 app.queue_auto_update_launch(request);
@@ -170,6 +190,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 app.repos = repos;
                 app.rate_limit = Some(rl);
                 app.rebuild_rows();
+                app.clear_issue_pr_pending_repos();
                 app.loading = false;
                 app.status_msg = String::from(READY_MSG);
                 // Do NOT set fetch_rx = None here:
@@ -177,6 +198,11 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 // Keep draining until Disconnected.
             }
             Ok(FetchProgress::Done(Err(e))) => {
+                app.bg_tasks.clear();
+                app.checking_repos.clear();
+                app.clear_issue_pr_pending_repos();
+                app.clear_pending_local_repos();
+                app.clear_pending_cargo_repos();
                 app.loading = false;
                 app.status_msg = format!("Error: {e}");
                 *fetch_rx = None;
@@ -187,6 +213,9 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 *fetch_rx = None;
                 app.bg_tasks.clear();
                 app.checking_repos.clear();
+                app.clear_issue_pr_pending_repos();
+                app.clear_pending_local_repos();
+                app.clear_pending_cargo_repos();
                 break;
             }
         }

@@ -44,6 +44,16 @@ fn make_repo_with_cargo_state(name: &str, cargo_install: Option<bool>) -> RepoIn
     repo
 }
 
+fn make_repo_with_cargo_state_and_updated(
+    name: &str,
+    cargo_install: Option<bool>,
+    updated_at_raw: &str,
+) -> RepoInfo {
+    let mut repo = make_repo_with_cargo_state(name, cargo_install);
+    repo.updated_at_raw = String::from(updated_at_raw);
+    repo
+}
+
 #[test]
 fn issue_url_format() {
     let item = IssueOrPr {
@@ -175,22 +185,73 @@ fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
 }
 
 #[test]
-fn cargo_check_order_prioritizes_known_cargo_old_repos() {
+fn cargo_check_order_follows_updated_descending() {
     let repos = vec![
-        make_repo_with_cargo_state("repo-ok", Some(true)),
-        make_repo_with_cargo_state("repo-old-1", Some(false)),
-        make_repo_with_cargo_state("repo-none", None),
-        make_repo_with_cargo_state("repo-old-2", Some(false)),
+        make_repo_with_cargo_state_and_updated("repo-ok", Some(true), "2024-01-02T00:00:00Z"),
+        make_repo_with_cargo_state_and_updated("repo-old-1", Some(false), "2024-01-03T00:00:00Z"),
+        make_repo_with_cargo_state_and_updated("repo-none", None, "2024-01-04T00:00:00Z"),
+        make_repo_with_cargo_state_and_updated("repo-old-2", Some(false), "2024-01-01T00:00:00Z"),
     ];
 
     assert_eq!(
         cargo_check_order(&repos),
         vec![
-            String::from("repo-old-1"),
-            String::from("repo-old-2"),
-            String::from("repo-ok"),
             String::from("repo-none"),
+            String::from("repo-old-1"),
+            String::from("repo-ok"),
+            String::from("repo-old-2"),
         ]
+    );
+}
+
+#[test]
+fn split_startup_and_post_fetch_cargo_repos_runs_cached_repos_first() {
+    let cached_repos = vec![
+        make_repo_with_cargo_state("repo-a", Some(true)),
+        make_repo_with_cargo_state("repo-b", Some(false)),
+    ];
+    let fetched_repos = vec![
+        make_repo_with_cargo_state("repo-a", Some(true)),
+        make_repo_with_cargo_state("repo-b", Some(false)),
+        make_repo_with_cargo_state("repo-c", None),
+    ];
+
+    let (startup_repos, post_fetch_repos) =
+        split_startup_and_post_fetch_cargo_repos(&cached_repos, &fetched_repos);
+
+    assert_eq!(
+        startup_repos
+            .iter()
+            .map(|repo| repo.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["repo-a", "repo-b"]
+    );
+    assert_eq!(
+        post_fetch_repos
+            .iter()
+            .map(|repo| repo.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["repo-c"]
+    );
+}
+
+#[test]
+fn split_startup_and_post_fetch_cargo_repos_checks_all_fetched_repos_without_cache() {
+    let fetched_repos = vec![
+        make_repo_with_cargo_state("repo-a", Some(true)),
+        make_repo_with_cargo_state("repo-b", Some(false)),
+    ];
+
+    let (startup_repos, post_fetch_repos) =
+        split_startup_and_post_fetch_cargo_repos(&[], &fetched_repos);
+
+    assert!(startup_repos.is_empty());
+    assert_eq!(
+        post_fetch_repos
+            .iter()
+            .map(|repo| repo.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["repo-a", "repo-b"]
     );
 }
 
@@ -217,6 +278,48 @@ fn format_pull_log_includes_repo_and_compacts_error_output() {
         line,
         "pull owner/repo failed: git pull failed | repository has unresolved conflicts"
     );
+}
+
+#[test]
+fn refresh_repos_after_auto_pull_updates_only_targeted_local_state() {
+    let mut repo_a = make_repo_for_cargo_log();
+    repo_a.name = String::from("repo-a");
+    repo_a.full_name = String::from("owner/repo-a");
+    repo_a.local_status = LocalStatus::Pullable;
+    repo_a.local_head_hash = String::from("old-head-a");
+
+    let mut repo_b = make_repo_for_cargo_log();
+    repo_b.name = String::from("repo-b");
+    repo_b.full_name = String::from("owner/repo-b");
+    repo_b.local_status = LocalStatus::Clean;
+    repo_b.local_head_hash = String::from("old-head-b");
+
+    let mut repos = vec![repo_a, repo_b];
+    let refreshed_repo_names = vec![String::from("repo-a")];
+
+    refresh_repos_after_auto_pull_with(
+        &mut repos,
+        "C:\\repos",
+        &refreshed_repo_names,
+        |_base_dir, repo_name| match repo_name {
+            "repo-a" => (
+                LocalStatus::Modified,
+                true,
+                vec![String::from(" M Cargo.toml")],
+            ),
+            other => panic!("unexpected repo status refresh: {other}"),
+        },
+        |_base_dir, repo_name| match repo_name {
+            "repo-a" => String::from("new-head-a"),
+            other => panic!("unexpected repo head refresh: {other}"),
+        },
+    );
+
+    assert_eq!(repos[0].local_status, LocalStatus::Modified);
+    assert_eq!(repos[0].staging_files, vec![String::from(" M Cargo.toml")]);
+    assert_eq!(repos[0].local_head_hash, "new-head-a");
+    assert_eq!(repos[1].local_status, LocalStatus::Clean);
+    assert_eq!(repos[1].local_head_hash, "old-head-b");
 }
 
 #[test]

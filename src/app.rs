@@ -10,8 +10,10 @@ mod app_search;
 #[path = "app_cargo_polls.rs"]
 mod cargo_polls;
 
+pub(crate) use cargo_polls::CargoHashPoll;
+#[cfg(test)]
 pub(crate) use cargo_polls::{
-    CargoHashPoll, ExpiredCargoHashPoll, CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT,
+    ExpiredCargoHashPoll, CARGO_HASH_POLL_INTERVAL, CARGO_HASH_POLL_TIMEOUT,
 };
 
 const MAX_LOG_LINES: usize = 2_000;
@@ -37,6 +39,12 @@ pub struct App {
     pub window_focused: bool,
     pub config: Config,
     pub num_prefix: u32,
+    /// repos whose issue/PR snapshot is still being refreshed in the current fetch
+    pub issue_pr_pending_repos: HashSet<String>,
+    /// repos whose cargo check has not produced a result yet in the current fetch
+    pub pending_cargo_repos: HashSet<String>,
+    /// repos whose local status/head refresh has not produced a result yet in the current fetch
+    pub pending_local_repos: HashSet<String>,
     /// repos currently being checked in phase 3
     pub checking_repos: HashSet<String>,
     /// Active background tasks: (tag, cur, total)
@@ -82,6 +90,9 @@ impl App {
             window_focused: true,
             config,
             num_prefix: 0,
+            issue_pr_pending_repos: HashSet::new(),
+            pending_cargo_repos: HashSet::new(),
+            pending_local_repos: HashSet::new(),
             checking_repos: HashSet::new(),
             bg_tasks: vec![],
             pending_auto_update_launches: VecDeque::new(),
@@ -108,6 +119,71 @@ impl App {
     pub fn rebuild_rows(&mut self) {
         self.rows = build_rows(&self.repos);
         self.apply_filter();
+    }
+
+    pub fn start_issue_pr_refresh(&mut self) {
+        let repo_names: Vec<String> = self.repos.iter().map(|repo| repo.name.clone()).collect();
+        self.set_issue_pr_pending_repos(repo_names);
+    }
+
+    pub fn set_issue_pr_pending_repos<I>(&mut self, repo_names: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.issue_pr_pending_repos = repo_names.into_iter().collect();
+    }
+
+    pub fn finish_issue_pr_refresh(&mut self, repo_name: &str) {
+        self.issue_pr_pending_repos.remove(repo_name);
+    }
+
+    pub fn clear_issue_pr_pending_repos(&mut self) {
+        self.issue_pr_pending_repos.clear();
+    }
+
+    pub fn set_bg_task_progress(&mut self, tag: &'static str, cur: usize, total: usize) {
+        if cur == 0 && total == 0 {
+            self.clear_bg_task(tag);
+        } else if let Some(entry) = self.bg_tasks.iter_mut().find(|t| t.0 == tag) {
+            entry.1 = cur;
+            entry.2 = total;
+        } else {
+            self.bg_tasks.push((tag, cur, total));
+        }
+    }
+
+    pub fn clear_bg_task(&mut self, tag: &'static str) {
+        self.bg_tasks.retain(|t| t.0 != tag);
+    }
+
+    pub fn add_pending_cargo_repos<I>(&mut self, repo_names: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.pending_cargo_repos.extend(repo_names);
+    }
+
+    pub fn finish_pending_cargo_repo(&mut self, repo_name: &str) {
+        self.pending_cargo_repos.remove(repo_name);
+    }
+
+    pub fn clear_pending_cargo_repos(&mut self) {
+        self.pending_cargo_repos.clear();
+    }
+
+    pub fn add_pending_local_repos<I>(&mut self, repo_names: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.pending_local_repos.extend(repo_names);
+    }
+
+    pub fn finish_pending_local_repo(&mut self, repo_name: &str) {
+        self.pending_local_repos.remove(repo_name);
+    }
+
+    pub fn clear_pending_local_repos(&mut self) {
+        self.pending_local_repos.clear();
     }
 
     pub fn selected_repo_idx(&self) -> Option<usize> {

@@ -130,16 +130,23 @@ pub struct AutoUpdateLaunchRequest {
 }
 
 pub enum FetchProgress {
-    Status(String),
     Log(String),
     BackgroundChecksCompleted,
+    /// Reset issue/PR pending state for the next repo refresh pass.
+    BeginRepoRefresh(Vec<String>),
+    /// Reset local-status pending state for repos whose local check is about to run.
+    BeginLocalRefresh(Vec<String>),
+    /// Reset cargo pending state for repos whose cargo check is about to run.
+    BeginCargoRefresh(Vec<String>),
     /// Structured progress for background task display: (tag, cur, total)
-    /// tag examples: "gh↓", "scan", "pull", "chk"
+    /// tag examples: "gh↓", "scan", "pull", "lcl", "chk"
     PhaseProgress {
         tag: &'static str,
         cur: usize,
         total: usize,
     },
+    /// Incremental repo snapshot from GitHub fetch so the UI can clear issue/PR spinners per repo.
+    RepoUpdate(RepoInfo),
     /// Signal that a specific repo is currently being checked (for UI feedback)
     CheckingRepo(String),
     /// Incremental update per repo after phase-3 checks

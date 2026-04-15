@@ -131,6 +131,30 @@ fn append_auto_update_cargo_poll_timeout_log(
     );
 }
 
+fn apply_cached_history_to_startup(app: &mut App, cached_history: History) {
+    if cached_history.repos.is_empty() {
+        return;
+    }
+
+    let repo_names: Vec<String> = cached_history
+        .repos
+        .iter()
+        .map(|repo| repo.name.clone())
+        .collect();
+    app.repos = cached_history.repos;
+    app.rate_limit = cached_history.rate_limit;
+    app.rebuild_rows();
+    app.status_msg = String::from(READY_MSG);
+    app.loading = true;
+    app.set_issue_pr_pending_repos(repo_names.clone());
+    app.clear_pending_local_repos();
+    app.add_pending_local_repos(repo_names.clone());
+    app.set_bg_task_progress("lcl", 0, repo_names.len());
+    app.clear_pending_cargo_repos();
+    app.add_pending_cargo_repos(repo_names);
+    app.set_bg_task_progress("cgo", 0, app.pending_cargo_repos.len());
+}
+
 fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPollEvent>) {
     while let Ok(event) = rx.try_recv() {
         match event {
@@ -370,13 +394,7 @@ fn main() -> Result<()> {
 
     let cached_history =
         History::load(&Config::history_path().to_string_lossy()).unwrap_or_default();
-    if !cached_history.repos.is_empty() {
-        app.repos = cached_history.repos;
-        app.rate_limit = cached_history.rate_limit;
-        app.rebuild_rows();
-        app.status_msg = String::from(READY_MSG);
-        app.loading = true;
-    }
+    apply_cached_history_to_startup(&mut app, cached_history);
 
     let mut fetch_rx: Option<mpsc::Receiver<FetchProgress>> = Some(start_fetch(config, history));
     let (cargo_hash_poll_tx, cargo_hash_poll_rx) = mpsc::channel();
