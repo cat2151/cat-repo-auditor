@@ -3,7 +3,7 @@ use crate::github::{AutoUpdateLaunchRequest, RateLimit, RepoInfo};
 use crate::github_local::WorkflowRepoExistCheck;
 use crate::ui::{build_detail_items, build_rows, Focus, RepoRow, SearchState};
 use std::collections::{HashSet, VecDeque};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 #[path = "app_search.rs"]
 mod app_search;

@@ -1,4 +1,5 @@
-use super::*;
+use super::App;
+use std::time::{Duration, SystemTime};
 
 pub(crate) const CARGO_HASH_POLL_INTERVAL: Duration = Duration::from_secs(60);
 pub(crate) const CARGO_HASH_POLL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
