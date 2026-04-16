@@ -105,7 +105,8 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::PhaseProgress { tag, cur, total }) => {
                 app.set_bg_task_progress(tag, cur, total);
             }
-            Ok(FetchProgress::RepoUpdate(mut repo)) => {
+            Ok(FetchProgress::RepoUpdate(repo)) => {
+                let mut repo = *repo;
                 let repo_name = repo.name.clone();
                 if let Some(repo_idx) = app
                     .repos

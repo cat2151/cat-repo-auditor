@@ -186,7 +186,8 @@ fn drain_fetch_channel_repo_update_refreshes_issue_pr_state_per_repo() {
     }];
 
     let (tx, rx) = mpsc::channel();
-    tx.send(FetchProgress::RepoUpdate(updated_repo)).unwrap();
+    tx.send(FetchProgress::RepoUpdate(Box::new(updated_repo)))
+        .unwrap();
     drop(tx);
 
     let mut fetch_rx = Some(rx);

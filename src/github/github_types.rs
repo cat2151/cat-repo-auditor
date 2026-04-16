@@ -146,7 +146,7 @@ pub enum FetchProgress {
         total: usize,
     },
     /// Incremental repo snapshot from GitHub fetch so the UI can clear issue/PR spinners per repo.
-    RepoUpdate(RepoInfo),
+    RepoUpdate(Box<RepoInfo>),
     /// Signal that a specific repo is currently being checked (for UI feedback)
     CheckingRepo(String),
     /// Incremental update per repo after phase-3 checks

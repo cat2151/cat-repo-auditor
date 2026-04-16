@@ -367,7 +367,7 @@ pub(crate) fn do_fetch(
                     cur: scan_i,
                     total: 0,
                 });
-                let _ = tx.send(FetchProgress::RepoUpdate(repo_info.clone()));
+                let _ = tx.send(FetchProgress::RepoUpdate(Box::new(repo_info.clone())));
                 repo_infos.push(repo_info);
             }
         }
