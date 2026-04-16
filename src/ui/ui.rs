@@ -237,7 +237,7 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
         let heights: Vec<u16> = boxes.iter().map(|b| bottom_right_box_height(*b)).collect();
         let offsets = bottom_right_stack_offsets(&heights);
 
-        for (b, offset) in boxes.into_iter().zip(offsets.into_iter()) {
+        for (b, offset) in boxes.into_iter().zip(offsets) {
             match b {
                 BottomRightBox::CargoHash => draw_cargo_old_box(f, app, idx, area, offset),
                 BottomRightBox::LocalHash => draw_local_hash_box(f, app, idx, area, offset),
