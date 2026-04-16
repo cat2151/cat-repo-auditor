@@ -180,7 +180,8 @@ fn apply_cached_history_to_startup_marks_cached_repos_pending_in_all_status_colu
         auto_pull: false,
         auto_update: false,
     });
-    app.issue_pr_pending_repos.insert(String::from("stale-issue"));
+    app.issue_pr_pending_repos
+        .insert(String::from("stale-issue"));
     app.pending_local_repos.insert(String::from("stale-local"));
     app.pending_cargo_repos.insert(String::from("stale-cargo"));
     let history = crate::history::History {

@@ -176,26 +176,28 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                     (format!("{:>3}", repo.open_issues), MK_COMMENT)
                 };
 
-                let (doc_str, doc_col) =
-                    if issue_pr_pending || (is_checking && repo.readme_ja_checked_at != repo.updated_at_raw) {
-                        pending
-                    } else {
-                        match repo.readme_ja {
-                            Some(true) => ("✔", MK_GREEN),
-                            Some(false) => ("✘", MK_COMMENT),
-                            None => ("?", MK_ORANGE),
-                        }
-                    };
-                let (pg_str, pg_col) =
-                    if issue_pr_pending || (is_checking && repo.pages_checked_at != repo.updated_at_raw) {
-                        pending
-                    } else {
-                        match repo.pages {
-                            Some(true) => ("✔", MK_CYAN),
-                            Some(false) => ("✘", MK_COMMENT),
-                            None => ("?", MK_ORANGE),
-                        }
-                    };
+                let (doc_str, doc_col) = if issue_pr_pending
+                    || (is_checking && repo.readme_ja_checked_at != repo.updated_at_raw)
+                {
+                    pending
+                } else {
+                    match repo.readme_ja {
+                        Some(true) => ("✔", MK_GREEN),
+                        Some(false) => ("✘", MK_COMMENT),
+                        None => ("?", MK_ORANGE),
+                    }
+                };
+                let (pg_str, pg_col) = if issue_pr_pending
+                    || (is_checking && repo.pages_checked_at != repo.updated_at_raw)
+                {
+                    pending
+                } else {
+                    match repo.pages {
+                        Some(true) => ("✔", MK_CYAN),
+                        Some(false) => ("✘", MK_COMMENT),
+                        None => ("?", MK_ORANGE),
+                    }
+                };
                 let local_no_git = matches!(
                     repo.local_status,
                     LocalStatus::NotFound | LocalStatus::NoGit
@@ -220,16 +222,13 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                 } else {
                     local_check_cell(local_no_git, repo.deepwiki, MK_PURPLE)
                 };
-                let (wf_str, wf_col) =
-                    if local_pending
-                        || (is_checking
-                            && !local_no_git
-                            && repo.wf_checked_at != repo.local_head_hash)
+                let (wf_str, wf_col) = if local_pending
+                    || (is_checking && !local_no_git && repo.wf_checked_at != repo.local_head_hash)
                 {
-                        pending
-                    } else {
-                        local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
-                    };
+                    pending
+                } else {
+                    local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
+                };
 
                 let (local_str, local_col) = if local_pending {
                     (pending.0.to_string(), pending.1)
