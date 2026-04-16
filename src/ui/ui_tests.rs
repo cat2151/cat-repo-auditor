@@ -117,9 +117,52 @@ impl Drop for TempDirGuard {
     }
 }
 
+fn find_text_x(buffer: &ratatui::buffer::Buffer, needle: &str) -> Option<u16> {
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            let mut matched = true;
+            for (offset, ch) in needle.chars().enumerate() {
+                let x = x + offset as u16;
+                if x >= buffer.area.width || buffer[(x, y)].symbol() != ch.to_string() {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                return Some(x);
+            }
+        }
+    }
+    None
+}
+
+fn rendered_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
+    let area = terminal.backend().buffer().area;
+    let mut rendered = Vec::new();
+    for y in 0..area.height {
+        let mut line = String::new();
+        for x in 0..area.width {
+            line.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        rendered.push(line);
+    }
+    rendered
+}
+
+fn spinner_count(line: &str) -> usize {
+    SPINNER_FRAMES
+        .iter()
+        .map(|frame| line.matches(frame).count())
+        .sum()
+}
+
 #[path = "ui_tests/bottom_right_tests.rs"]
 mod bottom_right_tests;
-#[path = "ui_tests/rendering_tests.rs"]
-mod rendering_tests;
+#[path = "ui_tests/rendering_core_tests.rs"]
+mod rendering_core_tests;
+#[path = "ui_tests/rendering_overlay_tests.rs"]
+mod rendering_overlay_tests;
+#[path = "ui_tests/rendering_repo_status_tests.rs"]
+mod rendering_repo_status_tests;
 #[path = "ui_tests/rows_and_detail_tests.rs"]
 mod rows_and_detail_tests;
