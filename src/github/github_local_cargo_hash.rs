@@ -3,8 +3,12 @@ use std::process::Command;
 
 #[path = "github_local_cargo_hash_checkout.rs"]
 mod checkout;
+#[path = "github_local_cargo_hash_metadata.rs"]
+mod metadata;
 #[path = "github_local_cargo_hash_remote.rs"]
 mod remote;
+
+use metadata::parse_cargo_install_entry;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CargoGitInstallCheck {
@@ -35,40 +39,6 @@ impl CargoGitInstallCheck {
             Self::NotInstalled | Self::Failed => None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CargoInstallMetadata {
-    crate_name: String,
-    git_url: String,
-    repo_name: String,
-    metadata_revision: String,
-}
-
-fn parse_cargo_install_entry(entry: &str) -> Option<CargoInstallMetadata> {
-    let crate_name = entry.split_whitespace().next()?.to_string();
-    let git_start = entry.find("git+")? + "git+".len();
-    let source = entry[git_start..].trim();
-    let source = source.strip_suffix(')').unwrap_or(source).trim();
-    let (git_url, metadata_revision) = source.split_once('#')?;
-    let git_url = git_url.trim();
-    let metadata_revision = metadata_revision.trim().trim_end_matches(')').trim();
-    if git_url.is_empty() || metadata_revision.is_empty() {
-        return None;
-    }
-
-    let normalized_git_url = git_url.trim_end_matches('/').trim_end_matches(".git");
-    let repo_name = normalized_git_url.rsplit('/').next()?.trim();
-    if repo_name.is_empty() {
-        return None;
-    }
-
-    Some(CargoInstallMetadata {
-        crate_name,
-        git_url: git_url.to_string(),
-        repo_name: repo_name.to_string(),
-        metadata_revision: metadata_revision.to_string(),
-    })
 }
 
 /// Compare the commit hash of a `cargo install --git` entry against remote HEAD.
@@ -496,138 +466,12 @@ fn finish_cargo_git_install_check(
 }
 
 #[cfg(test)]
-pub(super) fn check_cargo_git_install_inner_with_remote_hash(
-    owner: &str,
-    repo_name: &str,
-    base_dir: &str,
-    cargo_home: &str,
-    remote_hash: &str,
-    mut log_fn: impl FnMut(&str),
-) -> Option<(bool, String, String, String)> {
-    check_cargo_git_install_inner_with_resolver(
-        owner,
-        repo_name,
-        base_dir,
-        cargo_home,
-        &mut log_fn,
-        |log_fn, owner, repo_name| {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "remote のコミットハッシュ取得を開始します",
-            );
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                &format!("remote のコミットハッシュを取得しました: {remote_hash}"),
-            );
-            Some(remote_hash.to_string())
-        },
-    )
-    .as_legacy_tuple()
-}
+#[path = "github_local_cargo_hash_test_support.rs"]
+mod test_support;
 
 #[cfg(test)]
-pub(super) fn check_cargo_git_install_status_with_remote_failure_and_logger(
-    owner: &str,
-    repo_name: &str,
-    base_dir: &str,
-    cargo_home: &str,
-    mut log_fn: impl FnMut(&str),
-) -> CargoGitInstallCheck {
-    check_cargo_git_install_inner_with_resolver(
-        owner,
-        repo_name,
-        base_dir,
-        cargo_home,
-        &mut log_fn,
-        |log_fn, owner, repo_name| {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "remote のコミットハッシュ取得を開始します",
-            );
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "remote のコミットハッシュ取得に失敗しました",
-            );
-            None
-        },
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_cargo_install_entry;
-
-    #[test]
-    fn parse_cargo_install_entry_extracts_crate_repo_and_revision_without_dot_git() {
-        let metadata = parse_cargo_install_entry(
-            "clap-mml-render-server 0.1.0 (git+https://github.com/cat2151/clap-mml-play-server#f7861234)",
-        )
-        .expect("metadata should parse");
-
-        assert_eq!(metadata.crate_name, "clap-mml-render-server");
-        assert_eq!(
-            metadata.git_url,
-            "https://github.com/cat2151/clap-mml-play-server"
-        );
-        assert_eq!(metadata.repo_name, "clap-mml-play-server");
-        assert_eq!(metadata.metadata_revision, "f7861234");
-    }
-
-    #[test]
-    fn parse_cargo_install_entry_extracts_repo_name_with_dot_git_suffix() {
-        let metadata = parse_cargo_install_entry(
-            "cat-edit-mml 0.1.0 (git+https://github.com/cat2151/cat-edit-mml.git#d27b5678)",
-        )
-        .expect("metadata should parse");
-
-        assert_eq!(metadata.crate_name, "cat-edit-mml");
-        assert_eq!(
-            metadata.git_url,
-            "https://github.com/cat2151/cat-edit-mml.git"
-        );
-        assert_eq!(metadata.repo_name, "cat-edit-mml");
-        assert_eq!(metadata.metadata_revision, "d27b5678");
-    }
-}
-
-#[cfg(test)]
-pub(super) fn check_cargo_git_install_with_remote_hash_and_logger(
-    owner: &str,
-    repo_name: &str,
-    base_dir: &str,
-    cargo_home: &str,
-    remote_hash: &str,
-    log_fn: impl FnMut(&str),
-) -> Option<(bool, String, String, String)> {
-    check_cargo_git_install_with_resolver_and_logger(
-        owner,
-        repo_name,
-        base_dir,
-        cargo_home,
-        log_fn,
-        |log_fn, owner, repo_name| {
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                "remote のコミットハッシュ取得を開始します",
-            );
-            super::log_cargo_check_result(
-                log_fn,
-                owner,
-                repo_name,
-                &format!("remote のコミットハッシュを取得しました: {remote_hash}"),
-            );
-            Some(remote_hash.to_string())
-        },
-    )
-    .as_legacy_tuple()
-}
+pub(super) use test_support::{
+    check_cargo_git_install_inner_with_remote_hash,
+    check_cargo_git_install_status_with_remote_failure_and_logger,
+    check_cargo_git_install_with_remote_hash_and_logger,
+};
