@@ -8,7 +8,9 @@ mod bins;
 mod hash;
 
 pub(crate) use bins::get_cargo_bins;
-pub(crate) use hash::check_cargo_git_install;
+pub(crate) use hash::{
+    check_cargo_git_install, check_cargo_git_install_status, CargoGitInstallCheck,
+};
 
 #[cfg(test)]
 use bins::get_cargo_bins_inner;
@@ -120,11 +122,18 @@ fn format_git_ls_remote_main_command(owner: &str, repo_name: &str) -> String {
     format!("git ls-remote https://github.com/{owner}/{repo_name}.git refs/heads/main")
 }
 
+fn cargo_install_entry_matches_repo(key: &str, owner: &str, repo_name: &str) -> bool {
+    let src = key.trim_end_matches(')');
+    let repo_url = format!("git+https://github.com/{owner}/{repo_name}");
+    src.contains(&format!("{repo_url}#")) || src.contains(&format!("{repo_url}.git#"))
+}
+
 /// Format a one-line comparison summary for cargo hash investigation logs.
 ///
 /// - `remote_hash`: latest hash resolved from the GitHub remote repository's `main` branch
 /// - `installed_hash`: HEAD resolved from the selected cargo checkout under `git/checkouts`
-/// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`
+/// - `local_hash`: HEAD resolved from the local repository clone under `base_dir`, for
+///   diagnostic logging only
 ///
 /// Logging all three values together makes it easier to see which source diverges when
 /// an unexpected hash is being observed in the field.

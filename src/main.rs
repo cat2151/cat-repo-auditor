@@ -83,6 +83,7 @@ fn apply_cargo_hash_poll_result(
             repo.cargo_remote_hash = remote_hash;
             repo.cargo_remote_hash_checked_at = repo.updated_at_raw.clone();
             repo.cargo_installed_hash = installed_hash;
+            repo.cargo_check_failed = false;
             matches_remote
         }
         None => false,
@@ -99,6 +100,7 @@ fn persist_repo_cargo_state(repo: &RepoInfo) {
             history_repo.cargo_remote_hash = repo.cargo_remote_hash.clone();
             history_repo.cargo_remote_hash_checked_at = repo.cargo_remote_hash_checked_at.clone();
             history_repo.cargo_installed_hash = repo.cargo_installed_hash.clone();
+            history_repo.cargo_check_failed = repo.cargo_check_failed;
         }
     })
     .ok();

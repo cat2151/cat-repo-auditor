@@ -19,8 +19,8 @@ mod types;
 
 use cargo_worker::{apply_cargo_result_to_history, spawn_background_cargo_checks};
 use phase3::{
-    apply_phase3_result, build_phase3_tasks, collect_local_heads, phase3_worker_count,
-    run_phase3_repo_task, spawn_background_local_checks,
+    apply_phase3_result, build_phase3_tasks, phase3_worker_count, run_phase3_repo_task,
+    spawn_background_local_checks,
 };
 
 pub use types::{
@@ -227,10 +227,8 @@ pub fn fetch_repos_with_progress(
                 .map(|repo| repo.name.clone())
                 .collect(),
         ));
-        let local_heads = collect_local_heads(&startup_cargo_repos, &config.local_base_dir);
         Some(spawn_background_cargo_checks(
             &startup_cargo_repos,
-            &local_heads,
             &owner,
             &config.local_base_dir,
             auto_update_run_dir.as_deref(),
@@ -290,11 +288,8 @@ pub fn fetch_repos_with_progress(
                         .map(|repo| repo.name.clone())
                         .collect(),
                 ));
-                let local_heads =
-                    collect_local_heads(&post_fetch_cargo_repos, &config.local_base_dir);
                 Some(spawn_background_cargo_checks(
                     &post_fetch_cargo_repos,
-                    &local_heads,
                     &owner,
                     &config.local_base_dir,
                     auto_update_run_dir.as_deref(),

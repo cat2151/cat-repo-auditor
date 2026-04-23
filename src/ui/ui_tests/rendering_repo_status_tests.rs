@@ -350,6 +350,40 @@ fn draw_ui_shows_cgo_old_from_hash_mismatch_even_if_cached_flag_is_ok() {
 }
 
 #[test]
+fn draw_ui_shows_cgo_unknown_when_latest_cargo_check_failed() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = None;
+    app.repos[0].cargo_installed_hash.clear();
+    app.repos[0].cargo_remote_hash.clear();
+    app.repos[0].cargo_check_failed = true;
+    app.repos[0].readme_ja = Some(false);
+    app.repos[0].pages = Some(false);
+    app.repos[0].readme_ja_badge = Some(false);
+    app.repos[0].deepwiki = Some(false);
+    app.repos[0].wf_workflows = Some(false);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains('?'),
+        "cgo column should show unknown when current cargo check failed: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains("ok") && !repo_line.contains("old"),
+        "failed cargo check should not reuse stale ok/old status: {repo_line}"
+    );
+}
+
+#[test]
 fn draw_ui_shows_cgo_ok_from_hash_match_even_if_cached_flag_is_old() {
     let backend = TestBackend::new(120, 20);
     let mut terminal = Terminal::new(backend).unwrap();

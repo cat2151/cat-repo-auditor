@@ -18,11 +18,8 @@ pub(super) fn get_cargo_bins_inner(
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
     let installs = json.get("installs")?.as_object()?;
 
-    let needle = format!("git+https://github.com/{owner}/{repo_name}#");
-
     for (key, val) in installs {
-        let src = key.trim_end_matches(')');
-        if src.contains(needle.as_str()) {
+        if super::cargo_install_entry_matches_repo(key, owner, repo_name) {
             let bins = val.get("bins")?.as_array()?;
             return Some(
                 bins.iter()

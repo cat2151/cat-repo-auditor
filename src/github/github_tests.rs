@@ -31,6 +31,7 @@ fn make_repo_for_cargo_log() -> RepoInfo {
         cargo_remote_hash: String::from("remote456"),
         cargo_remote_hash_checked_at: String::from("2024-01-01T00:00:00Z"),
         cargo_installed_hash: String::from("installed789"),
+        cargo_check_failed: false,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -109,17 +110,15 @@ fn should_auto_pull_status_matches_issue_rules() {
 fn cargo_check_status_log_explains_run_when_cache_is_current() {
     let repo = make_repo_for_cargo_log();
 
-    let log = format_cargo_check_status_log(&repo, "local123", CargoCheckStatus::new(false, false));
+    let log = format_cargo_check_status_log(&repo, CargoCheckStatus::new(false));
 
     assert!(log.contains(
-        "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
+        "cargo check を実行: local check には依存せず、installed hash 確認のため毎回実行します"
     ));
-    assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=false"));
-    assert!(log.contains("local_head=\"local123\""));
-    assert!(log.contains("cargo_checked_at=\"local123\""));
     assert!(log.contains("cargo_remote_hash_checked_at=\"2024-01-01T00:00:00Z\""));
     assert!(log.contains("cargo_remote_hash_present=true"));
+    assert!(log.contains("cargo_check_failed=false"));
 }
 
 #[test]
@@ -127,12 +126,11 @@ fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
     let mut repo = make_repo_for_cargo_log();
     repo.cargo_remote_hash.clear();
 
-    let log = format_cargo_check_status_log(&repo, "local123", CargoCheckStatus::new(false, true));
+    let log = format_cargo_check_status_log(&repo, CargoCheckStatus::new(true));
 
     assert!(log.contains(
-        "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
+        "cargo check を実行: local check には依存せず、remote hash cache が古いか空です"
     ));
-    assert!(log.contains("needs_cargo_local=false"));
     assert!(log.contains("needs_cargo_remote=true"));
     assert!(log.contains("cargo_remote_hash_present=false"));
     assert!(log.contains("cargo_install=Some(true)"));
@@ -142,44 +140,55 @@ fn cargo_check_status_log_explains_run_when_remote_hash_is_missing() {
 fn cargo_check_status_matches_run_state() {
     let repo = make_repo_for_cargo_log();
 
-    let run_with_current_cache = CargoCheckStatus::for_repo(&repo, "local123");
-    let run = CargoCheckStatus::for_repo(&repo, "different-local-head");
+    let run_with_current_cache = CargoCheckStatus::for_repo(&repo);
+    let mut missing_remote_hash = repo.clone();
+    missing_remote_hash.cargo_remote_hash.clear();
+    let run = CargoCheckStatus::for_repo(&missing_remote_hash);
 
-    assert!(!run_with_current_cache.needs_local());
     assert!(!run_with_current_cache.needs_remote());
-    assert!(run.needs_local());
-    assert_eq!(run.needs_remote(), run_with_current_cache.needs_remote());
+    assert!(run.needs_remote());
 }
 
 #[test]
-fn cargo_check_status_log_explains_run_when_local_head_is_unavailable() {
-    let repo = make_repo_for_cargo_log();
-    let status = CargoCheckStatus::for_repo(&repo, "");
-
-    let log = format_cargo_check_status_log(&repo, "", status);
-
-    assert!(status.needs_local());
-    assert!(!status.needs_remote());
-    assert!(log.contains(
-        "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
-    ));
-    assert!(log.contains("local_head=\"\""));
-}
-
-#[test]
-fn resolve_cargo_check_fields_preserves_last_known_good_values_on_failure() {
+fn resolve_cargo_check_fields_clears_hashes_and_marks_failure_on_failure() {
     let repo = make_repo_for_cargo_log();
 
-    let resolved = resolve_cargo_check_fields(&repo, &repo.updated_at_raw, None);
+    let resolved = resolve_cargo_check_fields(
+        &repo.updated_at_raw,
+        crate::github_local::CargoGitInstallCheck::Failed,
+    );
 
     assert_eq!(
         resolved,
         (
-            repo.cargo_install,
-            repo.cargo_checked_at.clone(),
-            repo.cargo_remote_hash.clone(),
-            repo.cargo_remote_hash_checked_at.clone(),
-            repo.cargo_installed_hash.clone(),
+            None,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            true,
+        )
+    );
+}
+
+#[test]
+fn resolve_cargo_check_fields_clears_hashes_without_failure_when_not_installed() {
+    let repo = make_repo_for_cargo_log();
+
+    let resolved = resolve_cargo_check_fields(
+        &repo.updated_at_raw,
+        crate::github_local::CargoGitInstallCheck::NotInstalled,
+    );
+
+    assert_eq!(
+        resolved,
+        (
+            None,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            false,
         )
     );
 }

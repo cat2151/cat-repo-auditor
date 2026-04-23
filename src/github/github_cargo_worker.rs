@@ -1,7 +1,7 @@
 use crate::{
     github_local::{
         append_cargo_check_after_auto_update_log, append_cargo_check_results,
-        check_cargo_git_install,
+        check_cargo_git_install, check_cargo_git_install_status, CargoGitInstallCheck,
     },
     history::History,
 };
@@ -13,34 +13,23 @@ use super::{
 
 /// Cargo check の状態とログ用の説明材料を保持する。
 ///
-/// `needs_local` / `needs_remote` は実行判定には使わず、ログで
-/// 「何が最新か / 何が古いか」を説明するために保持している。
+/// `needs_remote` は実行判定には使わず、ログで remote hash cache の状態を説明するために保持している。
 #[derive(Clone, Copy)]
 pub(super) struct CargoCheckStatus {
-    needs_local: bool,
     needs_remote: bool,
 }
 
 impl CargoCheckStatus {
-    pub(super) fn for_repo(repo: &RepoInfo, local_head: &str) -> Self {
+    pub(super) fn for_repo(repo: &RepoInfo) -> Self {
         Self {
-            needs_local: repo.cargo_checked_at != local_head,
             needs_remote: repo.cargo_remote_hash_checked_at != repo.updated_at_raw
                 || repo.cargo_remote_hash.is_empty(),
         }
     }
 
     #[cfg(test)]
-    pub(super) fn new(needs_local: bool, needs_remote: bool) -> Self {
-        Self {
-            needs_local,
-            needs_remote,
-        }
-    }
-
-    #[cfg(test)]
-    pub(super) fn needs_local(self) -> bool {
-        self.needs_local
+    pub(super) fn new(needs_remote: bool) -> Self {
+        Self { needs_remote }
     }
 
     #[cfg(test)]
@@ -63,64 +52,62 @@ fn cargo_check_status(
         })
 }
 
-fn local_head_for<'a>(
-    local_heads: &'a std::collections::HashMap<String, String>,
-    repo_name: &str,
-) -> &'a str {
-    local_heads.get(repo_name).map(|s| s.as_str()).unwrap_or("")
-}
-
 fn format_cargo_check_status_reason(status: CargoCheckStatus) -> &'static str {
-    match (status.needs_local, status.needs_remote) {
-        (false, false) => {
-            "cargo check を実行: local HEAD と remote hash cache は最新ですが、installed hash 確認のため毎回実行します"
-        }
-        (false, true) => {
-            "cargo check を実行: local HEAD cache は最新ですが、remote hash cache が古いか空です"
-        }
-        (true, false) => {
-            "cargo check を実行: remote hash cache は最新ですが、local HEAD cache が古いです"
-        }
-        (true, true) => {
-            "cargo check を実行: local HEAD cache と remote hash cache の両方が古いか空です"
-        }
+    if status.needs_remote {
+        "cargo check を実行: local check には依存せず、remote hash cache が古いか空です"
+    } else {
+        "cargo check を実行: local check には依存せず、installed hash 確認のため毎回実行します"
     }
 }
 
-pub(super) fn format_cargo_check_status_log(
-    repo: &RepoInfo,
-    local_head: &str,
-    status: CargoCheckStatus,
-) -> String {
+pub(super) fn format_cargo_check_status_log(repo: &RepoInfo, status: CargoCheckStatus) -> String {
     format!(
-        "{}: needs_cargo_local={} needs_cargo_remote={} local_head={:?} cargo_checked_at={:?} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?}",
+        "{}: needs_cargo_remote={} updated_at_raw={:?} cargo_remote_hash_checked_at={:?} cargo_remote_hash_present={} cargo_install={:?} cargo_check_failed={}",
         format_cargo_check_status_reason(status),
-        status.needs_local,
         status.needs_remote,
-        local_head,
-        repo.cargo_checked_at,
         repo.updated_at_raw,
         repo.cargo_remote_hash_checked_at,
         !repo.cargo_remote_hash.is_empty(),
         repo.cargo_install,
+        repo.cargo_check_failed,
     )
 }
 
 pub(super) fn resolve_cargo_check_fields(
-    repo: &RepoInfo,
     updated_at_raw: &str,
-    cargo_result: Option<(bool, String, String, String)>,
-) -> (Option<bool>, String, String, String, String) {
+    cargo_result: CargoGitInstallCheck,
+) -> (Option<bool>, String, String, String, String, bool) {
     match cargo_result {
         // `loc`（git から実際に読んだ hash）を cargo_cat に使い、
         // 保存値が常に比較に使った正確な hash になるようにする。
-        Some((ok, inst, loc, remote)) => (Some(ok), loc, remote, updated_at_raw.to_string(), inst),
-        None => (
-            repo.cargo_install,
-            repo.cargo_checked_at.clone(),
-            repo.cargo_remote_hash.clone(),
-            repo.cargo_remote_hash_checked_at.clone(),
-            repo.cargo_installed_hash.clone(),
+        CargoGitInstallCheck::Checked {
+            matches_remote,
+            installed_hash,
+            local_hash,
+            remote_hash,
+        } => (
+            Some(matches_remote),
+            local_hash,
+            remote_hash,
+            updated_at_raw.to_string(),
+            installed_hash,
+            false,
+        ),
+        CargoGitInstallCheck::NotInstalled => (
+            None,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            false,
+        ),
+        CargoGitInstallCheck::Failed => (
+            None,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            true,
         ),
     }
 }
@@ -144,6 +131,7 @@ pub(super) struct CargoRepoResult {
     pub(super) cargo_remote_hash: String,
     pub(super) cargo_remote_hash_cat: String,
     pub(super) cargo_installed_hash: String,
+    pub(super) cargo_check_failed: bool,
 }
 
 fn append_auto_update_recheck_log(
@@ -171,12 +159,17 @@ fn build_cargo_tasks(repos: &[RepoInfo]) -> Vec<CargoRepoTask> {
 fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> CargoRepoResult {
     let repo = task.repo;
     let name = repo.name.clone();
-    let (cargo_install, cargo_cat, cargo_remote_hash, cargo_remote_hash_cat, cargo_installed_hash) =
-        resolve_cargo_check_fields(
-            &repo,
-            &repo.updated_at_raw,
-            check_cargo_git_install(owner, name.as_str(), base_dir),
-        );
+    let (
+        cargo_install,
+        cargo_cat,
+        cargo_remote_hash,
+        cargo_remote_hash_cat,
+        cargo_installed_hash,
+        cargo_check_failed,
+    ) = resolve_cargo_check_fields(
+        &repo.updated_at_raw,
+        check_cargo_git_install_status(owner, name.as_str(), base_dir),
+    );
 
     CargoRepoResult {
         name,
@@ -186,6 +179,7 @@ fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> Carg
         cargo_remote_hash,
         cargo_remote_hash_cat,
         cargo_installed_hash,
+        cargo_check_failed,
     }
 }
 
@@ -196,6 +190,7 @@ pub(super) fn apply_cargo_result_to_history(history: &mut History, result: &Carg
         r.cargo_remote_hash = result.cargo_remote_hash.clone();
         r.cargo_remote_hash_checked_at = result.cargo_remote_hash_cat.clone();
         r.cargo_installed_hash = result.cargo_installed_hash.clone();
+        r.cargo_check_failed = result.cargo_check_failed;
     }
 }
 
@@ -210,7 +205,6 @@ pub(super) fn apply_cargo_result_to_history(history: &mut History, result: &Carg
 /// into in-memory history before saving the final history snapshot.
 pub(super) fn spawn_background_cargo_checks(
     repos: &[RepoInfo],
-    local_heads: &std::collections::HashMap<String, String>,
     owner: &str,
     base_dir: &str,
     auto_update_run_dir: Option<&str>,
@@ -218,22 +212,15 @@ pub(super) fn spawn_background_cargo_checks(
 ) -> std::thread::JoinHandle<Vec<CargoRepoResult>> {
     let cargo_check_statuses: std::collections::HashMap<String, CargoCheckStatus> = repos
         .iter()
-        .map(|repo| {
-            let local_head = local_head_for(local_heads, &repo.name);
-            (
-                repo.name.clone(),
-                CargoCheckStatus::for_repo(repo, local_head),
-            )
-        })
+        .map(|repo| (repo.name.clone(), CargoCheckStatus::for_repo(repo)))
         .collect();
     let cargo_check_logs: Vec<(String, String)> = repos
         .iter()
         .map(|repo| {
-            let local_head = local_head_for(local_heads, &repo.name);
             let status = cargo_check_status(&cargo_check_statuses, &repo.name);
             (
                 repo.name.clone(),
-                format_cargo_check_status_log(repo, local_head, status),
+                format_cargo_check_status_log(repo, status),
             )
         })
         .collect();
@@ -294,6 +281,7 @@ pub(super) fn spawn_background_cargo_checks(
                     cargo_remote_hash: result.cargo_remote_hash.clone(),
                     cargo_remote_hash_cat: result.cargo_remote_hash_cat.clone(),
                     cargo_installed_hash: result.cargo_installed_hash.clone(),
+                    cargo_check_failed: result.cargo_check_failed,
                 });
 
                 if auto_update_run_dir.is_some() {

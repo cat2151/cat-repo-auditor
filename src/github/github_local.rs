@@ -9,7 +9,7 @@ mod launch;
 
 pub(crate) use cargo::{
     append_cargo_check_after_auto_update_log, append_cargo_check_results, check_cargo_git_install,
-    get_cargo_bins,
+    check_cargo_git_install_status, get_cargo_bins, CargoGitInstallCheck,
 };
 pub(crate) use checks::{
     check_deepwiki_exists, check_file_exists, check_pages_exists, check_readme_ja_badge,

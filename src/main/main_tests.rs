@@ -46,6 +46,7 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
         cargo_remote_hash: String::new(),
         cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
+        cargo_check_failed: false,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }

@@ -6,32 +6,66 @@ mod checkout;
 #[path = "github_local_cargo_hash_remote.rs"]
 mod remote;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CargoGitInstallCheck {
+    NotInstalled,
+    Failed,
+    Checked {
+        matches_remote: bool,
+        installed_hash: String,
+        local_hash: String,
+        remote_hash: String,
+    },
+}
+
+impl CargoGitInstallCheck {
+    pub(crate) fn as_legacy_tuple(&self) -> Option<(bool, String, String, String)> {
+        match self {
+            Self::Checked {
+                matches_remote,
+                installed_hash,
+                local_hash,
+                remote_hash,
+            } => Some((
+                *matches_remote,
+                installed_hash.clone(),
+                local_hash.clone(),
+                remote_hash.clone(),
+            )),
+            Self::NotInstalled | Self::Failed => None,
+        }
+    }
+}
+
 /// Compare the commit hash of a `cargo install --git` entry against remote HEAD.
 ///
 /// Method:
 ///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name only.
 ///   2. Find `$CARGO_HOME/git/checkouts/<app_name>` or
 ///      `$CARGO_HOME/git/checkouts/<app_name>-*` (exact or prefix match with "-" delimiter).
-///      Multiple matches → call `log_fn` and return None.
+///      Multiple matches → call `log_fn` and mark the check failed.
 ///   3. Sort sub-directories of the checkout by modification timestamp; run `git rev-parse HEAD`
 ///      in the most recently modified one to obtain the installed commit hash.
 ///   4. Run `git ls-remote ... refs/heads/main` against the GitHub remote to obtain the
 ///      remote `main` hash for logging.
-///   5. Run `git rev-parse HEAD` in the local clone for display/debug output.
+///   5. Best-effort: run `git rev-parse HEAD` in the local clone for diagnostic output only.
 ///
-/// Returns:
-///   None                         – repo not installed via `cargo install --git`, OR
-///                                  .crates2.json is missing/unreadable/unparseable, OR
-///                                  checkout directory not found, OR
-///                                  `git rev-parse HEAD` failed, OR
-///                                  `git ls-remote` failed
-///   Some((true,  inst, local, remote))   – installed hash == remote HEAD
-///   Some((false, inst, local, remote))   – installed hash != remote HEAD (stale install)
+/// `check_cargo_git_install` exposes the historical tuple API for callers that only need
+/// checked vs unchecked. `check_cargo_git_install_status` preserves the distinction between
+/// "not installed" and "failed to resolve the current hashes".
 pub(crate) fn check_cargo_git_install(
     owner: &str,
     repo_name: &str,
     base_dir: &str,
 ) -> Option<(bool, String, String, String)> {
+    check_cargo_git_install_status(owner, repo_name, base_dir).as_legacy_tuple()
+}
+
+pub(crate) fn check_cargo_git_install_status(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+) -> CargoGitInstallCheck {
     let cargo_home = super::get_cargo_home();
     check_cargo_git_install_with_resolver_and_logger(
         owner,
@@ -50,7 +84,7 @@ fn check_cargo_git_install_with_resolver_and_logger<L, R>(
     cargo_home: &str,
     mut log_fn: L,
     mut resolve_remote_hash: R,
-) -> Option<(bool, String, String, String)>
+) -> CargoGitInstallCheck
 where
     L: FnMut(&str),
     R: FnMut(&mut L, &str, &str) -> Option<String>,
@@ -70,7 +104,11 @@ where
         &mut resolve_remote_hash,
     );
     let completion_message = match &result {
-        Some((_matches_remote, installed_hash, _local_hash, remote_hash)) => format!(
+        CargoGitInstallCheck::Checked {
+            installed_hash,
+            remote_hash,
+            ..
+        } => format!(
             "終了: cargo check を完了しました (cargo install と remote の比較結果={})",
             if installed_hash == remote_hash {
                 "一致"
@@ -78,7 +116,10 @@ where
                 "不一致"
             }
         ),
-        None => String::from("終了: cargo check を完了しました (チェック対象外または判定不能)"),
+        CargoGitInstallCheck::NotInstalled => {
+            String::from("終了: cargo check を完了しました (チェック対象外)")
+        }
+        CargoGitInstallCheck::Failed => String::from("終了: cargo check を完了しました (判定不能)"),
     };
     super::log_cargo_check_result(&mut log_fn, owner, repo_name, &completion_message);
     result
@@ -101,6 +142,7 @@ pub(super) fn check_cargo_git_install_inner(
         &mut log_fn,
         |log_fn, owner, repo_name| remote::fetch_remote_main_hash(log_fn, owner, repo_name),
     )
+    .as_legacy_tuple()
 }
 
 fn check_cargo_git_install_inner_with_resolver<L, R>(
@@ -110,7 +152,7 @@ fn check_cargo_git_install_inner_with_resolver<L, R>(
     cargo_home: &str,
     log_fn: &mut L,
     mut resolve_remote_hash: R,
-) -> Option<(bool, String, String, String)>
+) -> CargoGitInstallCheck
 where
     L: FnMut(&str),
     R: FnMut(&mut L, &str, &str) -> Option<String>,
@@ -131,9 +173,9 @@ where
                     owner,
                     repo_name,
                     &crates2_path,
-                    "cargo install メタデータファイルが見つからないため、cargo install の確認をスキップします",
+                    "cargo install メタデータファイルが見つからないため、cargo install の確認は判定不能です",
                 );
-                return None;
+                return CargoGitInstallCheck::Failed;
             }
             super::log_cargo_check_path_result(
                 log_fn,
@@ -142,7 +184,7 @@ where
                 &crates2_path,
                 &format!("cargo install メタデータファイルの読み取りに失敗しました: {err}"),
             );
-            return None;
+            return CargoGitInstallCheck::Failed;
         }
     };
     let json: serde_json::Value = match serde_json::from_str(&content) {
@@ -155,7 +197,7 @@ where
                 &crates2_path,
                 &format!("cargo install メタデータファイルの解析に失敗しました: {err}"),
             );
-            return None;
+            return CargoGitInstallCheck::Failed;
         }
     };
     let installs = match json
@@ -171,15 +213,13 @@ where
                 &crates2_path,
                 "cargo install メタデータファイルに installs オブジェクトがありません",
             );
-            return None;
+            return CargoGitInstallCheck::Failed;
         }
     };
 
-    let needle = format!("git+https://github.com/{owner}/{repo_name}#");
-
     let matched_entry = match installs
         .keys()
-        .find(|key| key.trim_end_matches(')').contains(needle.as_str()))
+        .find(|key| super::cargo_install_entry_matches_repo(key, owner, repo_name))
     {
         Some(entry) => entry.to_string(),
         None => {
@@ -190,7 +230,7 @@ where
                 &crates2_path,
                 "cargo install メタデータ内に対象リポジトリが見つからないため、cargo install の確認をスキップします",
             );
-            return None;
+            return CargoGitInstallCheck::NotInstalled;
         }
     };
     let app_name = match matched_entry
@@ -206,7 +246,7 @@ where
                 repo_name,
                 "一致した cargo install エントリに crate 名が含まれていません",
             );
-            return None;
+            return CargoGitInstallCheck::Failed;
         }
     };
     super::log_cargo_check_path_result(
@@ -226,7 +266,10 @@ where
     );
 
     let sub_dir =
-        checkout::resolve_checkout_subdir(log_fn, owner, repo_name, cargo_home, &app_name)?;
+        match checkout::resolve_checkout_subdir(log_fn, owner, repo_name, cargo_home, &app_name) {
+            Some(sub_dir) => sub_dir,
+            None => return CargoGitInstallCheck::Failed,
+        };
 
     let installed_command = super::format_git_rev_parse_head_command(&sub_dir);
     super::log_cargo_check_result(
@@ -251,12 +294,12 @@ where
                 repo_name,
                 &format!("コマンドの起動に失敗しました: コマンド={installed_command}: {err}"),
             );
-            return None;
+            return CargoGitInstallCheck::Failed;
         }
     };
     super::log_cargo_check_command_result(log_fn, owner, repo_name, &installed_command, &out);
     if !out.status.success() {
-        return None;
+        return CargoGitInstallCheck::Failed;
     }
     let installed_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if installed_hash.is_empty() {
@@ -266,7 +309,7 @@ where
             repo_name,
             "インストール済み checkout の HEAD ハッシュが空です",
         );
-        return None;
+        return CargoGitInstallCheck::Failed;
     }
     super::log_cargo_check_result(
         log_fn,
@@ -274,7 +317,10 @@ where
         repo_name,
         &format!("インストール済み checkout のコミットハッシュを取得しました: {installed_hash}"),
     );
-    let remote_hash = resolve_remote_hash(log_fn, owner, repo_name)?;
+    let remote_hash = match resolve_remote_hash(log_fn, owner, repo_name) {
+        Some(remote_hash) => remote_hash,
+        None => return CargoGitInstallCheck::Failed,
+    };
 
     let repo_path = Path::new(base_dir).join(repo_name);
     let local_command = super::format_git_rev_parse_head_command(&repo_path);
@@ -296,14 +342,36 @@ where
                 log_fn,
                 owner,
                 repo_name,
-                &format!("コマンドの起動に失敗しました: コマンド={local_command}: {err}"),
+                &format!(
+                    "ローカルリポジトリのコミットハッシュ取得に失敗しましたが、cargo install と remote の判定は継続します: コマンド={local_command}: {err}"
+                ),
             );
-            return None;
+            return finish_cargo_git_install_check(
+                log_fn,
+                owner,
+                repo_name,
+                installed_hash,
+                String::new(),
+                remote_hash,
+            );
         }
     };
     super::log_cargo_check_command_result(log_fn, owner, repo_name, &local_command, &out);
     if !out.status.success() {
-        return None;
+        super::log_cargo_check_result(
+            log_fn,
+            owner,
+            repo_name,
+            "ローカルリポジトリのコミットハッシュ取得に失敗しましたが、cargo install と remote の判定は継続します",
+        );
+        return finish_cargo_git_install_check(
+            log_fn,
+            owner,
+            repo_name,
+            installed_hash,
+            String::new(),
+            remote_hash,
+        );
     }
     let local_hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if local_hash.is_empty() {
@@ -311,9 +379,16 @@ where
             log_fn,
             owner,
             repo_name,
-            "ローカルリポジトリの HEAD ハッシュが空です",
+            "ローカルリポジトリの HEAD ハッシュが空ですが、cargo install と remote の判定は継続します",
         );
-        return None;
+        return finish_cargo_git_install_check(
+            log_fn,
+            owner,
+            repo_name,
+            installed_hash,
+            String::new(),
+            remote_hash,
+        );
     }
     super::log_cargo_check_result(
         log_fn,
@@ -322,6 +397,24 @@ where
         &format!("ローカルリポジトリのコミットハッシュを取得しました: {local_hash}"),
     );
 
+    finish_cargo_git_install_check(
+        log_fn,
+        owner,
+        repo_name,
+        installed_hash,
+        local_hash,
+        remote_hash,
+    )
+}
+
+fn finish_cargo_git_install_check(
+    log_fn: &mut impl FnMut(&str),
+    owner: &str,
+    repo_name: &str,
+    installed_hash: String,
+    local_hash: String,
+    remote_hash: String,
+) -> CargoGitInstallCheck {
     super::log_cargo_check_result(
         log_fn,
         owner,
@@ -342,12 +435,12 @@ where
         ),
     );
 
-    Some((
-        installed_hash == remote_hash,
+    CargoGitInstallCheck::Checked {
+        matches_remote: installed_hash == remote_hash,
         installed_hash,
         local_hash,
         remote_hash,
-    ))
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +474,7 @@ pub(super) fn check_cargo_git_install_inner_with_remote_hash(
             Some(remote_hash.to_string())
         },
     )
+    .as_legacy_tuple()
 }
 
 #[cfg(test)]
@@ -414,4 +508,5 @@ pub(super) fn check_cargo_git_install_with_remote_hash_and_logger(
             Some(remote_hash.to_string())
         },
     )
+    .as_legacy_tuple()
 }

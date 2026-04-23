@@ -61,7 +61,8 @@ pub struct RepoInfo {
     #[serde(default)]
     pub deepwiki_checked_at: String,
 
-    /// None = repo not found in .crates2.json (not installed via cargo install --git)
+    /// None = repo not found in .crates2.json, or latest cargo check failed.
+    /// Use `cargo_check_failed` to distinguish failure from not installed.
     /// Some(true) = installed hash == remote main HEAD, Some(false) = stale against upstream
     #[serde(default)]
     pub cargo_install: Option<bool>,
@@ -77,6 +78,9 @@ pub struct RepoInfo {
     /// installed commit hash from .crates2.json
     #[serde(default)]
     pub cargo_installed_hash: String,
+    /// true when the latest cargo check could not resolve current installed/remote hashes.
+    #[serde(default)]
+    pub cargo_check_failed: bool,
 
     /// Required workflow yml files are present in .github/workflows/
     #[serde(default)]
@@ -175,6 +179,7 @@ pub enum FetchProgress {
         cargo_remote_hash: String,
         cargo_remote_hash_cat: String,
         cargo_installed_hash: String,
+        cargo_check_failed: bool,
     },
     RequestAutoUpdateLaunch(AutoUpdateLaunchRequest),
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),

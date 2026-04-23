@@ -149,11 +149,11 @@ pub(crate) fn draw_help_dialog(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled("  cgo ", Style::default().fg(c(app, MK_GREEN))),
-            Span::raw("ok=cargo install HEAD matches local"),
+            Span::raw("ok=installed hash matches remote HEAD"),
         ]),
         Line::from(vec![
             Span::styled("      ", Style::default().fg(c(app, MK_ORANGE))),
-            Span::raw("old=installed hash differs from HEAD"),
+            Span::raw("old=installed differs, ?=check failed"),
         ]),
     ];
 

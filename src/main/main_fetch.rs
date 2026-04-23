@@ -15,12 +15,14 @@ fn apply_cargo_update(
     cargo_remote_hash: String,
     cargo_remote_hash_cat: String,
     cargo_installed_hash: String,
+    cargo_check_failed: bool,
 ) {
     repo.cargo_install = cargo_install;
     repo.cargo_checked_at = cargo_cat;
     repo.cargo_remote_hash = cargo_remote_hash;
     repo.cargo_remote_hash_checked_at = cargo_remote_hash_cat;
     repo.cargo_installed_hash = cargo_installed_hash;
+    repo.cargo_check_failed = cargo_check_failed;
 }
 
 /// Return true when the repo already holds cargo fields that were updated live in the current
@@ -34,6 +36,7 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
         || !repo.cargo_remote_hash.is_empty()
         || !repo.cargo_remote_hash_checked_at.is_empty()
         || !repo.cargo_installed_hash.is_empty()
+        || repo.cargo_check_failed
 }
 
 fn merge_live_repo_state_from(
@@ -46,6 +49,7 @@ fn merge_live_repo_state_from(
         incoming.cargo_remote_hash = existing.cargo_remote_hash.clone();
         incoming.cargo_remote_hash_checked_at = existing.cargo_remote_hash_checked_at.clone();
         incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
+        incoming.cargo_check_failed = existing.cargo_check_failed;
     }
 }
 
@@ -169,6 +173,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 cargo_remote_hash,
                 cargo_remote_hash_cat,
                 cargo_installed_hash,
+                cargo_check_failed,
             }) => {
                 if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
                     apply_cargo_update(
@@ -178,6 +183,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                         cargo_remote_hash,
                         cargo_remote_hash_cat,
                         cargo_installed_hash,
+                        cargo_check_failed,
                     );
                 }
                 app.finish_pending_cargo_repo(&name);

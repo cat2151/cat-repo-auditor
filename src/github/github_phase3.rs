@@ -3,7 +3,6 @@ use crate::github_local::{
     check_deepwiki_exists, check_file_exists, check_local_status_no_fetch, check_pages_exists,
     check_readme_ja_badge, check_workflows, local_head_hash_no_fetch,
 };
-use std::collections::HashMap;
 
 #[derive(Clone)]
 pub(super) struct Phase3RepoTask {
@@ -43,34 +42,6 @@ pub(super) fn phase3_worker_count(total_check: usize) -> usize {
         .map(std::num::NonZeroUsize::get)
         .unwrap_or(4)
         .min(total_check)
-}
-
-pub(super) fn collect_local_heads(
-    repos: &[RepoInfo],
-    local_base_dir: &str,
-) -> HashMap<String, String> {
-    repos
-        .iter()
-        .filter(|r| r.has_local_git)
-        .filter_map(|r| {
-            let path = format!(
-                "{}/{}",
-                local_base_dir.trim_end_matches(['/', '\\']),
-                r.name
-            );
-            let out = std::process::Command::new("git")
-                .args(["-C", &path, "rev-parse", "HEAD"])
-                .output()
-                .ok()?;
-            if !out.status.success() {
-                return None;
-            }
-            Some((
-                r.name.clone(),
-                String::from_utf8_lossy(&out.stdout).trim().to_string(),
-            ))
-        })
-        .collect()
 }
 
 pub(super) fn apply_phase3_result(repo: &mut RepoInfo, result: &Phase3RepoResult) {

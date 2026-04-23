@@ -10,8 +10,21 @@ use std::time::Duration;
 mod success_tests;
 
 fn make_crates2_json(owner: &str, repo: &str, crate_name: &str) -> String {
+    make_crates2_json_with_repo_url(owner, repo, crate_name, &format!("{repo}#"))
+}
+
+fn make_crates2_json_with_dot_git(owner: &str, repo: &str, crate_name: &str) -> String {
+    make_crates2_json_with_repo_url(owner, repo, crate_name, &format!("{repo}.git#"))
+}
+
+fn make_crates2_json_with_repo_url(
+    owner: &str,
+    _repo: &str,
+    crate_name: &str,
+    repo_url_suffix: &str,
+) -> String {
     let key = format!(
-        "{crate_name} 0.1.0 (git+https://github.com/{owner}/{repo}#0123456789abcdef0123456789abcdef01234567)"
+        "{crate_name} 0.1.0 (git+https://github.com/{owner}/{repo_url_suffix}0123456789abcdef0123456789abcdef01234567)"
     );
     format!(
         "{{\"installs\":{{\"{key}\":{{\"version_req\":null,\"bins\":[\"{crate_name}\"],\
@@ -185,6 +198,32 @@ fn cargo_install_returns_none_and_logs_when_repo_not_in_crates2() {
 }
 
 #[test]
+fn cargo_install_matches_crates2_git_url_with_dot_git_suffix() {
+    let tmp = unique_temp_dir("cargo_test_dot_git_match");
+    let json = make_crates2_json_with_dot_git("owner", "myrepo", "myrepo");
+    std::fs::write(tmp.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_inner(
+        "owner",
+        "myrepo",
+        "/nonexistent",
+        tmp.to_str().unwrap(),
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    assert!(result.is_none());
+    assert!(logs.iter().any(|msg| {
+        msg.contains("一致した cargo install エントリ=")
+            && msg.contains("git+https://github.com/owner/myrepo.git#")
+    }));
+    assert!(!logs
+        .iter()
+        .any(|msg| msg.contains("cargo install メタデータ内に対象リポジトリが見つからない")));
+}
+
+#[test]
 fn cargo_install_none_when_checkouts_dir_missing() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_nocheckouts_{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
@@ -322,6 +361,42 @@ fn cargo_install_returns_some_false_when_hashes_differ() {
 }
 
 #[test]
+fn cargo_install_does_not_depend_on_local_clone_hash() {
+    let tmp = unique_temp_dir("cargo_test_no_local_clone");
+    let cargo_home = tmp.join("cargo_home");
+    let sub_dir = cargo_home
+        .join("git")
+        .join("checkouts")
+        .join("myrepo-abc12345")
+        .join("abcdef12");
+    let installed_hash = init_git_repo_with_content(&sub_dir, "installed-content");
+
+    let json = make_crates2_json("owner", "myrepo", "myrepo");
+    std::fs::write(cargo_home.join(".crates2.json"), &json).unwrap();
+
+    let mut logs = Vec::new();
+    let result = check_cargo_git_install_inner_with_remote_hash(
+        "owner",
+        "myrepo",
+        tmp.join("repos").to_str().unwrap(),
+        cargo_home.to_str().unwrap(),
+        &installed_hash,
+        |msg| logs.push(msg.to_string()),
+    );
+    std::fs::remove_dir_all(&tmp).ok();
+
+    let (matches, inst, loc, remote) = result.expect("local clone failure must not block cgo");
+    assert!(matches);
+    assert_eq!(inst, installed_hash);
+    assert_eq!(loc, "");
+    assert_eq!(remote, installed_hash);
+    assert!(logs.iter().any(|msg| {
+        msg.contains("ローカルリポジトリのコミットハッシュ取得に失敗しました")
+            && msg.contains("判定は継続します")
+    }));
+}
+
+#[test]
 fn cargo_install_picks_latest_mtime_subdir() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_mtime_{}", std::process::id()));
     let local_repo = tmp.join("repos").join("myrepo");
@@ -419,8 +494,7 @@ fn cargo_install_wrapper_logs_skip_reason_and_end_when_repo_is_not_target() {
         msg.contains("cargo install メタデータ内に対象リポジトリが見つからないため、cargo install の確認をスキップします")
     }));
     assert!(logs.iter().any(|msg| {
-        msg.contains("終了: cargo check を完了しました")
-            && msg.contains("チェック対象外または判定不能")
+        msg.contains("終了: cargo check を完了しました") && msg.contains("チェック対象外")
     }));
 }
 
@@ -428,6 +502,18 @@ fn cargo_install_wrapper_logs_skip_reason_and_end_when_repo_is_not_target() {
 fn get_cargo_bins_returns_installed_bins_for_matching_repo() {
     let tmp = unique_temp_dir("cargo_test_bins");
     let json = make_crates2_json("owner", "myrepo", "catrepo");
+    std::fs::write(tmp.join(".crates2.json"), json).unwrap();
+
+    let bins = get_cargo_bins_inner(&tmp, "owner", "myrepo");
+
+    std::fs::remove_dir_all(&tmp).ok();
+    assert_eq!(bins, Some(vec![String::from("catrepo")]));
+}
+
+#[test]
+fn get_cargo_bins_matches_git_url_with_dot_git_suffix() {
+    let tmp = unique_temp_dir("cargo_test_bins_dot_git");
+    let json = make_crates2_json_with_dot_git("owner", "myrepo", "catrepo");
     std::fs::write(tmp.join(".crates2.json"), json).unwrap();
 
     let bins = get_cargo_bins_inner(&tmp, "owner", "myrepo");

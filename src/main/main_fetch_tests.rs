@@ -69,6 +69,7 @@ fn make_repo(name: &str) -> RepoInfo {
         cargo_remote_hash: String::new(),
         cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
+        cargo_check_failed: false,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -321,6 +322,7 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
         cargo_remote_hash: String::from("remote456"),
         cargo_remote_hash_cat: String::from("2024-01-02T00:00:00Z"),
         cargo_installed_hash: String::from("installed789"),
+        cargo_check_failed: false,
     })
     .unwrap();
     drop(tx);
@@ -336,6 +338,45 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     assert_eq!(repo.cargo_remote_hash, "remote456");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-02T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed789");
+    assert!(!repo.cargo_check_failed);
+    assert!(!app.pending_cargo_repos.contains("repo"));
+}
+
+#[test]
+fn drain_fetch_channel_applies_cargo_check_failure_without_reusing_cached_hashes() {
+    let mut app = App::new(make_config());
+    let mut repo = make_repo("repo");
+    repo.cargo_install = Some(true);
+    repo.cargo_checked_at = String::from("cached-local");
+    repo.cargo_remote_hash = String::from("cached-remote");
+    repo.cargo_remote_hash_checked_at = String::from("2024-01-01T00:00:00Z");
+    repo.cargo_installed_hash = String::from("cached-installed");
+    app.repos = vec![repo];
+    app.pending_cargo_repos.insert(String::from("repo"));
+
+    let (tx, rx) = mpsc::channel();
+    tx.send(FetchProgress::CargoUpdate {
+        name: String::from("repo"),
+        cargo_install: None,
+        cargo_cat: String::new(),
+        cargo_remote_hash: String::new(),
+        cargo_remote_hash_cat: String::new(),
+        cargo_installed_hash: String::new(),
+        cargo_check_failed: true,
+    })
+    .unwrap();
+    drop(tx);
+
+    let mut fetch_rx = Some(rx);
+    drain_fetch_channel(&mut app, &mut fetch_rx);
+
+    let repo = &app.repos[0];
+    assert_eq!(repo.cargo_install, None);
+    assert!(repo.cargo_checked_at.is_empty());
+    assert!(repo.cargo_remote_hash.is_empty());
+    assert!(repo.cargo_remote_hash_checked_at.is_empty());
+    assert!(repo.cargo_installed_hash.is_empty());
+    assert!(repo.cargo_check_failed);
     assert!(!app.pending_cargo_repos.contains("repo"));
 }
 
