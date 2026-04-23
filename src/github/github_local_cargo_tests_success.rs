@@ -104,6 +104,9 @@ fn cargo_install_logs_hash_source_details() {
             && msg.contains(&crates2_path_display)
             && msg.contains("一致した cargo install エントリ=")
             && msg.contains(&expected_matched_crate_name)
+            && msg.contains("一致した git repo 名=\"myrepo\"")
+            && msg.contains("metadata revision=")
+            && msg.contains("metadata revision source=.crates2.json")
     }));
     assert!(logs.iter().any(|msg| {
         msg.contains(
@@ -130,6 +133,11 @@ fn cargo_install_logs_hash_source_details() {
         msg.contains(&format!(
             "インストール済み checkout のコミットハッシュを取得しました: {local_hash}"
         ))
+    }));
+    assert!(logs.iter().any(|msg| {
+        msg.contains("参考: metadata revision と checkout HEAD が一致しません")
+            && msg.contains(DEFAULT_METADATA_REVISION)
+            && msg.contains(&local_hash)
     }));
     assert!(logs
         .iter()

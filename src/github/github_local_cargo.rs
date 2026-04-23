@@ -17,6 +17,7 @@ use bins::get_cargo_bins_inner;
 #[cfg(test)]
 use hash::{
     check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
+    check_cargo_git_install_status_with_remote_failure_and_logger,
     check_cargo_git_install_with_remote_hash_and_logger,
 };
 

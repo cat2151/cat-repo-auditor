@@ -23,9 +23,24 @@ fn matches_checkout_dir_name(dir_name: &str, app_name: &str) -> bool {
             })
 }
 
-/// Resolve the newest cargo git checkout sub-directory for the matched crate name.
+fn unique_checkout_name_candidates(repo_checkout_name: &str, app_name: &str) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    for name in [repo_checkout_name, app_name] {
+        if !name.is_empty()
+            && !candidates
+                .iter()
+                .any(|candidate| candidate.as_str() == name)
+        {
+            candidates.push(name.to_string());
+        }
+    }
+    candidates
+}
+
+/// Resolve the newest cargo git checkout sub-directory for the matched git install entry.
 ///
-/// Returns `Some(path)` only when exactly one checkout base directory matches `app_name`
+/// Returns `Some(path)` only when exactly one checkout base directory matches the repo name
+/// or crate name, in that priority order,
 /// and that directory contains at least one checkout sub-directory to inspect. Any
 /// directory read failure, ambiguous match, or missing checkout candidate is logged via
 /// `log_fn` and results in `None`.
@@ -34,18 +49,14 @@ pub(super) fn resolve_checkout_subdir(
     owner: &str,
     repo_name: &str,
     cargo_home: &str,
+    repo_checkout_name: &str,
     app_name: &str,
 ) -> Option<PathBuf> {
     let checkouts_dir = Path::new(cargo_home).join("git").join("checkouts");
-    let matches: Vec<PathBuf> = match std::fs::read_dir(&checkouts_dir) {
+    let checkout_base_dirs: Vec<PathBuf> = match std::fs::read_dir(&checkouts_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_dir())
-            .filter(|e| {
-                let name = e.file_name();
-                let s = name.to_string_lossy();
-                matches_checkout_dir_name(s.as_ref(), app_name)
-            })
             .map(|e| e.path())
             .collect(),
         Err(err) => {
@@ -59,50 +70,70 @@ pub(super) fn resolve_checkout_subdir(
             return None;
         }
     };
-    let checkout_candidate_names = matches
-        .iter()
-        .filter_map(|path| {
-            path.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .collect::<Vec<_>>();
+
+    let checkout_name_candidates = unique_checkout_name_candidates(repo_checkout_name, app_name);
     super::super::log_cargo_check_path_result(
         log_fn,
         owner,
         repo_name,
         &checkouts_dir,
-        &format!("checkouts 配下の hash 取得候補 dir 名一覧={checkout_candidate_names:?}"),
+        &format!("checkout dir 名の探索候補={checkout_name_candidates:?}"),
     );
 
-    if matches.is_empty() {
-        super::super::log_cargo_check_path_result(
-            log_fn,
-            owner,
-            repo_name,
-            &checkouts_dir,
-            &format!("{app_name:?} に対応する checkout ディレクトリが見つかりません"),
-        );
-        return None;
-    }
+    let mut checkout_base = None;
+    for candidate_name in checkout_name_candidates {
+        let matches: Vec<PathBuf> = checkout_base_dirs
+            .iter()
+            .filter(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy())
+                    .is_some_and(|name| matches_checkout_dir_name(name.as_ref(), &candidate_name))
+            })
+            .cloned()
+            .collect();
+        if matches.is_empty() {
+            continue;
+        }
 
-    if matches.len() > 1 {
+        let checkout_candidate_names = matches
+            .iter()
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .collect::<Vec<_>>();
         super::super::log_cargo_check_path_result(
             log_fn,
             owner,
             repo_name,
             &checkouts_dir,
             &format!(
-                "{app_name:?} に対応する checkout ディレクトリが複数見つかりました: {:?}",
-                matches
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
+                "checkouts 配下の hash 取得候補 dir 名一覧={checkout_candidate_names:?} (探索名={candidate_name:?})"
             ),
         );
-        return None;
+
+        if matches.len() > 1 {
+            super::super::log_cargo_check_path_result(
+                log_fn,
+                owner,
+                repo_name,
+                &checkouts_dir,
+                &format!(
+                    "{candidate_name:?} に対応する checkout ディレクトリが複数見つかりました: {:?}",
+                    matches
+                        .iter()
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                ),
+            );
+            return None;
+        }
+
+        checkout_base = matches.into_iter().next();
+        break;
     }
 
-    let checkout_base = match matches.into_iter().next() {
+    let checkout_base = match checkout_base {
         Some(path) => path,
         None => {
             super::super::log_cargo_check_path_result(
@@ -111,7 +142,7 @@ pub(super) fn resolve_checkout_subdir(
                 repo_name,
                 &checkouts_dir,
                 &format!(
-                    "絞り込み後に {app_name:?} の checkout ディレクトリが見つかりません (内部不整合)"
+                    "{repo_checkout_name:?} / {app_name:?} に対応する checkout ディレクトリが見つかりません"
                 ),
             );
             return None;
@@ -192,7 +223,23 @@ pub(super) fn resolve_checkout_subdir(
 
 #[cfg(test)]
 mod tests {
-    use super::matches_checkout_dir_name;
+    use super::{matches_checkout_dir_name, unique_checkout_name_candidates};
+
+    #[test]
+    fn unique_checkout_name_candidates_prefers_repo_name_then_crate_name() {
+        assert_eq!(
+            unique_checkout_name_candidates("clap-mml-play-server", "clap-mml-render-server"),
+            vec!["clap-mml-play-server", "clap-mml-render-server"]
+        );
+    }
+
+    #[test]
+    fn unique_checkout_name_candidates_deduplicates_same_name() {
+        assert_eq!(
+            unique_checkout_name_candidates("own-repos-curator", "own-repos-curator"),
+            vec!["own-repos-curator"]
+        );
+    }
 
     #[test]
     fn matches_checkout_dir_name_accepts_exact_name() {

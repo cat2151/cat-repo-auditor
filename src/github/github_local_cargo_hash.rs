@@ -37,15 +37,49 @@ impl CargoGitInstallCheck {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CargoInstallMetadata {
+    crate_name: String,
+    git_url: String,
+    repo_name: String,
+    metadata_revision: String,
+}
+
+fn parse_cargo_install_entry(entry: &str) -> Option<CargoInstallMetadata> {
+    let crate_name = entry.split_whitespace().next()?.to_string();
+    let git_start = entry.find("git+")? + "git+".len();
+    let source = entry[git_start..].trim();
+    let source = source.strip_suffix(')').unwrap_or(source).trim();
+    let (git_url, metadata_revision) = source.split_once('#')?;
+    let git_url = git_url.trim();
+    let metadata_revision = metadata_revision.trim().trim_end_matches(')').trim();
+    if git_url.is_empty() || metadata_revision.is_empty() {
+        return None;
+    }
+
+    let normalized_git_url = git_url.trim_end_matches('/').trim_end_matches(".git");
+    let repo_name = normalized_git_url.rsplit('/').next()?.trim();
+    if repo_name.is_empty() {
+        return None;
+    }
+
+    Some(CargoInstallMetadata {
+        crate_name,
+        git_url: git_url.to_string(),
+        repo_name: repo_name.to_string(),
+        metadata_revision: metadata_revision.to_string(),
+    })
+}
+
 /// Compare the commit hash of a `cargo install --git` entry against remote HEAD.
 ///
 /// Method:
-///   1. Parse `.crates2.json` for the matching entry to get the crate (app) name only.
-///   2. Find `$CARGO_HOME/git/checkouts/<app_name>` or
-///      `$CARGO_HOME/git/checkouts/<app_name>-*` (exact or prefix match with "-" delimiter).
-///      Multiple matches → call `log_fn` and mark the check failed.
-///   3. Sort sub-directories of the checkout by modification timestamp; run `git rev-parse HEAD`
-///      in the most recently modified one to obtain the installed commit hash.
+///   1. Parse `.crates2.json` for the matching entry to get the crate name, git repo name,
+///      and Cargo metadata revision for logging.
+///   2. Find `$CARGO_HOME/git/checkouts/<repo_name>` / `<repo_name>-*`, then
+///      `<crate_name>` / `<crate_name>-*`.
+///   3. Run `git rev-parse HEAD` in the selected checkout cache to obtain the installed
+///      commit hash.
 ///   4. Run `git ls-remote ... refs/heads/main` against the GitHub remote to obtain the
 ///      remote `main` hash for logging.
 ///   5. Best-effort: run `git rev-parse HEAD` in the local clone for diagnostic output only.
@@ -233,18 +267,14 @@ where
             return CargoGitInstallCheck::NotInstalled;
         }
     };
-    let app_name = match matched_entry
-        .split_whitespace()
-        .next()
-        .map(|s| s.to_string())
-    {
-        Some(app_name) => app_name,
+    let install_metadata = match parse_cargo_install_entry(&matched_entry) {
+        Some(metadata) => metadata,
         None => {
             super::log_cargo_check_result(
                 log_fn,
                 owner,
                 repo_name,
-                "一致した cargo install エントリに crate 名が含まれていません",
+                "一致した cargo install エントリから crate 名、git repo 名、または metadata revision を抽出できません",
             );
             return CargoGitInstallCheck::Failed;
         }
@@ -255,7 +285,11 @@ where
         repo_name,
         &crates2_path,
         &format!(
-            "一致した cargo install エントリ={matched_entry:?}、一致した crate 名={app_name:?}"
+            "一致した cargo install エントリ={matched_entry:?}、一致した crate 名={:?}、一致した git URL={:?}、一致した git repo 名={:?}、metadata revision={:?}、metadata revision source=.crates2.json",
+            install_metadata.crate_name,
+            install_metadata.git_url,
+            install_metadata.repo_name,
+            install_metadata.metadata_revision,
         ),
     );
     super::log_cargo_check_result(
@@ -265,11 +299,17 @@ where
         "cargo install メタデータに対象リポジトリの情報があるため、cargo check の対象です",
     );
 
-    let sub_dir =
-        match checkout::resolve_checkout_subdir(log_fn, owner, repo_name, cargo_home, &app_name) {
-            Some(sub_dir) => sub_dir,
-            None => return CargoGitInstallCheck::Failed,
-        };
+    let sub_dir = match checkout::resolve_checkout_subdir(
+        log_fn,
+        owner,
+        repo_name,
+        cargo_home,
+        &install_metadata.repo_name,
+        &install_metadata.crate_name,
+    ) {
+        Some(sub_dir) => sub_dir,
+        None => return CargoGitInstallCheck::Failed,
+    };
 
     let installed_command = super::format_git_rev_parse_head_command(&sub_dir);
     super::log_cargo_check_result(
@@ -317,6 +357,18 @@ where
         repo_name,
         &format!("インストール済み checkout のコミットハッシュを取得しました: {installed_hash}"),
     );
+    if install_metadata.metadata_revision != installed_hash {
+        super::log_cargo_check_result(
+            log_fn,
+            owner,
+            repo_name,
+            &format!(
+                "参考: metadata revision と checkout HEAD が一致しません: metadata revision={} checkout HEAD={} 判定には checkout HEAD を使用します",
+                install_metadata.metadata_revision, installed_hash
+            ),
+        );
+    }
+
     let remote_hash = match resolve_remote_hash(log_fn, owner, repo_name) {
         Some(remote_hash) => remote_hash,
         None => return CargoGitInstallCheck::Failed,
@@ -475,6 +527,75 @@ pub(super) fn check_cargo_git_install_inner_with_remote_hash(
         },
     )
     .as_legacy_tuple()
+}
+
+#[cfg(test)]
+pub(super) fn check_cargo_git_install_status_with_remote_failure_and_logger(
+    owner: &str,
+    repo_name: &str,
+    base_dir: &str,
+    cargo_home: &str,
+    mut log_fn: impl FnMut(&str),
+) -> CargoGitInstallCheck {
+    check_cargo_git_install_inner_with_resolver(
+        owner,
+        repo_name,
+        base_dir,
+        cargo_home,
+        &mut log_fn,
+        |log_fn, owner, repo_name| {
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                "remote のコミットハッシュ取得を開始します",
+            );
+            super::log_cargo_check_result(
+                log_fn,
+                owner,
+                repo_name,
+                "remote のコミットハッシュ取得に失敗しました",
+            );
+            None
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_cargo_install_entry;
+
+    #[test]
+    fn parse_cargo_install_entry_extracts_crate_repo_and_revision_without_dot_git() {
+        let metadata = parse_cargo_install_entry(
+            "clap-mml-render-server 0.1.0 (git+https://github.com/cat2151/clap-mml-play-server#f7861234)",
+        )
+        .expect("metadata should parse");
+
+        assert_eq!(metadata.crate_name, "clap-mml-render-server");
+        assert_eq!(
+            metadata.git_url,
+            "https://github.com/cat2151/clap-mml-play-server"
+        );
+        assert_eq!(metadata.repo_name, "clap-mml-play-server");
+        assert_eq!(metadata.metadata_revision, "f7861234");
+    }
+
+    #[test]
+    fn parse_cargo_install_entry_extracts_repo_name_with_dot_git_suffix() {
+        let metadata = parse_cargo_install_entry(
+            "cat-edit-mml 0.1.0 (git+https://github.com/cat2151/cat-edit-mml.git#d27b5678)",
+        )
+        .expect("metadata should parse");
+
+        assert_eq!(metadata.crate_name, "cat-edit-mml");
+        assert_eq!(
+            metadata.git_url,
+            "https://github.com/cat2151/cat-edit-mml.git"
+        );
+        assert_eq!(metadata.repo_name, "cat-edit-mml");
+        assert_eq!(metadata.metadata_revision, "d27b5678");
+    }
 }
 
 #[cfg(test)]
