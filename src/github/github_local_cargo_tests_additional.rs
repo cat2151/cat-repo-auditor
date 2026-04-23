@@ -90,7 +90,7 @@ fn cargo_install_does_not_depend_on_local_clone_hash() {
     );
     std::fs::remove_dir_all(&tmp).ok();
 
-    let (matches, inst, loc, remote) = result.expect("local clone failure must not block cgo");
+    let (matches, inst, loc, remote) = result.expect("local clone failure must not block cargo");
     assert!(matches);
     assert_eq!(inst, installed_hash);
     assert_eq!(loc, "");

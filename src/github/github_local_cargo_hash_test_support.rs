@@ -3,7 +3,7 @@ use super::{
     CargoGitInstallCheck,
 };
 
-pub(crate) fn check_cargo_git_install_inner_with_remote_hash(
+pub(in super::super) fn check_cargo_git_install_inner_with_remote_hash(
     owner: &str,
     repo_name: &str,
     base_dir: &str,
@@ -36,7 +36,7 @@ pub(crate) fn check_cargo_git_install_inner_with_remote_hash(
     .as_legacy_tuple()
 }
 
-pub(crate) fn check_cargo_git_install_status_with_remote_failure_and_logger(
+pub(in super::super) fn check_cargo_git_install_status_with_remote_failure_and_logger(
     owner: &str,
     repo_name: &str,
     base_dir: &str,
@@ -67,7 +67,7 @@ pub(crate) fn check_cargo_git_install_status_with_remote_failure_and_logger(
     )
 }
 
-pub(crate) fn check_cargo_git_install_with_remote_hash_and_logger(
+pub(in super::super) fn check_cargo_git_install_with_remote_hash_and_logger(
     owner: &str,
     repo_name: &str,
     base_dir: &str,
