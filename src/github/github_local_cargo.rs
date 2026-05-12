@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 use std::process::Output;
+use std::sync::{Mutex, OnceLock};
 
 #[path = "github_local_cargo_bins.rs"]
 mod bins;
@@ -11,6 +12,8 @@ pub(crate) use bins::get_cargo_bins;
 pub(crate) use hash::{
     check_cargo_git_install, check_cargo_git_install_status, CargoGitInstallCheck,
 };
+
+static LOG_APPEND_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[cfg(test)]
 use bins::get_cargo_bins_inner;
@@ -38,6 +41,10 @@ fn append_log_messages_to_path(
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
+    let _guard = LOG_APPEND_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

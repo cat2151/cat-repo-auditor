@@ -26,6 +26,72 @@ fn append_cargo_check_after_auto_update_log_writes_repo_section_and_messages() {
 }
 
 #[test]
+fn append_log_messages_to_path_serializes_concurrent_batches() {
+    let tmp = unique_temp_dir("cargo_log_batch_mutex");
+    let log_path = tmp.join("logs").join("log.txt");
+    let thread_count = 8;
+    let batch_count = 25;
+    let lines_per_batch = 4;
+    let start = std::sync::Arc::new(std::sync::Barrier::new(thread_count));
+
+    let handles = (0..thread_count)
+        .map(|thread_index| {
+            let log_path = log_path.clone();
+            let start = std::sync::Arc::clone(&start);
+            std::thread::spawn(move || {
+                start.wait();
+                for batch_index in 0..batch_count {
+                    append_log_messages_to_path(
+                        &log_path,
+                        (0..lines_per_batch).map(move |line_index| {
+                            std::thread::sleep(Duration::from_micros(50));
+                            format!(
+                                "log_event thread={thread_index} batch={batch_index} line={line_index}"
+                            )
+                        }),
+                    );
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let persisted = std::fs::read_to_string(&log_path).unwrap();
+    std::fs::remove_dir_all(&tmp).ok();
+
+    let lines = persisted.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), thread_count * batch_count * lines_per_batch);
+
+    let mut seen_batches = std::collections::HashSet::new();
+    for chunk in lines.chunks(lines_per_batch) {
+        assert_eq!(chunk.len(), lines_per_batch);
+        let mut batch_id = None;
+        for (line_index, line) in chunk.iter().enumerate() {
+            assert!(contains_human_readable_timestamp(line));
+            let message = line
+                .split_once("] ")
+                .map(|(_, message)| message)
+                .unwrap_or_else(|| panic!("missing timestamp prefix: {line}"));
+            assert_eq!(message.matches("log_event ").count(), 1, "{message}");
+            let (current_batch_id, current_line_index) = message
+                .rsplit_once(" line=")
+                .unwrap_or_else(|| panic!("missing line index: {message}"));
+            assert_eq!(current_line_index.parse::<usize>().unwrap(), line_index);
+            if let Some(expected_batch_id) = &batch_id {
+                assert_eq!(current_batch_id, expected_batch_id);
+            } else {
+                batch_id = Some(current_batch_id.to_string());
+            }
+        }
+        seen_batches.insert(batch_id.expect("batch id should be present"));
+    }
+    assert_eq!(seen_batches.len(), thread_count * batch_count);
+}
+
+#[test]
 fn cargo_install_returns_some_false_when_hashes_differ() {
     let tmp = std::env::temp_dir().join(format!("cargo_test_stale_{}", std::process::id()));
     let local_repo = tmp.join("repos").join("myrepo");

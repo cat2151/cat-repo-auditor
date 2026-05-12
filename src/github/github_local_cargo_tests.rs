@@ -1,6 +1,6 @@
 use super::{
-    append_cargo_check_after_auto_update_log_for_path, check_cargo_git_install_inner,
-    check_cargo_git_install_inner_with_remote_hash,
+    append_cargo_check_after_auto_update_log_for_path, append_log_messages_to_path,
+    check_cargo_git_install_inner, check_cargo_git_install_inner_with_remote_hash,
     check_cargo_git_install_status_with_remote_failure_and_logger,
     check_cargo_git_install_with_remote_hash_and_logger, get_cargo_bins_inner,
     CargoGitInstallCheck,
