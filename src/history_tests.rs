@@ -106,6 +106,38 @@ fn default_history_has_empty_fields() {
 }
 
 #[test]
+fn load_history_without_tracking_status_defaults_to_unknown() {
+    let tmp = unique_history_test_path("cat_repo_auditor_old_history");
+    let old_history = r#"{
+        "etags": {},
+        "repos": [{
+            "name": "repo",
+            "full_name": "owner/repo",
+            "updated_at": "",
+            "updated_at_raw": "",
+            "open_issues": 0,
+            "open_prs": 0,
+            "is_private": false,
+            "local_status": "Clean",
+            "has_local_git": true,
+            "staging_files": [],
+            "issues": [],
+            "prs": []
+        }],
+        "rate_limit": null
+    }"#;
+    std::fs::write(&tmp, old_history).unwrap();
+
+    let loaded = History::load(tmp.to_str().unwrap()).unwrap();
+
+    assert_eq!(
+        loaded.repos[0].tracking_status,
+        crate::github::GitTrackingStatus::Unknown
+    );
+    std::fs::remove_file(&tmp).ok();
+}
+
+#[test]
 fn update_creates_file_when_missing() {
     let tmp = unique_history_test_path("cat_repo_auditor_history_update_missing");
     std::fs::remove_file(&tmp).ok();

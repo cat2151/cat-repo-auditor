@@ -18,7 +18,8 @@ use crate::{
     config::Config,
     github::FetchProgress,
     github_local::{
-        check_local_status_no_fetch, collect_workflow_repo_exist_checks, launch_lazygit, open_url,
+        check_local_repo_state_no_fetch, collect_workflow_repo_exist_checks, launch_lazygit,
+        open_url, LocalRepoState,
     },
     history::History,
     main_helpers::{make_x_log_line, persist_log_line, rerender_terminal, start_fetch},
@@ -358,23 +359,23 @@ fn launch_selected_repo(
 }
 
 fn refresh_selected_repo_local_status(app: &mut App) {
-    refresh_selected_repo_local_status_with(app, check_local_status_no_fetch);
+    refresh_selected_repo_local_status_with(app, check_local_repo_state_no_fetch);
 }
 
 fn refresh_selected_repo_local_status_with<Check>(app: &mut App, check_local_status: Check)
 where
-    Check: FnOnce(&str, &str) -> (crate::github::LocalStatus, bool, Vec<String>),
+    Check: FnOnce(&str, &str) -> LocalRepoState,
 {
     let Some(repo_idx) = app.selected_repo_idx() else {
         return;
     };
     let repo_name = app.repos[repo_idx].name.clone();
-    let (local_status, has_local_git, staging_files) =
-        check_local_status(&app.config.local_base_dir, &repo_name);
+    let local_state = check_local_status(&app.config.local_base_dir, &repo_name);
     let repo = &mut app.repos[repo_idx];
-    repo.local_status = local_status;
-    repo.has_local_git = has_local_git;
-    repo.staging_files = staging_files;
+    repo.local_status = local_state.local_status;
+    repo.tracking_status = local_state.tracking_status;
+    repo.has_local_git = local_state.has_local_git;
+    repo.staging_files = local_state.files;
     app.rebuild_rows();
     let fallback_row_idx = app.row_cursor;
     app.row_cursor = app

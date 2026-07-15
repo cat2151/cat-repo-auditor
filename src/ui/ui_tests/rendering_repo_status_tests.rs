@@ -1,6 +1,84 @@
 use super::*;
 
 #[test]
+fn draw_ui_pins_and_highlights_ahead_repo_without_a_push_column() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].local_status = crate::github::LocalStatus::Modified;
+    app.repos[0].tracking_status = crate::github::GitTrackingStatus::Ahead { commits: 2 };
+    app.rebuild_rows();
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    assert!(
+        rendered.iter().any(|line| line.contains("⚠ PUSH / NO-UP")),
+        "push warning group should be visible: {rendered:?}"
+    );
+    let warning_y = rendered
+        .iter()
+        .position(|line| line.contains("PUSH↑2"))
+        .expect("ahead label should be rendered") as u16;
+    let warning_x = find_text_x(terminal.backend().buffer(), "PUSH↑2")
+        .expect("ahead label position should be found");
+    let warning_cell = &terminal.backend().buffer()[(warning_x, warning_y)];
+    assert_eq!(warning_cell.fg, MK_RED);
+    assert!(warning_cell
+        .modifier
+        .contains(ratatui::style::Modifier::BOLD));
+
+    let repo_line = &rendered[warning_y as usize];
+    assert!(repo_line.contains("PUSH↑2"));
+    assert!(!repo_line.contains("modified"));
+}
+
+#[test]
+fn draw_ui_gives_conflict_priority_inside_push_warning_group() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].local_status = crate::github::LocalStatus::Conflict;
+    app.repos[0].tracking_status = crate::github::GitTrackingStatus::Ahead { commits: 3 };
+    app.rebuild_rows();
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    assert!(rendered.iter().any(|line| line.contains("⚠ PUSH / NO-UP")));
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains("focus-test"))
+        .expect("repo row should be rendered");
+    assert!(repo_line.contains("conflict"));
+    assert!(!repo_line.contains("PUSH↑3"));
+}
+
+#[test]
+fn draw_ui_labels_diverged_and_no_upstream_repos() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    let mut no_upstream = make_repo("no-upstream");
+    no_upstream.tracking_status = crate::github::GitTrackingStatus::NoUpstream;
+    app.repos[0].tracking_status = crate::github::GitTrackingStatus::Diverged {
+        ahead: 1,
+        behind: 1,
+    };
+    app.repos.push(no_upstream);
+    app.rebuild_rows();
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    assert!(rendered.iter().any(|line| line.contains("DIVERGED")));
+    assert!(rendered.iter().any(|line| line.contains("NO-UP")));
+}
+
+#[test]
 fn draw_ui_does_not_leak_hidden_background_progress_into_repo_name_when_columns_hidden() {
     let backend = TestBackend::new(100, 20);
     let mut terminal = Terminal::new(backend).unwrap();

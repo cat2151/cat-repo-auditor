@@ -31,6 +31,9 @@ pub struct RepoInfo {
     pub open_prs: u64,
     pub is_private: bool,
     pub local_status: LocalStatus,
+    /// Relationship between local HEAD and its configured upstream.
+    #[serde(default)]
+    pub tracking_status: GitTrackingStatus,
     pub has_local_git: bool,
     pub staging_files: Vec<String>,
     #[serde(default)]
@@ -90,7 +93,7 @@ pub struct RepoInfo {
     pub wf_checked_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LocalStatus {
     Conflict,
     Modified,
@@ -100,6 +103,34 @@ pub enum LocalStatus {
     Other,
     NotFound,
     NoGit,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum GitTrackingStatus {
+    /// Tracking state has not been checked yet or could not be determined.
+    #[default]
+    Unknown,
+    Synced,
+    Ahead {
+        commits: u64,
+    },
+    Behind {
+        commits: u64,
+    },
+    Diverged {
+        ahead: u64,
+        behind: u64,
+    },
+    NoUpstream,
+}
+
+impl GitTrackingStatus {
+    pub fn needs_push_attention(&self) -> bool {
+        matches!(
+            self,
+            Self::Ahead { .. } | Self::Diverged { .. } | Self::NoUpstream
+        )
+    }
 }
 
 impl std::fmt::Display for LocalStatus {
@@ -157,6 +188,7 @@ pub enum FetchProgress {
     ExistenceUpdate {
         name: String,
         local_status: LocalStatus,
+        tracking_status: GitTrackingStatus,
         has_local_git: bool,
         staging_files: Vec<String>,
         local_head_hash: String,

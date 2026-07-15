@@ -16,6 +16,34 @@ where
 // ── build_rows ────────────────────────────────────────────────────────────────
 
 #[test]
+fn build_rows_pins_push_attention_repos_in_warning_group() {
+    let mut normal = make_repo("normal");
+    normal.open_prs = 1;
+    let mut ahead = make_repo("ahead");
+    ahead.tracking_status = crate::github::GitTrackingStatus::Ahead { commits: 2 };
+    let mut no_upstream = make_repo("no-upstream");
+    no_upstream.is_private = true;
+    no_upstream.tracking_status = crate::github::GitTrackingStatus::NoUpstream;
+
+    let rows = build_rows(&[normal, ahead, no_upstream]);
+
+    assert!(matches!(
+        rows.first(),
+        Some(RepoRow::Separator(label)) if label == PUSH_WARNING_GROUP_LABEL
+    ));
+    assert!(matches!(rows.get(1), Some(RepoRow::Repo(1))));
+    assert!(matches!(rows.get(2), Some(RepoRow::Repo(2))));
+    assert!(matches!(rows.get(3), Some(RepoRow::Repo(0))));
+    assert_eq!(
+        rows.iter()
+            .filter(|row| matches!(row, RepoRow::Repo(_)))
+            .count(),
+        3,
+        "warning repos must not be duplicated in their normal groups"
+    );
+}
+
+#[test]
 fn build_rows_single_group_no_separator() {
     // Repos with open_prs=1 land in group 0; when all repos are in the same
     // group (group 0) build_rows must not insert any separator.

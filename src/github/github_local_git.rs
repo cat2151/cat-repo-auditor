@@ -1,57 +1,118 @@
 use anyhow::{anyhow, bail, Context, Result};
 use std::process::Command;
 
-use crate::github::LocalStatus;
+use crate::github::{GitTrackingStatus, LocalStatus};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocalRepoState {
+    pub local_status: LocalStatus,
+    pub tracking_status: GitTrackingStatus,
+    pub has_local_git: bool,
+    pub files: Vec<String>,
+}
 
 /// The repository name that contains reusable workflow definitions.
 pub(crate) const WORKFLOW_SOURCE_REPO: &str = "github-actions";
 
+#[cfg(test)]
 pub(crate) fn check_local_status_no_fetch(
     base_dir: &str,
     repo_name: &str,
 ) -> (LocalStatus, bool, Vec<String>) {
+    let state = check_local_repo_state_no_fetch(base_dir, repo_name);
+    (state.local_status, state.has_local_git, state.files)
+}
+
+pub(crate) fn check_local_repo_state_no_fetch(base_dir: &str, repo_name: &str) -> LocalRepoState {
     let path = build_repo_path(base_dir, repo_name);
 
     if !std::path::Path::new(&path).exists() {
-        return (LocalStatus::NotFound, false, vec![]);
+        return LocalRepoState {
+            local_status: LocalStatus::NotFound,
+            tracking_status: GitTrackingStatus::Unknown,
+            has_local_git: false,
+            files: vec![],
+        };
     }
     let git_dir = format!("{}/.git", path);
     if !std::path::Path::new(&git_dir).exists() {
-        return (LocalStatus::NoGit, false, vec![]);
+        return LocalRepoState {
+            local_status: LocalStatus::NoGit,
+            tracking_status: GitTrackingStatus::Unknown,
+            has_local_git: false,
+            files: vec![],
+        };
     }
 
     let local_changes = get_local_changes(&path);
-    if local_changes.has_conflict {
-        return (LocalStatus::Conflict, true, local_changes.files);
-    }
-    if local_changes.has_staged {
-        return (LocalStatus::Staging, true, local_changes.files);
-    }
-    if local_changes.has_modified {
-        return (LocalStatus::Modified, true, local_changes.files);
-    }
-
-    match local_and_upstream_heads(&path) {
-        Some((local_sha, remote_sha)) => {
-            if local_sha == remote_sha {
-                return (LocalStatus::Clean, true, vec![]);
-            }
-
-            let merge_base = Command::new("git")
-                .args(["-C", &path, "merge-base", "HEAD", "@{u}"])
-                .output();
-
-            if let Ok(mb) = merge_base {
-                if mb.status.success() {
-                    let base_sha = String::from_utf8_lossy(&mb.stdout).trim().to_string();
-                    if base_sha == local_sha {
-                        return (LocalStatus::Pullable, true, vec![]);
-                    }
-                }
-            }
-            (LocalStatus::Other, true, vec![])
+    let tracking_status = get_tracking_status(&path);
+    let local_status = if local_changes.has_conflict {
+        LocalStatus::Conflict
+    } else if local_changes.has_staged {
+        LocalStatus::Staging
+    } else if local_changes.has_modified {
+        LocalStatus::Modified
+    } else {
+        match tracking_status {
+            GitTrackingStatus::Synced => LocalStatus::Clean,
+            GitTrackingStatus::Behind { .. } => LocalStatus::Pullable,
+            _ => LocalStatus::Other,
         }
-        None => (LocalStatus::Other, true, vec![]),
+    };
+
+    LocalRepoState {
+        local_status,
+        tracking_status,
+        has_local_git: true,
+        files: local_changes.files,
+    }
+}
+
+fn get_tracking_status(repo_path: &str) -> GitTrackingStatus {
+    let head = Command::new("git")
+        .args(["-C", repo_path, "rev-parse", "--verify", "HEAD"])
+        .output();
+    if !matches!(head, Ok(ref output) if output.status.success()) {
+        return GitTrackingStatus::Unknown;
+    }
+
+    let upstream = Command::new("git")
+        .args(["-C", repo_path, "rev-parse", "--verify", "@{u}"])
+        .output();
+    if !matches!(upstream, Ok(ref output) if output.status.success()) {
+        return GitTrackingStatus::NoUpstream;
+    }
+
+    let counts = Command::new("git")
+        .args([
+            "-C",
+            repo_path,
+            "rev-list",
+            "--left-right",
+            "--count",
+            "HEAD...@{u}",
+        ])
+        .output();
+    let Ok(counts) = counts else {
+        return GitTrackingStatus::Unknown;
+    };
+    if !counts.status.success() {
+        return GitTrackingStatus::Unknown;
+    }
+    let counts_text = String::from_utf8_lossy(&counts.stdout);
+    let mut fields = counts_text.split_whitespace();
+    let (Some(ahead), Some(behind), None) = (fields.next(), fields.next(), fields.next()) else {
+        return GitTrackingStatus::Unknown;
+    };
+    let (Ok(ahead), Ok(behind)) = (ahead.parse::<u64>(), behind.parse::<u64>()) else {
+        return GitTrackingStatus::Unknown;
+    };
+
+    match (ahead, behind) {
+        (0, 0) => GitTrackingStatus::Synced,
+        (ahead, 0) => GitTrackingStatus::Ahead { commits: ahead },
+        (0, behind) => GitTrackingStatus::Behind { commits: behind },
+        (ahead, behind) => GitTrackingStatus::Diverged { ahead, behind },
     }
 }
 
@@ -80,12 +141,14 @@ pub(crate) fn local_head_hash_no_fetch(base_dir: &str, repo_name: &str) -> Strin
     }
 }
 
+#[cfg(test)]
 pub(crate) fn local_head_matches_upstream(base_dir: &str, repo_name: &str) -> bool {
     local_head_matches_upstream_with_logger(base_dir, repo_name, |msg| {
         super::cargo::append_log_message(msg)
     })
 }
 
+#[cfg(test)]
 fn log_local_repo_check(
     log_fn: &mut impl FnMut(&str),
     repo_name: &str,
@@ -97,6 +160,7 @@ fn log_local_repo_check(
     ));
 }
 
+#[cfg(test)]
 pub(super) fn local_head_matches_upstream_with_logger(
     base_dir: &str,
     repo_name: &str,
@@ -215,12 +279,7 @@ fn get_local_changes(repo_path: &str) -> LocalChanges {
     }
 }
 
-fn local_and_upstream_heads(repo_path: &str) -> Option<(String, String)> {
-    fn empty_logger(_: &str) {}
-    let mut empty_logger = empty_logger;
-    local_and_upstream_heads_with_logger("", repo_path, &mut empty_logger)
-}
-
+#[cfg(test)]
 fn local_and_upstream_heads_with_logger(
     repo_name: &str,
     repo_path: &str,

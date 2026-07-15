@@ -15,7 +15,7 @@ mod draw_left;
 pub(crate) use crate::ui_types::{
     build_detail_items, build_rows, local_check_cell, window_color, Focus, RepoRow, SearchState,
     MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE,
-    MK_PURPLE, MK_RED, MK_YELLOW,
+    MK_PURPLE, MK_RED, MK_YELLOW, PUSH_WARNING_GROUP_LABEL,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},

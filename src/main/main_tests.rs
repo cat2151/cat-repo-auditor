@@ -28,6 +28,7 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
         open_prs: 0,
         is_private: false,
         local_status: crate::github::LocalStatus::Clean,
+        tracking_status: crate::github::GitTrackingStatus::Synced,
         has_local_git: true,
         staging_files: vec![],
         local_head_hash: String::new(),

@@ -70,6 +70,8 @@ pub(crate) enum RepoRow {
     Repo(usize),
 }
 
+pub(crate) const PUSH_WARNING_GROUP_LABEL: &str = "── ⚠ PUSH / NO-UP";
+
 fn group_key(r: &RepoInfo) -> u8 {
     if r.is_private {
         return 4;
@@ -98,8 +100,21 @@ fn group_label(g: u8) -> &'static str {
 
 pub(crate) fn build_rows(repos: &[RepoInfo]) -> Vec<RepoRow> {
     let mut rows: Vec<RepoRow> = vec![];
+    let warning_repos: Vec<usize> = repos
+        .iter()
+        .enumerate()
+        .filter_map(|(i, repo)| repo.tracking_status.needs_push_attention().then_some(i))
+        .collect();
+    if !warning_repos.is_empty() {
+        rows.push(RepoRow::Separator(PUSH_WARNING_GROUP_LABEL.to_string()));
+        rows.extend(warning_repos.into_iter().map(RepoRow::Repo));
+    }
+
     let mut cur_group: Option<u8> = None;
     for (i, repo) in repos.iter().enumerate() {
+        if repo.tracking_status.needs_push_attention() {
+            continue;
+        }
         let g = group_key(repo);
         if cur_group != Some(g) {
             if g != 0 {

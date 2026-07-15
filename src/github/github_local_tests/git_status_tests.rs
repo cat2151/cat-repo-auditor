@@ -3,6 +3,103 @@ use super::*;
 use std::process::Command as Cmd;
 
 #[test]
+fn check_local_repo_state_reports_ahead_commit_and_clears_after_push() {
+    let (tmp, _seed, local) = setup_remote_with_clone("status_ahead");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
+    std::fs::write(local.join("ahead.txt"), "ahead\n").unwrap();
+    run_git_ok(&local, &["add", "ahead.txt"]);
+    run_git_ok(&local, &["commit", "-m", "local ahead"]);
+
+    let state = check_local_repo_state_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+    assert_eq!(state.local_status, LocalStatus::Other);
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Ahead { commits: 1 }
+    );
+
+    run_git_ok(&local, &["push", "origin", "HEAD"]);
+    let state = check_local_repo_state_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+    assert_eq!(state.local_status, LocalStatus::Clean);
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Synced
+    );
+}
+
+#[test]
+fn check_local_repo_state_keeps_ahead_visible_with_dirty_files() {
+    let (tmp, _seed, local) = setup_remote_with_clone("status_ahead_dirty");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
+    std::fs::write(local.join("ahead.txt"), "ahead\n").unwrap();
+    run_git_ok(&local, &["add", "ahead.txt"]);
+    run_git_ok(&local, &["commit", "-m", "local ahead"]);
+    std::fs::write(local.join("dirty.txt"), "not committed\n").unwrap();
+
+    let state = check_local_repo_state_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+    assert_eq!(state.local_status, LocalStatus::Modified);
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Ahead { commits: 1 }
+    );
+    assert!(!state.files.is_empty());
+}
+
+#[test]
+fn check_local_repo_state_reports_behind_and_diverged_counts() {
+    let (tmp, seed, local) = setup_remote_with_clone("status_diverged");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
+
+    std::fs::write(seed.join("remote.txt"), "remote\n").unwrap();
+    run_git_ok(&seed, &["add", "remote.txt"]);
+    run_git_ok(&seed, &["commit", "-m", "remote ahead"]);
+    run_git_ok(&seed, &["push", "origin", "HEAD"]);
+    run_git_ok(&local, &["fetch", "origin"]);
+
+    let state = check_local_repo_state_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+    assert_eq!(state.local_status, LocalStatus::Pullable);
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Behind { commits: 1 }
+    );
+
+    std::fs::write(local.join("local.txt"), "local\n").unwrap();
+    run_git_ok(&local, &["add", "local.txt"]);
+    run_git_ok(&local, &["commit", "-m", "local diverged"]);
+    let state = check_local_repo_state_no_fetch(tmp.join("repos").to_str().unwrap(), "myrepo");
+    assert_eq!(state.local_status, LocalStatus::Other);
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Diverged {
+            ahead: 1,
+            behind: 1
+        }
+    );
+}
+
+#[test]
+fn check_local_repo_state_reports_no_upstream_only_after_first_commit() {
+    let tmp = unique_temp_dir("status_no_upstream");
+    let _tmp_guard = TempDirGuard::new(tmp.clone());
+    let committed = tmp.join("committed");
+    init_git_repo(&committed);
+
+    let state = check_local_repo_state_no_fetch(tmp.to_str().unwrap(), "committed");
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::NoUpstream
+    );
+
+    let unborn = tmp.join("unborn");
+    std::fs::create_dir_all(&unborn).unwrap();
+    run_git_ok(&unborn, &["init"]);
+    let state = check_local_repo_state_no_fetch(tmp.to_str().unwrap(), "unborn");
+    assert_eq!(
+        state.tracking_status,
+        crate::github::GitTrackingStatus::Unknown
+    );
+}
+
+#[test]
 fn check_local_status_reports_modified_before_pullable() {
     let tmp = unique_temp_dir("status_modified");
     let _tmp_guard = TempDirGuard::new(tmp.clone());

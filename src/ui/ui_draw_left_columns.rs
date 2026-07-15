@@ -51,7 +51,7 @@ pub(super) fn column_widths(show_columns: bool) -> Vec<Constraint> {
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length(8),
+            Constraint::Length(9),
             Constraint::Length(4),
         ]
     } else {

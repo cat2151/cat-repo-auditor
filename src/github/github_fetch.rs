@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     github::{FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo},
-    github_local::{check_local_status_no_fetch, local_head_hash_no_fetch},
+    github_local::{check_local_repo_state_no_fetch, local_head_hash_no_fetch},
     history::History,
 };
 use anyhow::{bail, Context, Result};
@@ -128,25 +128,36 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
 
     let full_name = name_with_owner.clone();
     let history_repo = history.repos.iter().find(|h| h.name == name);
-    let (local_status, has_local_git, staging_files, local_head_hash) = history_repo
-        .map(|repo| {
-            (
-                repo.local_status.clone(),
-                repo.has_local_git,
-                repo.staging_files.clone(),
-                repo.local_head_hash.clone(),
-            )
-        })
-        .unwrap_or_else(|| {
-            let (local_status, has_local_git, staging_files) =
-                check_local_status_no_fetch(&config.local_base_dir, &name);
-            let local_head_hash = if has_local_git {
-                local_head_hash_no_fetch(&config.local_base_dir, &name)
-            } else {
-                String::new()
-            };
-            (local_status, has_local_git, staging_files, local_head_hash)
-        });
+    let (local_status, tracking_status, has_local_git, staging_files, local_head_hash) =
+        history_repo
+            .map(|repo| {
+                (
+                    repo.local_status.clone(),
+                    repo.tracking_status.clone(),
+                    repo.has_local_git,
+                    repo.staging_files.clone(),
+                    repo.local_head_hash.clone(),
+                )
+            })
+            .unwrap_or_else(|| {
+                let local_state = check_local_repo_state_no_fetch(&config.local_base_dir, &name);
+                let local_status = local_state.local_status;
+                let tracking_status = local_state.tracking_status;
+                let has_local_git = local_state.has_local_git;
+                let staging_files = local_state.files;
+                let local_head_hash = if has_local_git {
+                    local_head_hash_no_fetch(&config.local_base_dir, &name)
+                } else {
+                    String::new()
+                };
+                (
+                    local_status,
+                    tracking_status,
+                    has_local_git,
+                    staging_files,
+                    local_head_hash,
+                )
+            });
     let updated_at_raw = format_date_iso(&updated_at);
 
     let (
@@ -215,6 +226,7 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
         open_prs: pull_requests.total_count,
         is_private,
         local_status,
+        tracking_status,
         has_local_git,
         staging_files,
         local_head_hash,

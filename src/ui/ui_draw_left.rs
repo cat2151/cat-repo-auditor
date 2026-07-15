@@ -1,12 +1,13 @@
 use super::{
     c, local_check_cell, spinner_frame, Focus, RepoRow, SearchState, MK_BG, MK_BG_DIM, MK_BG_SEL,
     MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
+    PUSH_WARNING_GROUP_LABEL,
 };
 #[path = "ui_draw_left_columns.rs"]
 mod columns;
 use crate::{
     app::App,
-    github::{LocalStatus, RepoInfo},
+    github::{GitTrackingStatus, LocalStatus, RepoInfo},
 };
 use ratatui::{
     layout::Rect,
@@ -40,6 +41,26 @@ fn cargo_check_status_cell(repo: &RepoInfo) -> Option<(&'static str, ratatui::st
         Some(("ok", MK_GREEN))
     } else {
         Some(("old", MK_ORANGE))
+    }
+}
+
+fn push_attention_label(repo: &RepoInfo) -> Option<String> {
+    if repo.local_status == LocalStatus::Conflict {
+        return repo
+            .tracking_status
+            .needs_push_attention()
+            .then(|| repo.local_status.to_string());
+    }
+
+    match repo.tracking_status {
+        GitTrackingStatus::Ahead { commits } => Some(if commits > 999 {
+            String::from("PUSH↑999+")
+        } else {
+            format!("PUSH↑{commits}")
+        }),
+        GitTrackingStatus::Diverged { .. } => Some(String::from("DIVERGED")),
+        GitTrackingStatus::NoUpstream => Some(String::from("NO-UP")),
+        _ => None,
     }
 }
 
@@ -104,12 +125,17 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
         .take(visible)
         .map(|(row_i, row)| match row {
             RepoRow::Separator(label) => Row::new(vec![
-                Cell::from(label.as_str()).style(
+                Cell::from(label.as_str()).style(if label == PUSH_WARNING_GROUP_LABEL {
+                    Style::default()
+                        .fg(c(app, MK_RED))
+                        .bg(c(app, MK_BG))
+                        .add_modifier(Modifier::BOLD)
+                } else {
                     Style::default()
                         .fg(c(app, MK_COMMENT))
                         .bg(c(app, MK_BG))
-                        .add_modifier(Modifier::DIM),
-                ),
+                        .add_modifier(Modifier::DIM)
+                }),
                 Cell::from(""),
                 Cell::from(""),
                 Cell::from(""),
@@ -233,10 +259,13 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                     local_check_cell(local_no_git, repo.wf_workflows, MK_GREEN)
                 };
 
-                let (local_str, local_col) = if local_pending {
-                    (pending.0.to_string(), pending.1)
+                let push_attention = push_attention_label(repo);
+                let (local_str, local_col, local_warning) = if local_pending {
+                    (pending.0.to_string(), pending.1, false)
+                } else if let Some(label) = push_attention {
+                    (label, MK_RED, true)
                 } else {
-                    (repo.local_status.to_string(), local_status_col)
+                    (repo.local_status.to_string(), local_status_col, false)
                 };
 
                 let (cgo_str, cgo_col) = if has_pending_cargo_check {
@@ -319,7 +348,21 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
                         } else {
                             Style::default().fg(c(app, wf_col)).bg(c(app, MK_BG))
                         }),
-                        Cell::from(local_str).style(if sel || dim {
+                        Cell::from(local_str).style(if local_warning {
+                            Style::default()
+                                .fg(c(app, MK_RED))
+                                .bg(c(
+                                    app,
+                                    if sel {
+                                        MK_BG_SEL
+                                    } else if dim {
+                                        MK_BG_DIM
+                                    } else {
+                                        MK_BG
+                                    },
+                                ))
+                                .add_modifier(Modifier::BOLD)
+                        } else if sel || dim {
                             base_style
                         } else {
                             Style::default().fg(c(app, local_col)).bg(c(app, MK_BG))
@@ -347,6 +390,7 @@ pub(super) fn draw_left(f: &mut Frame, app: &mut App, area: Rect, unix_millis: u
 
     let mut ts = TableState::default();
     let table = Table::new(rows, columns::column_widths(app.show_columns))
+        .column_spacing(if app.show_columns { 0 } else { 1 })
         .header(header)
         .row_highlight_style(Style::default())
         .style(Style::default().bg(c(app, MK_BG)));

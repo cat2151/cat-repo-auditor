@@ -15,6 +15,7 @@ fn make_repo(name: &str) -> RepoInfo {
         open_prs: 0,
         is_private: false,
         local_status: LocalStatus::Clean,
+        tracking_status: crate::github::GitTrackingStatus::Synced,
         has_local_git: true,
         staging_files: vec![],
         local_head_hash: String::new(),

@@ -133,6 +133,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::ExistenceUpdate {
                 name,
                 local_status,
+                tracking_status,
                 has_local_git,
                 staging_files,
                 local_head_hash,
@@ -149,6 +150,7 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             }) => {
                 if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
                     r.local_status = local_status;
+                    r.tracking_status = tracking_status;
                     r.has_local_git = has_local_git;
                     r.staging_files = staging_files;
                     r.local_head_hash = local_head_hash;

@@ -27,6 +27,7 @@ fn make_repo(name: &str, cargo_install: Option<bool>) -> RepoInfo {
         open_prs: 0,
         is_private: false,
         local_status: LocalStatus::Clean,
+        tracking_status: crate::github::GitTrackingStatus::Synced,
         has_local_git: true,
         staging_files: vec![],
         local_head_hash: String::new(),
@@ -145,11 +146,12 @@ fn test_refresh_selected_repo_local_status_updates_only_selected_repo() {
     refresh_selected_repo_local_status_with(&mut app, |base_dir, repo_name| {
         assert_eq!(base_dir, "/base");
         assert_eq!(repo_name, "beta");
-        (
-            LocalStatus::Clean,
-            true,
-            vec![String::from("Cargo.toml"), String::from("src/main.rs")],
-        )
+        LocalRepoState {
+            local_status: LocalStatus::Clean,
+            tracking_status: crate::github::GitTrackingStatus::Synced,
+            has_local_git: true,
+            files: vec![String::from("Cargo.toml"), String::from("src/main.rs")],
+        }
     });
 
     assert_eq!(app.repos[0].local_status, LocalStatus::Modified);
@@ -188,7 +190,12 @@ fn test_refresh_preserves_selection_after_separator_change() {
 
     refresh_selected_repo_local_status_with(&mut app, |_base_dir, repo_name| {
         assert_eq!(repo_name, "beta");
-        (LocalStatus::NotFound, false, vec![])
+        LocalRepoState {
+            local_status: LocalStatus::NotFound,
+            tracking_status: crate::github::GitTrackingStatus::Unknown,
+            has_local_git: false,
+            files: vec![],
+        }
     });
 
     assert_eq!(app.repos[1].local_status, LocalStatus::NotFound);

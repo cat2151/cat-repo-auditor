@@ -2,8 +2,7 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_local_status_no_fetch, git_pull, local_head_hash_no_fetch,
-        local_head_matches_upstream,
+        check_local_repo_state_no_fetch, git_pull, local_head_hash_no_fetch, LocalRepoState,
     },
     history::History,
     self_update,
@@ -24,7 +23,8 @@ use phase3::{
 };
 
 pub use types::{
-    AutoUpdateLaunchRequest, FetchProgress, IssueOrPr, LocalStatus, RateLimit, RepoInfo,
+    AutoUpdateLaunchRequest, FetchProgress, GitTrackingStatus, IssueOrPr, LocalStatus, RateLimit,
+    RepoInfo,
 };
 
 // ──────────────────────────────────────────────
@@ -59,7 +59,7 @@ fn refresh_repos_after_auto_pull_with<CheckLocalStatus, LocalHeadHash>(
     check_local_status: CheckLocalStatus,
     local_head_hash: LocalHeadHash,
 ) where
-    CheckLocalStatus: Fn(&str, &str) -> (LocalStatus, bool, Vec<String>),
+    CheckLocalStatus: Fn(&str, &str) -> LocalRepoState,
     LocalHeadHash: Fn(&str, &str) -> String,
 {
     let refreshed_repo_names: std::collections::HashSet<&str> =
@@ -69,10 +69,11 @@ fn refresh_repos_after_auto_pull_with<CheckLocalStatus, LocalHeadHash>(
         .iter_mut()
         .filter(|repo| refreshed_repo_names.contains(repo.name.as_str()))
     {
-        let (local_status, has_local_git, staging_files) = check_local_status(base_dir, &repo.name);
-        repo.local_status = local_status;
-        repo.has_local_git = has_local_git;
-        repo.staging_files = staging_files;
+        let local_state = check_local_status(base_dir, &repo.name);
+        repo.local_status = local_state.local_status;
+        repo.tracking_status = local_state.tracking_status;
+        repo.has_local_git = local_state.has_local_git;
+        repo.staging_files = local_state.files;
         repo.local_head_hash = local_head_hash(base_dir, &repo.name);
     }
 }
@@ -86,25 +87,24 @@ fn refresh_repos_after_auto_pull(
         repos,
         base_dir,
         refreshed_repo_names,
-        check_local_status_no_fetch,
+        check_local_repo_state_no_fetch,
         local_head_hash_no_fetch,
     );
 }
 
-fn should_auto_pull_status(local_status: &LocalStatus, head_matches_upstream: bool) -> bool {
-    match local_status {
-        LocalStatus::Pullable => true,
-        LocalStatus::Modified | LocalStatus::Staging => !head_matches_upstream,
-        _ => false,
-    }
+fn should_auto_pull_status(
+    local_status: &LocalStatus,
+    tracking_status: &GitTrackingStatus,
+) -> bool {
+    matches!(tracking_status, GitTrackingStatus::Behind { .. })
+        && matches!(
+            local_status,
+            LocalStatus::Pullable | LocalStatus::Modified | LocalStatus::Staging
+        )
 }
 
-fn should_auto_pull_repo(base_dir: &str, repo: &RepoInfo) -> bool {
-    let head_matches_upstream = matches!(
-        repo.local_status,
-        LocalStatus::Modified | LocalStatus::Staging
-    ) && local_head_matches_upstream(base_dir, &repo.name);
-    should_auto_pull_status(&repo.local_status, head_matches_upstream)
+fn should_auto_pull_repo(repo: &RepoInfo) -> bool {
+    should_auto_pull_status(&repo.local_status, &repo.tracking_status)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -302,7 +302,7 @@ pub fn fetch_repos_with_progress(
             let pullable: Vec<PullTarget> = if config.auto_pull {
                 repos
                     .iter()
-                    .filter(|r| should_auto_pull_repo(&config.local_base_dir, r))
+                    .filter(|r| should_auto_pull_repo(r))
                     .map(|r| (r.name.clone(), r.full_name.clone()))
                     .collect()
             } else {
@@ -383,6 +383,7 @@ pub fn fetch_repos_with_progress(
                         let _ = tx.send(FetchProgress::ExistenceUpdate {
                             name: result.name.clone(),
                             local_status: result.local_status,
+                            tracking_status: result.tracking_status,
                             has_local_git: result.has_local_git,
                             staging_files: result.staging_files.clone(),
                             local_head_hash: result.local_head_hash.clone(),

@@ -1,6 +1,6 @@
 use super::{LocalStatus, RepoInfo};
 use crate::github_local::{
-    check_deepwiki_exists, check_file_exists, check_local_status_no_fetch, check_pages_exists,
+    check_deepwiki_exists, check_file_exists, check_local_repo_state_no_fetch, check_pages_exists,
     check_readme_ja_badge, check_workflows, local_head_hash_no_fetch,
 };
 
@@ -12,6 +12,7 @@ pub(super) struct Phase3RepoTask {
 pub(super) struct Phase3RepoResult {
     pub name: String,
     pub local_status: LocalStatus,
+    pub tracking_status: super::GitTrackingStatus,
     pub has_local_git: bool,
     pub staging_files: Vec<String>,
     pub local_head_hash: String,
@@ -46,6 +47,7 @@ pub(super) fn phase3_worker_count(total_check: usize) -> usize {
 
 pub(super) fn apply_phase3_result(repo: &mut RepoInfo, result: &Phase3RepoResult) {
     repo.local_status = result.local_status.clone();
+    repo.tracking_status = result.tracking_status.clone();
     repo.has_local_git = result.has_local_git;
     repo.staging_files = result.staging_files.clone();
     repo.local_head_hash = result.local_head_hash.clone();
@@ -63,7 +65,11 @@ pub(super) fn apply_phase3_result(repo: &mut RepoInfo, result: &Phase3RepoResult
 
 fn run_local_repo_task(repo: RepoInfo, base_dir: &str) -> Phase3RepoResult {
     let name = repo.name.clone();
-    let (local_status, has_local_git, staging_files) = check_local_status_no_fetch(base_dir, &name);
+    let local_state = check_local_repo_state_no_fetch(base_dir, &name);
+    let local_status = local_state.local_status;
+    let tracking_status = local_state.tracking_status;
+    let has_local_git = local_state.has_local_git;
+    let staging_files = local_state.files;
     let local_head_hash = if has_local_git {
         local_head_hash_no_fetch(base_dir, &name)
     } else {
@@ -73,6 +79,7 @@ fn run_local_repo_task(repo: RepoInfo, base_dir: &str) -> Phase3RepoResult {
     Phase3RepoResult {
         name,
         local_status,
+        tracking_status,
         has_local_git,
         staging_files,
         local_head_hash,
@@ -142,6 +149,7 @@ pub(super) fn spawn_background_local_checks(
                 let _ = tx.send(super::FetchProgress::ExistenceUpdate {
                     name: result.name.clone(),
                     local_status: result.local_status.clone(),
+                    tracking_status: result.tracking_status.clone(),
                     has_local_git: result.has_local_git,
                     staging_files: result.staging_files.clone(),
                     local_head_hash: result.local_head_hash.clone(),
@@ -178,6 +186,7 @@ pub(super) fn run_phase3_repo_task(
     let name = repo.name.clone();
     let cat = repo.updated_at_raw.clone();
     let local_status = repo.local_status.clone();
+    let tracking_status = repo.tracking_status.clone();
     let has_local_git = repo.has_local_git;
     let staging_files = repo.staging_files.clone();
     let local_head = repo.local_head_hash.clone();
@@ -236,6 +245,7 @@ pub(super) fn run_phase3_repo_task(
     Phase3RepoResult {
         name,
         local_status,
+        tracking_status,
         has_local_git,
         staging_files,
         local_head_hash: local_head,

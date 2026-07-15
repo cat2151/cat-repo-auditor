@@ -16,13 +16,16 @@ pub(crate) use checks::{
     check_workflows, collect_workflow_repo_exist_checks,
 };
 pub(crate) use git::{
-    check_local_status_no_fetch, git_pull, local_head_hash_no_fetch, local_head_matches_upstream,
+    check_local_repo_state_no_fetch, git_pull, local_head_hash_no_fetch, LocalRepoState,
     WORKFLOW_SOURCE_REPO,
 };
 pub(crate) use launch::{launch_app_with_args, launch_lazygit, open_url};
 
 #[cfg(test)]
-use git::local_head_matches_upstream_with_logger;
+use git::{
+    check_local_status_no_fetch, local_head_matches_upstream,
+    local_head_matches_upstream_with_logger,
+};
 
 const CALL_WORKFLOW_PREFIX: &str = "call-";
 

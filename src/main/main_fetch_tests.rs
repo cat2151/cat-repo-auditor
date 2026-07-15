@@ -19,6 +19,7 @@ fn make_repo(name: &str) -> RepoInfo {
         open_prs: 0,
         is_private: false,
         local_status: LocalStatus::Clean,
+        tracking_status: crate::github::GitTrackingStatus::Synced,
         has_local_git: true,
         staging_files: vec![],
         local_head_hash: String::new(),
@@ -99,6 +100,7 @@ fn drain_fetch_channel_tracks_multiple_checking_repos_until_each_update_arrives(
     tx.send(FetchProgress::ExistenceUpdate {
         name: String::from("repo-a"),
         local_status: LocalStatus::Pullable,
+        tracking_status: crate::github::GitTrackingStatus::Behind { commits: 1 },
         has_local_git: true,
         staging_files: vec![String::from(" M Cargo.toml")],
         local_head_hash: String::from("local-a"),
@@ -416,6 +418,7 @@ fn drain_fetch_channel_existence_update_refreshes_local_state_without_touching_c
     tx.send(FetchProgress::ExistenceUpdate {
         name: String::from("repo"),
         local_status: LocalStatus::Pullable,
+        tracking_status: crate::github::GitTrackingStatus::Behind { commits: 1 },
         has_local_git: true,
         staging_files: vec![String::from(" M src/main.rs")],
         local_head_hash: String::from("local-live"),

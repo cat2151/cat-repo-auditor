@@ -13,6 +13,7 @@ fn make_repo_for_cargo_log() -> RepoInfo {
         open_prs: 0,
         is_private: false,
         local_status: LocalStatus::Clean,
+        tracking_status: GitTrackingStatus::Synced,
         has_local_git: true,
         staging_files: vec![],
         local_head_hash: String::from("local123"),
@@ -97,13 +98,26 @@ fn local_status_display() {
 
 #[test]
 fn should_auto_pull_status_matches_issue_rules() {
-    assert!(should_auto_pull_status(&LocalStatus::Pullable, false));
-    assert!(should_auto_pull_status(&LocalStatus::Modified, false));
-    assert!(should_auto_pull_status(&LocalStatus::Staging, false));
-    assert!(!should_auto_pull_status(&LocalStatus::Modified, true));
-    assert!(!should_auto_pull_status(&LocalStatus::Staging, true));
-    assert!(!should_auto_pull_status(&LocalStatus::Clean, false));
-    assert!(!should_auto_pull_status(&LocalStatus::Other, false));
+    let behind = GitTrackingStatus::Behind { commits: 1 };
+    assert!(should_auto_pull_status(&LocalStatus::Pullable, &behind));
+    assert!(should_auto_pull_status(&LocalStatus::Modified, &behind));
+    assert!(should_auto_pull_status(&LocalStatus::Staging, &behind));
+    assert!(!should_auto_pull_status(
+        &LocalStatus::Modified,
+        &GitTrackingStatus::Ahead { commits: 1 }
+    ));
+    assert!(!should_auto_pull_status(
+        &LocalStatus::Staging,
+        &GitTrackingStatus::Diverged {
+            ahead: 1,
+            behind: 1
+        }
+    ));
+    assert!(!should_auto_pull_status(&LocalStatus::Clean, &behind));
+    assert!(!should_auto_pull_status(
+        &LocalStatus::Other,
+        &GitTrackingStatus::Unknown
+    ));
 }
 
 #[test]
@@ -311,11 +325,12 @@ fn refresh_repos_after_auto_pull_updates_only_targeted_local_state() {
         "C:\\repos",
         &refreshed_repo_names,
         |_base_dir, repo_name| match repo_name {
-            "repo-a" => (
-                LocalStatus::Modified,
-                true,
-                vec![String::from(" M Cargo.toml")],
-            ),
+            "repo-a" => LocalRepoState {
+                local_status: LocalStatus::Modified,
+                tracking_status: GitTrackingStatus::Behind { commits: 1 },
+                has_local_git: true,
+                files: vec![String::from(" M Cargo.toml")],
+            },
             other => panic!("unexpected repo status refresh: {other}"),
         },
         |_base_dir, repo_name| match repo_name {
@@ -325,6 +340,10 @@ fn refresh_repos_after_auto_pull_updates_only_targeted_local_state() {
     );
 
     assert_eq!(repos[0].local_status, LocalStatus::Modified);
+    assert_eq!(
+        repos[0].tracking_status,
+        GitTrackingStatus::Behind { commits: 1 }
+    );
     assert_eq!(repos[0].staging_files, vec![String::from(" M Cargo.toml")]);
     assert_eq!(repos[0].local_head_hash, "new-head-a");
     assert_eq!(repos[1].local_status, LocalStatus::Clean);
