@@ -1,6 +1,6 @@
 use crate::{
     app::App,
-    ui::{MK_BG_DIM, MK_CYAN, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_YELLOW},
+    ui::{MK_BG_DIM, MK_CYAN, MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW},
 };
 use ratatui::{
     layout::Rect,
@@ -86,6 +86,10 @@ pub(crate) fn draw_help_dialog(f: &mut Frame, app: &App, area: Rect) {
             Span::raw("Run installed app (cgo=ok only)"),
         ]),
         Line::from(vec![
+            Span::styled("  Shift+N  ", Style::default().fg(c(app, MK_ORANGE))),
+            Span::raw("List repos whose installed app is old"),
+        ]),
+        Line::from(vec![
             Span::styled("  Shift+L  ", Style::default().fg(c(app, MK_ORANGE))),
             Span::raw("Toggle log pane (bottom half)"),
         ]),
@@ -149,11 +153,11 @@ pub(crate) fn draw_help_dialog(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled("  cgo ", Style::default().fg(c(app, MK_GREEN))),
-            Span::raw("ok=installed hash matches remote HEAD"),
+            Span::raw("ok=installed binary reports remote HEAD"),
         ]),
         Line::from(vec![
-            Span::styled("      ", Style::default().fg(c(app, MK_ORANGE))),
-            Span::raw("old=installed differs, ?=check failed"),
+            Span::styled("      ", Style::default().fg(c(app, MK_RED))),
+            Span::raw("NG=installed binary is old, ?=check failed"),
         ]),
     ];
 

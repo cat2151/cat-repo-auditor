@@ -8,8 +8,9 @@ mod git;
 mod launch;
 
 pub(crate) use cargo::{
-    append_cargo_check_after_auto_update_log, append_cargo_check_results, check_cargo_git_install,
-    check_cargo_git_install_status, get_cargo_bins, CargoGitInstallCheck,
+    append_cargo_check_after_auto_update_log, append_cargo_check_results,
+    check_cargo_git_install_status, check_installed_bins, get_cargo_bins, BinCheckOutcome,
+    CargoGitInstallCheck,
 };
 pub(crate) use checks::{
     check_deepwiki_exists, check_file_exists, check_pages_exists, check_readme_ja_badge,

@@ -78,12 +78,20 @@ pub struct RepoInfo {
     /// updated_at_raw when cargo_remote_hash was last checked
     #[serde(default)]
     pub cargo_remote_hash_checked_at: String,
-    /// installed commit hash from .crates2.json
+    /// installed commit hash. binary self-report (`<bin> check` の embedded) が取れた場合は
+    /// その値、取れなかった場合のみ cargo checkout 由来の値になる。
     #[serde(default)]
     pub cargo_installed_hash: String,
     /// true when the latest cargo check could not resolve current installed/remote hashes.
     #[serde(default)]
     pub cargo_check_failed: bool,
+    /// installed binary の `check` サブコマンドが返した result 行。
+    /// Some(true)=up-to-date, Some(false)=update available, None=未取得または判定不能。
+    ///
+    /// checkout HEAD は cargo が fetch しただけで remote に追いつくため、実バイナリが
+    /// 置き換わったかを表さない。この self-report が Some のときは常にそちらを優先する。
+    #[serde(default)]
+    pub cargo_bin_check: Option<bool>,
 
     /// Required workflow yml files are present in .github/workflows/
     #[serde(default)]
@@ -164,6 +172,33 @@ pub struct AutoUpdateLaunchRequest {
     pub remote_hash: String,
 }
 
+/// 1 repo 分の cargo check 結果。`RepoInfo` の cargo_* フィールドへそのまま反映する。
+///
+/// worker --> UI --> history と同じ組を持ち回るため、まとめて 1 つの型にしている。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CargoCheckFields {
+    pub cargo_install: Option<bool>,
+    pub cargo_checked_at: String,
+    pub cargo_remote_hash: String,
+    pub cargo_remote_hash_checked_at: String,
+    pub cargo_installed_hash: String,
+    pub cargo_check_failed: bool,
+    pub cargo_bin_check: Option<bool>,
+}
+
+impl CargoCheckFields {
+    /// cargo check の結果を repo に反映する。
+    pub fn apply_to(&self, repo: &mut RepoInfo) {
+        repo.cargo_install = self.cargo_install;
+        repo.cargo_checked_at = self.cargo_checked_at.clone();
+        repo.cargo_remote_hash = self.cargo_remote_hash.clone();
+        repo.cargo_remote_hash_checked_at = self.cargo_remote_hash_checked_at.clone();
+        repo.cargo_installed_hash = self.cargo_installed_hash.clone();
+        repo.cargo_check_failed = self.cargo_check_failed;
+        repo.cargo_bin_check = self.cargo_bin_check;
+    }
+}
+
 pub enum FetchProgress {
     Log(String),
     BackgroundChecksCompleted,
@@ -206,12 +241,7 @@ pub enum FetchProgress {
     /// Incremental cargo-only update that can arrive independently of other checks.
     CargoUpdate {
         name: String,
-        cargo_install: Option<bool>,
-        cargo_cat: String,
-        cargo_remote_hash: String,
-        cargo_remote_hash_cat: String,
-        cargo_installed_hash: String,
-        cargo_check_failed: bool,
+        fields: CargoCheckFields,
     },
     RequestAutoUpdateLaunch(AutoUpdateLaunchRequest),
     Done(anyhow::Result<(Vec<RepoInfo>, RateLimit)>),

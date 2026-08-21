@@ -23,6 +23,7 @@ pub(crate) enum CargoGitInstallCheck {
 }
 
 impl CargoGitInstallCheck {
+    #[cfg(test)]
     pub(crate) fn as_legacy_tuple(&self) -> Option<(bool, String, String, String)> {
         match self {
             Self::Checked {
@@ -53,18 +54,6 @@ impl CargoGitInstallCheck {
 ///   4. Run `git ls-remote ... refs/heads/main` against the GitHub remote to obtain the
 ///      remote `main` hash for logging.
 ///   5. Best-effort: run `git rev-parse HEAD` in the local clone for diagnostic output only.
-///
-/// `check_cargo_git_install` exposes the historical tuple API for callers that only need
-/// checked vs unchecked. `check_cargo_git_install_status` preserves the distinction between
-/// "not installed" and "failed to resolve the current hashes".
-pub(crate) fn check_cargo_git_install(
-    owner: &str,
-    repo_name: &str,
-    base_dir: &str,
-) -> Option<(bool, String, String, String)> {
-    check_cargo_git_install_status(owner, repo_name, base_dir).as_legacy_tuple()
-}
-
 pub(crate) fn check_cargo_git_install_status(
     owner: &str,
     repo_name: &str,

@@ -3,15 +3,17 @@ use std::path::Path;
 use std::process::Output;
 use std::sync::{Mutex, OnceLock};
 
+#[path = "github_local_cargo_bin_check.rs"]
+mod bin_check;
 #[path = "github_local_cargo_bins.rs"]
 mod bins;
 #[path = "github_local_cargo_hash.rs"]
 mod hash;
 
+pub(crate) use bin_check::{check_installed_bins, BinCheckOutcome};
 pub(crate) use bins::get_cargo_bins;
-pub(crate) use hash::{
-    check_cargo_git_install, check_cargo_git_install_status, CargoGitInstallCheck,
-};
+use bins::get_cargo_bins_all;
+pub(crate) use hash::{check_cargo_git_install_status, CargoGitInstallCheck};
 
 static LOG_APPEND_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 

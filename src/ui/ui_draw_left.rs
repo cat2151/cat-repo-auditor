@@ -27,20 +27,25 @@ fn repo_has_pending_cargo_check(cargo_pending: bool, has_active_cargo_poll: bool
     cargo_pending || has_active_cargo_poll
 }
 
-/// Returns the rendered `cgo` status from the installed/remote hash comparison.
+/// Returns the rendered `cgo` status.
 ///
-/// When the latest check failed, the left pane shows `?` instead of reusing stale hashes.
+/// `cargo_bin_check` is the installed binary's own `check` self-report and always wins: the
+/// checkout HEAD catches up with the remote as soon as cargo fetches, so it can read `ok`
+/// while `~/.cargo/bin/<bin>` is still the old build.
+///
+/// When the latest check failed, the left pane shows `?` instead of asserting ok / NG.
 /// When the repo is not cargo-installed, the cell stays blank.
-/// Otherwise, matching hashes render `ok` and mismatched hashes render `old`.
 fn cargo_check_status_cell(repo: &RepoInfo) -> Option<(&'static str, ratatui::style::Color)> {
     if repo.cargo_check_failed {
         Some(("?", MK_ORANGE))
+    } else if repo.cargo_bin_check == Some(false) {
+        Some(("NG", MK_RED))
     } else if repo.cargo_installed_hash.is_empty() || repo.cargo_remote_hash.is_empty() {
         None
     } else if repo.cargo_installed_hash == repo.cargo_remote_hash {
         Some(("ok", MK_GREEN))
     } else {
-        Some(("old", MK_ORANGE))
+        Some(("NG", MK_RED))
     }
 }
 

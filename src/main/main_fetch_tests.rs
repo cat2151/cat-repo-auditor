@@ -1,6 +1,8 @@
 use super::*;
 use crate::config::Config;
-use crate::github::{AutoUpdateLaunchRequest, FetchProgress, LocalStatus, RateLimit, RepoInfo};
+use crate::github::{
+    AutoUpdateLaunchRequest, CargoCheckFields, FetchProgress, LocalStatus, RateLimit, RepoInfo,
+};
 use std::{
     collections::HashSet,
     time::{SystemTime, UNIX_EPOCH},
@@ -39,6 +41,7 @@ fn make_repo(name: &str) -> RepoInfo {
         cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
         cargo_check_failed: false,
+        cargo_bin_check: None,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -287,12 +290,15 @@ fn drain_fetch_channel_updates_cargo_remote_hash_checked_at() {
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::CargoUpdate {
         name: String::from("repo"),
-        cargo_install: Some(true),
-        cargo_cat: String::from("local123"),
-        cargo_remote_hash: String::from("remote456"),
-        cargo_remote_hash_cat: String::from("2024-01-02T00:00:00Z"),
-        cargo_installed_hash: String::from("installed789"),
-        cargo_check_failed: false,
+        fields: CargoCheckFields {
+            cargo_install: Some(true),
+            cargo_checked_at: String::from("local123"),
+            cargo_remote_hash: String::from("remote456"),
+            cargo_remote_hash_checked_at: String::from("2024-01-02T00:00:00Z"),
+            cargo_installed_hash: String::from("installed789"),
+            cargo_check_failed: false,
+            cargo_bin_check: Some(true),
+        },
     })
     .unwrap();
     drop(tx);
@@ -327,12 +333,10 @@ fn drain_fetch_channel_applies_cargo_check_failure_without_reusing_cached_hashes
     let (tx, rx) = mpsc::channel();
     tx.send(FetchProgress::CargoUpdate {
         name: String::from("repo"),
-        cargo_install: None,
-        cargo_cat: String::new(),
-        cargo_remote_hash: String::new(),
-        cargo_remote_hash_cat: String::new(),
-        cargo_installed_hash: String::new(),
-        cargo_check_failed: true,
+        fields: CargoCheckFields {
+            cargo_check_failed: true,
+            ..CargoCheckFields::default()
+        },
     })
     .unwrap();
     drop(tx);

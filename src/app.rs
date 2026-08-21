@@ -7,9 +7,12 @@ use std::time::SystemTime;
 
 #[path = "app_search.rs"]
 mod app_search;
+#[path = "app_cargo_ng.rs"]
+mod cargo_ng;
 #[path = "app_cargo_polls.rs"]
 mod cargo_polls;
 
+pub(crate) use cargo_ng::CargoNgItem;
 pub(crate) use cargo_polls::CargoHashPoll;
 #[cfg(test)]
 pub(crate) use cargo_polls::{
@@ -18,7 +21,7 @@ pub(crate) use cargo_polls::{
 
 const MAX_LOG_LINES: usize = 2_000;
 pub const READY_MSG: &str =
-    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:workflow  g:lazygit  Shift+L:log  /:search";
+    "q:quit  ?:help  F5:refresh  Nj/Nk:move  h/l:pane  Enter:README  i:pages  w:wiki  Shift+W:workflow  Shift+N:cgo NG  g:lazygit  Shift+L:log  /:search";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -56,6 +59,12 @@ pub struct App {
     pub workflow_repo_exist_items: Vec<WorkflowRepoExistCheck>,
     pub workflow_repo_exist_selected: usize,
     pub workflow_repo_exist_scroll: usize,
+    pub show_cargo_ng: bool,
+    pub cargo_ng_items: Vec<CargoNgItem>,
+    pub cargo_ng_selected: usize,
+    pub cargo_ng_scroll: usize,
+    /// この fetch で NG 一覧を自動表示済みか。1 fetch につき 1 度だけ開く。
+    pub cargo_ng_auto_shown: bool,
     pub show_columns: bool,
     pub show_log: bool,
     pub log_lines: Vec<String>,
@@ -102,6 +111,11 @@ impl App {
             workflow_repo_exist_items: vec![],
             workflow_repo_exist_selected: 0,
             workflow_repo_exist_scroll: 0,
+            show_cargo_ng: false,
+            cargo_ng_items: vec![],
+            cargo_ng_selected: 0,
+            cargo_ng_scroll: 0,
+            cargo_ng_auto_shown: false,
             show_columns: true,
             show_log: false,
             log_lines: vec![],

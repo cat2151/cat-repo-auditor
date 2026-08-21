@@ -1,5 +1,6 @@
 use super::cargo_worker::{
-    cargo_check_order, format_cargo_check_status_log, resolve_cargo_check_fields, CargoCheckStatus,
+    cargo_check_order, checkout_divergence_message, format_cargo_check_status_log,
+    resolve_cargo_check_fields, CargoCheckStatus,
 };
 use super::*;
 
@@ -33,6 +34,7 @@ fn make_repo_for_cargo_log() -> RepoInfo {
         cargo_remote_hash_checked_at: String::from("2024-01-01T00:00:00Z"),
         cargo_installed_hash: String::from("installed789"),
         cargo_check_failed: false,
+        cargo_bin_check: None,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -164,24 +166,29 @@ fn cargo_check_status_matches_run_state() {
 }
 
 #[test]
-fn resolve_cargo_check_fields_clears_hashes_and_marks_failure_on_failure() {
+fn resolve_cargo_check_fields_clears_hashes_and_marks_failure_when_bin_check_is_unavailable() {
     let repo = make_repo_for_cargo_log();
 
+    // checkout HEAD が ok を示していても、binary self-report が取れなければ断定しない。
     let resolved = resolve_cargo_check_fields(
         &repo.updated_at_raw,
-        crate::github_local::CargoGitInstallCheck::Failed,
+        &BinCheckOutcome::Unavailable {
+            reason: String::from("check 未実装"),
+        },
+        &crate::github_local::CargoGitInstallCheck::Checked {
+            matches_remote: true,
+            installed_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+            local_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+            remote_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+        },
     );
 
     assert_eq!(
         resolved,
-        (
-            None,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            true,
-        )
+        CargoCheckFields {
+            cargo_check_failed: true,
+            ..CargoCheckFields::default()
+        }
     );
 }
 
@@ -191,19 +198,66 @@ fn resolve_cargo_check_fields_clears_hashes_without_failure_when_not_installed()
 
     let resolved = resolve_cargo_check_fields(
         &repo.updated_at_raw,
-        crate::github_local::CargoGitInstallCheck::NotInstalled,
+        &BinCheckOutcome::NotInstalled,
+        &crate::github_local::CargoGitInstallCheck::NotInstalled,
+    );
+
+    assert_eq!(resolved, CargoCheckFields::default());
+}
+
+#[test]
+fn resolve_cargo_check_fields_prefers_the_binary_self_report_over_checkout_head() {
+    let repo = make_repo_for_cargo_log();
+
+    // 実測した cat-task-manager の状態: checkout HEAD は remote に追いついているが、
+    // 実バイナリは古い。checkout HEAD を採用すると誤って ok になる。
+    let resolved = resolve_cargo_check_fields(
+        &repo.updated_at_raw,
+        &BinCheckOutcome::UpdateAvailable {
+            embedded: String::from("4ecf42e931e9dc3af0dd89bd53351676a2899a23"),
+            remote: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+        },
+        &crate::github_local::CargoGitInstallCheck::Checked {
+            matches_remote: true,
+            installed_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+            local_hash: String::from("localhash"),
+            remote_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+        },
     );
 
     assert_eq!(
         resolved,
-        (
-            None,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            false,
-        )
+        CargoCheckFields {
+            cargo_install: Some(false),
+            cargo_checked_at: String::from("localhash"),
+            cargo_remote_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+            cargo_remote_hash_checked_at: repo.updated_at_raw.clone(),
+            cargo_installed_hash: String::from("4ecf42e931e9dc3af0dd89bd53351676a2899a23"),
+            cargo_check_failed: false,
+            cargo_bin_check: Some(false),
+        }
+    );
+}
+
+#[test]
+fn resolve_cargo_check_fields_reports_ok_when_the_binary_is_current() {
+    let repo = make_repo_for_cargo_log();
+
+    let resolved = resolve_cargo_check_fields(
+        &repo.updated_at_raw,
+        &BinCheckOutcome::UpToDate {
+            embedded: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+            remote: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+        },
+        &crate::github_local::CargoGitInstallCheck::Failed,
+    );
+
+    assert_eq!(resolved.cargo_install, Some(true));
+    assert_eq!(resolved.cargo_bin_check, Some(true));
+    assert!(!resolved.cargo_check_failed);
+    assert_eq!(
+        resolved.cargo_installed_hash,
+        "47049c0fe70d57e233d8943a4abab5bf780621bc"
     );
 }
 
@@ -355,30 +409,35 @@ fn should_spawn_auto_update_after_recheck_requires_repo_to_still_be_old() {
     assert!(should_spawn_auto_update_after_recheck(
         "owner",
         "repo",
-        "/base",
         Some(false),
-        |_owner, _repo_name, _base_dir| Some((false, String::new(), String::new(), String::new())),
+        |_owner, _repo_name| BinCheckOutcome::UpdateAvailable {
+            embedded: String::from("installed123"),
+            remote: String::from("remote123"),
+        },
     ));
     assert!(!should_spawn_auto_update_after_recheck(
         "owner",
         "repo",
-        "/base",
         Some(false),
-        |_owner, _repo_name, _base_dir| Some((true, String::new(), String::new(), String::new())),
+        |_owner, _repo_name| BinCheckOutcome::UpToDate {
+            embedded: String::from("remote123"),
+            remote: String::from("remote123"),
+        },
+    ));
+    // 判定不能のまま update を起動して auto-update loop に入れない。
+    assert!(!should_spawn_auto_update_after_recheck(
+        "owner",
+        "repo",
+        Some(false),
+        |_owner, _repo_name| BinCheckOutcome::Unavailable {
+            reason: String::from("timeout"),
+        },
     ));
     assert!(!should_spawn_auto_update_after_recheck(
         "owner",
         "repo",
-        "/base",
-        Some(false),
-        |_owner, _repo_name, _base_dir| None,
-    ));
-    assert!(!should_spawn_auto_update_after_recheck(
-        "owner",
-        "repo",
-        "/base",
         Some(true),
-        |_owner, _repo_name, _base_dir| panic!("recheck should not run for cargo ok"),
+        |_owner, _repo_name| panic!("recheck should not run for cargo ok"),
     ));
 }
 
@@ -403,34 +462,80 @@ fn should_spawn_auto_update_after_recheck_skips_cat_repo_auditor_itself() {
     assert!(!should_spawn_auto_update_after_recheck(
         crate::self_update::REPO_OWNER,
         crate::self_update::REPO_NAME,
-        "/base",
         Some(false),
-        |_owner, _repo_name, _base_dir| {
-            panic!("recheck should not run for cat-repo-auditor itself")
-        },
+        |_owner, _repo_name| { panic!("recheck should not run for cat-repo-auditor itself") },
     ));
 }
 
 #[test]
 fn inspect_auto_update_after_recheck_reports_updated_and_failed_cases() {
     assert_eq!(
-        inspect_auto_update_after_recheck("owner", "repo", "/base", Some(false), |_o, _r, _b| {
-            Some((
-                true,
-                String::from("installed123"),
-                String::from("local123"),
-                String::from("remote123"),
-            ))
+        inspect_auto_update_after_recheck("owner", "repo", Some(false), |_o, _r| {
+            BinCheckOutcome::UpToDate {
+                embedded: String::from("remote123"),
+                remote: String::from("remote123"),
+            }
         }),
         AutoUpdateAfterRecheck::UpdatedDuringRecheck {
-            installed_hash: String::from("installed123"),
+            installed_hash: String::from("remote123"),
             remote_hash: String::from("remote123"),
         }
     );
     assert_eq!(
-        inspect_auto_update_after_recheck("owner", "repo", "/base", Some(false), |_o, _r, _b| {
-            None
+        inspect_auto_update_after_recheck("owner", "repo", Some(false), |_o, _r| {
+            BinCheckOutcome::Unavailable {
+                reason: String::from("check 未実装"),
+            }
         }),
         AutoUpdateAfterRecheck::RecheckFailed
+    );
+    // cargo install されていない repo も update 起動の対象にしない。
+    assert_eq!(
+        inspect_auto_update_after_recheck("owner", "repo", Some(false), |_o, _r| {
+            BinCheckOutcome::NotInstalled
+        }),
+        AutoUpdateAfterRecheck::RecheckFailed
+    );
+}
+
+#[test]
+fn checkout_divergence_message_reports_only_real_disagreements() {
+    let stale_binary = BinCheckOutcome::UpdateAvailable {
+        embedded: String::from("4ecf42e931e9dc3af0dd89bd53351676a2899a23"),
+        remote: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+    };
+    let checkout_ahead = crate::github_local::CargoGitInstallCheck::Checked {
+        matches_remote: true,
+        installed_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+        local_hash: String::new(),
+        remote_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+    };
+
+    let message = checkout_divergence_message(&stale_binary, &checkout_ahead)
+        .expect("checkout HEAD が先行しているので食い違いを報告する想定です");
+    assert!(message.contains("checkout HEAD=47049c0fe70d57e233d8943a4abab5bf780621bc"));
+    assert!(message.contains("binary embedded=4ecf42e931e9dc3af0dd89bd53351676a2899a23"));
+
+    // 一致しているときは何も言わない。
+    let agreeing_checkout = crate::github_local::CargoGitInstallCheck::Checked {
+        matches_remote: false,
+        installed_hash: String::from("4ecf42e931e9dc3af0dd89bd53351676a2899a23"),
+        local_hash: String::new(),
+        remote_hash: String::from("47049c0fe70d57e233d8943a4abab5bf780621bc"),
+    };
+    assert_eq!(
+        checkout_divergence_message(&stale_binary, &agreeing_checkout),
+        None
+    );
+
+    // binary から hash が取れなかった場合は比較材料が無いので黙る。
+    assert_eq!(
+        checkout_divergence_message(
+            &BinCheckOutcome::Unavailable {
+                reason: String::from("timeout"),
+            },
+            &checkout_ahead
+        ),
+        None
     );
 }

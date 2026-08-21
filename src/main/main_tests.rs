@@ -48,6 +48,7 @@ fn make_poll_repo(name: &str) -> crate::github::RepoInfo {
         cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
         cargo_check_failed: false,
+        cargo_bin_check: None,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -358,7 +359,7 @@ fn run_auto_update_launch_request_with_starts_polling_and_logs() {
         &[
             String::from("この repo は cargo check で old でしたので、recheck でも old のままか確認しました。"),
             String::from(
-                "installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"
+                "installed hash 確認結果 (binary self-report): installed_hash=installed123 remote_hash=remote456"
             ),
             String::from("update 実行: run: `repo-bin update` cwd=`/run`"),
             String::from(
@@ -414,20 +415,54 @@ fn apply_cargo_hash_poll_result_updates_repo_and_detects_remote_match() {
 
     let matched_remote = apply_cargo_hash_poll_result(
         &mut repo,
-        Some((
-            true,
-            String::from("installed123"),
-            String::from("local456"),
-            String::from("installed123"),
-        )),
+        &BinCheckOutcome::UpToDate {
+            embedded: String::from("installed123"),
+            remote: String::from("installed123"),
+        },
     );
 
     assert!(matched_remote);
     assert_eq!(repo.cargo_install, Some(true));
-    assert_eq!(repo.cargo_checked_at, "local456");
+    assert_eq!(repo.cargo_bin_check, Some(true));
     assert_eq!(repo.cargo_remote_hash, "installed123");
     assert_eq!(repo.cargo_remote_hash_checked_at, "2024-01-01T00:00:00Z");
     assert_eq!(repo.cargo_installed_hash, "installed123");
+}
+
+#[test]
+fn apply_cargo_hash_poll_result_keeps_polling_while_the_binary_is_still_old() {
+    // 実測: checkout HEAD だけを見ていた頃は exe 置換前に完了扱いになっていた。
+    // binary self-report なら、置き換わるまで完了にならない。
+    let mut repo = make_poll_repo("repo");
+
+    let matched_remote = apply_cargo_hash_poll_result(
+        &mut repo,
+        &BinCheckOutcome::UpdateAvailable {
+            embedded: String::from("installed123"),
+            remote: String::from("remote456"),
+        },
+    );
+
+    assert!(!matched_remote);
+    assert_eq!(repo.cargo_bin_check, Some(false));
+    assert_eq!(repo.cargo_installed_hash, "installed123");
+    assert_eq!(repo.cargo_remote_hash, "remote456");
+}
+
+#[test]
+fn apply_cargo_hash_poll_result_leaves_state_untouched_when_check_is_unavailable() {
+    let mut repo = make_poll_repo("repo");
+    repo.cargo_installed_hash = String::from("keep-me");
+
+    let matched_remote = apply_cargo_hash_poll_result(
+        &mut repo,
+        &BinCheckOutcome::Unavailable {
+            reason: String::from("timeout"),
+        },
+    );
+
+    assert!(!matched_remote);
+    assert_eq!(repo.cargo_installed_hash, "keep-me");
 }
 
 #[test]
@@ -463,7 +498,7 @@ fn test_auto_update_timeout_logged_to_dedicated_file() {
         fs::read_to_string(temp_config_dir.auto_update_log_path()).expect("should write log");
     assert!(persisted.contains("========== owner/repo =========="));
     assert!(persisted
-        .contains("installed hash 確認結果: installed_hash=installed123 remote_hash=remote456"));
+        .contains("installed hash 確認結果 (binary self-report): installed_hash=installed123 remote_hash=remote456"));
     assert!(persisted.contains(
         "30分経過しても remote hash と一致しなかったため、この repo の polling を終了します。"
     ));

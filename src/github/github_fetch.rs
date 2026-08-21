@@ -175,6 +175,7 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
         cargo_remote_hash_checked_at,
         cargo_installed_hash,
         cargo_check_failed,
+        cargo_bin_check,
         wf_workflows,
         wf_checked_at,
     ) = history_repo
@@ -194,6 +195,7 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
                 h.cargo_remote_hash_checked_at.clone(),
                 h.cargo_installed_hash.clone(),
                 h.cargo_check_failed,
+                h.cargo_bin_check,
                 h.wf_workflows,
                 h.wf_checked_at.clone(),
             )
@@ -213,6 +215,7 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
             String::new(),
             String::new(),
             false,
+            None,
             None,
             String::new(),
         ));
@@ -244,6 +247,7 @@ fn build_repo_info(config: &Config, history: &History, repo: GqlRepo) -> Option<
         cargo_remote_hash_checked_at,
         cargo_installed_hash,
         cargo_check_failed,
+        cargo_bin_check,
         wf_workflows,
         wf_checked_at,
         issues: issues

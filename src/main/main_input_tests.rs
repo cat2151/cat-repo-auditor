@@ -47,6 +47,7 @@ fn make_repo(name: &str, cargo_install: Option<bool>) -> RepoInfo {
         cargo_remote_hash_checked_at: String::new(),
         cargo_installed_hash: String::new(),
         cargo_check_failed: false,
+        cargo_bin_check: None,
         wf_workflows: None,
         wf_checked_at: String::new(),
     }
@@ -208,4 +209,35 @@ fn test_refresh_preserves_selection_after_separator_change() {
         app.filtered_rows.get(app.row_cursor),
         Some(RepoRow::Repo(1))
     ));
+}
+
+#[test]
+fn cargo_ng_overlay_keys_navigate_jump_and_close() {
+    let mut app = App::new(make_config());
+    let mut stale = make_repo("stale", Some(false));
+    stale.cargo_bin_check = Some(false);
+    let mut fresh = make_repo("fresh", Some(true));
+    fresh.cargo_bin_check = Some(true);
+    app.repos = vec![fresh, stale];
+    app.rebuild_rows();
+    app.open_cargo_ng_from_repos();
+    assert_eq!(app.cargo_ng_items.len(), 1);
+
+    handle_cargo_ng_overlay(&mut app, KeyCode::Char('j'), KeyModifiers::NONE);
+    assert_eq!(app.cargo_ng_selected, 0, "1 件しかないので範囲外へ動かない");
+
+    handle_cargo_ng_overlay(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(!app.show_cargo_ng);
+    assert_eq!(
+        app.selected_repo().map(|repo| repo.name.as_str()),
+        Some("stale")
+    );
+
+    app.open_cargo_ng_from_repos();
+    handle_cargo_ng_overlay(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    assert!(!app.show_cargo_ng);
+
+    app.open_cargo_ng_from_repos();
+    handle_cargo_ng_overlay(&mut app, KeyCode::Char('N'), KeyModifiers::SHIFT);
+    assert!(!app.show_cargo_ng, "Shift+N はトグルとして閉じる");
 }

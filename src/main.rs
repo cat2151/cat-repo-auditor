@@ -41,7 +41,9 @@ use crate::{
     app::{App, READY_MSG},
     config::Config,
     github::{AutoUpdateLaunchRequest, FetchProgress, RepoInfo},
-    github_local::{append_cargo_check_after_auto_update_log, check_cargo_git_install},
+    github_local::{
+        append_cargo_check_after_auto_update_log, check_installed_bins, BinCheckOutcome,
+    },
     history::History,
     main_cli::{parse_subcommand, Subcommand},
     main_fetch::drain_fetch_channel,
@@ -67,26 +69,29 @@ mod tests;
 enum CargoHashPollEvent {
     Checked {
         name: String,
-        result: Option<(bool, String, String, String)>,
+        result: BinCheckOutcome,
     },
 }
 
-fn apply_cargo_hash_poll_result(
-    repo: &mut RepoInfo,
-    result: Option<(bool, String, String, String)>,
-) -> bool {
+/// update 後の polling 結果を repo へ反映し、置き換えが完了したかを返す。
+///
+/// installed hash は実行バイナリの self-report を使う。checkout HEAD で見ていたときは
+/// exe が置き換わる前に「一致」と判定して polling を打ち切っていた（実測で cmrt.exe の
+/// mtime より約 2 分早く完了扱いになっていた）。
+fn apply_cargo_hash_poll_result(repo: &mut RepoInfo, result: &BinCheckOutcome) -> bool {
     match result {
-        Some((ok, installed_hash, local_hash, remote_hash)) => {
-            let matches_remote = installed_hash == remote_hash;
-            repo.cargo_install = Some(ok);
-            repo.cargo_checked_at = local_hash;
-            repo.cargo_remote_hash = remote_hash;
+        BinCheckOutcome::UpToDate { embedded, remote }
+        | BinCheckOutcome::UpdateAvailable { embedded, remote } => {
+            let up_to_date = matches!(result, BinCheckOutcome::UpToDate { .. });
+            repo.cargo_install = Some(up_to_date);
+            repo.cargo_remote_hash = remote.clone();
             repo.cargo_remote_hash_checked_at = repo.updated_at_raw.clone();
-            repo.cargo_installed_hash = installed_hash;
+            repo.cargo_installed_hash = embedded.clone();
             repo.cargo_check_failed = false;
-            matches_remote
+            repo.cargo_bin_check = Some(up_to_date);
+            up_to_date
         }
-        None => false,
+        BinCheckOutcome::NotInstalled | BinCheckOutcome::Unavailable { .. } => false,
     }
 }
 
@@ -101,6 +106,7 @@ fn persist_repo_cargo_state(repo: &RepoInfo) {
             history_repo.cargo_remote_hash_checked_at = repo.cargo_remote_hash_checked_at.clone();
             history_repo.cargo_installed_hash = repo.cargo_installed_hash.clone();
             history_repo.cargo_check_failed = repo.cargo_check_failed;
+            history_repo.cargo_bin_check = repo.cargo_bin_check;
         }
     })
     .ok();
@@ -113,8 +119,11 @@ fn append_auto_update_cargo_poll_log(
     append_cargo_check_after_auto_update_log(repo_full_name, messages);
 }
 
+/// polling / recheck の結果ログ。installed hash は実行バイナリの `check` が自己申告した値。
 fn format_installed_hash_check_log(installed_hash: &str, remote_hash: &str) -> String {
-    format!("installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}")
+    format!(
+        "installed hash 確認結果 (binary self-report): installed_hash={installed_hash} remote_hash={remote_hash}"
+    )
 }
 
 fn append_auto_update_cargo_poll_timeout_log(
@@ -163,13 +172,13 @@ fn drain_cargo_hash_poll_channel(app: &mut App, rx: &mpsc::Receiver<CargoHashPol
             CargoHashPollEvent::Checked { name, result } => {
                 let now = SystemTime::now();
                 let auto_update_poll = app.cargo_hash_poll_after_auto_update(&name);
-                let check_succeeded = result.is_some();
+                let check_succeeded = result.embedded_hash().is_some();
                 let mut repo_full_name = None;
                 let mut latest_hashes = None;
                 let matched_remote =
                     if let Some(repo) = app.repos.iter_mut().find(|repo| repo.name == name) {
                         repo_full_name = Some(repo.full_name.clone());
-                        let matched_remote = apply_cargo_hash_poll_result(repo, result);
+                        let matched_remote = apply_cargo_hash_poll_result(repo, &result);
                         if auto_update_poll && check_succeeded {
                             latest_hashes = Some((
                                 repo.cargo_installed_hash.clone(),
@@ -278,10 +287,9 @@ fn start_due_cargo_hash_polls(app: &mut App, tx: &mpsc::Sender<CargoHashPollEven
     for repo_name in app.due_cargo_hash_polls_at(now) {
         app.mark_cargo_hash_poll_in_flight(&repo_name);
         let owner = app.config.owner.clone();
-        let base_dir = app.config.local_base_dir.clone();
         let tx = tx.clone();
         std::thread::spawn(move || {
-            let result = check_cargo_git_install(&owner, &repo_name, &base_dir);
+            let result = check_installed_bins(&owner, &repo_name);
             let _ = tx.send(CargoHashPollEvent::Checked {
                 name: repo_name,
                 result,

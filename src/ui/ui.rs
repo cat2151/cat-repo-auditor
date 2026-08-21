@@ -4,9 +4,9 @@ use crate::{
     github::LocalStatus,
     main_helpers::refresh_log_lines_if_changed_for_path,
     ui_detail::{
-        draw_cargo_old_box, draw_help_dialog, draw_local_hash_box, draw_local_staging_box,
-        draw_right, draw_workflow_repo_exist_overlay, CARGO_OLD_BOX_H, LOCAL_CHANGES_BOX_H,
-        LOCAL_HASH_BOX_H,
+        draw_cargo_ng_overlay, draw_cargo_old_box, draw_help_dialog, draw_local_hash_box,
+        draw_local_staging_box, draw_right, draw_workflow_repo_exist_overlay, CARGO_OLD_BOX_H,
+        LOCAL_CHANGES_BOX_H, LOCAL_HASH_BOX_H,
     },
 };
 #[path = "ui_draw_left.rs"]
@@ -251,6 +251,9 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     }
     if app.show_workflow_repo_exist {
         draw_workflow_repo_exist_overlay(f, app, area);
+    }
+    if app.show_cargo_ng {
+        draw_cargo_ng_overlay(f, app, area);
     }
 }
 

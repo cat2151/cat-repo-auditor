@@ -2,7 +2,7 @@ use crate::{
     app::App,
     ui::{
         truncate, window_color, MK_BG, MK_BG_DIM, MK_BG_SEL, MK_BLUE, MK_COMMENT, MK_CYAN, MK_FG,
-        MK_GREEN, MK_ORANGE, MK_PURPLE, MK_YELLOW,
+        MK_GREEN, MK_ORANGE, MK_PURPLE, MK_RED, MK_YELLOW,
     },
 };
 use ratatui::{
@@ -20,7 +20,7 @@ mod help;
 pub(crate) use help::draw_help_dialog;
 
 pub(crate) const LOCAL_HASH_BOX_H: u16 = 3;
-pub(crate) const CARGO_OLD_BOX_H: u16 = 4;
+pub(crate) const CARGO_OLD_BOX_H: u16 = 5;
 pub(crate) const LOCAL_CHANGES_BOX_H: u16 = 3;
 
 fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
@@ -83,6 +83,32 @@ pub(crate) fn draw_local_hash_box(
     );
 }
 
+/// `cgo` ボックスに出す判定と、その判定の出どころ。
+///
+/// installed hash が実行バイナリの self-report 由来かどうかを画面上で区別できるようにする。
+/// checkout HEAD 由来の値は cargo が fetch した時点で remote に追いつくため、同じ `ok` でも
+/// 信頼度が違う。
+fn cargo_verdict_line(repo: &crate::github::RepoInfo) -> (String, ratatui::style::Color) {
+    if repo.cargo_check_failed {
+        return (
+            String::from("? (binary self-report を取得できず)"),
+            MK_ORANGE,
+        );
+    }
+    match repo.cargo_bin_check {
+        Some(true) => (String::from("ok (binary self-report)"), MK_GREEN),
+        Some(false) => (String::from("NG (binary self-report)"), MK_RED),
+        None => {
+            if repo.cargo_installed_hash.is_empty() || repo.cargo_remote_hash.is_empty() {
+                (String::from("-"), MK_COMMENT)
+            } else if repo.cargo_installed_hash == repo.cargo_remote_hash {
+                (String::from("ok (hash 比較)"), MK_GREEN)
+            } else {
+                (String::from("NG (hash 比較)"), MK_RED)
+            }
+        }
+    }
+}
 pub(crate) fn draw_cargo_old_box(
     f: &mut Frame,
     app: &App,
@@ -126,6 +152,7 @@ pub(crate) fn draw_cargo_old_box(
 
     let label_w: u16 = 12;
     let max_w = inner.width.saturating_sub(label_w) as usize;
+    let (verdict, verdict_color) = cargo_verdict_line(repo);
     let lines = vec![
         Line::from(vec![
             Span::styled("    remote: ", Style::default().fg(c(app, MK_COMMENT))),
@@ -139,6 +166,13 @@ pub(crate) fn draw_cargo_old_box(
             Span::styled(
                 truncate(inst, max_w),
                 Style::default().fg(c(app, MK_ORANGE)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("   verdict: ", Style::default().fg(c(app, MK_COMMENT))),
+            Span::styled(
+                truncate(&verdict, max_w),
+                Style::default().fg(c(app, verdict_color)),
             ),
         ]),
     ];
@@ -406,4 +440,96 @@ pub(crate) fn draw_workflow_repo_exist_overlay(f: &mut Frame, app: &mut App, are
             MK_ORANGE,
         );
     }
+}
+
+/// cgo が NG の repo を一覧で強く見せる overlay。
+///
+/// 左ペインの 4 桁の `NG` だけでは見逃せてしまうため、fetch 完了時に 1 度だけ自動で開く。
+/// 「実バイナリの embedded hash」と「remote HEAD」を並べ、どこまで古いかをその場で判断できるようにする。
+pub(crate) fn draw_cargo_ng_overlay(f: &mut Frame, app: &mut App, area: Rect) {
+    let dialog = centered_rect(
+        area,
+        area.width.saturating_sub(4).min(100),
+        area.height.saturating_sub(2).min(24),
+    );
+    f.render_widget(Clear, dialog);
+    f.render_widget(
+        Paragraph::new("").style(Style::default().bg(c(app, MK_BG_DIM))),
+        dialog,
+    );
+
+    let block = Block::default()
+        .title(format!(
+            " cargo install が古いアプリ ({})  (Shift+N / Esc to close, Enter to jump) ",
+            app.cargo_ng_items.len()
+        ))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(c(app, MK_RED)))
+        .style(Style::default().bg(c(app, MK_BG_DIM)));
+    let inner = block.inner(dialog);
+    f.render_widget(block, dialog);
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled(
+            " installed は各アプリの `check` サブコマンドが自己申告した commit hash です。",
+            Style::default().fg(c(app, MK_COMMENT)),
+        )),
+        Line::from(Span::raw("")),
+    ];
+
+    let header_height = lines.len();
+    let visible = (inner.height as usize).saturating_sub(header_height);
+    app.adjust_cargo_ng_scroll(visible);
+
+    if app.cargo_ng_items.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " (cgo が NG の repo はありません)",
+            Style::default().fg(c(app, MK_COMMENT)),
+        )));
+    } else {
+        let name_width = (inner.width as usize).saturating_sub(24).max(8);
+        lines.extend(
+            app.cargo_ng_items
+                .iter()
+                .enumerate()
+                .skip(app.cargo_ng_scroll)
+                .take(visible)
+                .map(|(idx, item)| {
+                    let selected = idx == app.cargo_ng_selected;
+                    let bg = c(app, if selected { MK_BG_SEL } else { MK_BG_DIM });
+                    Line::from(vec![
+                        Span::styled(
+                            format!(
+                                " {:<width$}",
+                                truncate(&item.full_name, name_width),
+                                width = name_width
+                            ),
+                            Style::default().fg(c(app, MK_FG)).bg(bg),
+                        ),
+                        Span::styled(
+                            format!(" {}", short_hash(&item.installed_hash)),
+                            Style::default().fg(c(app, MK_RED)).bg(bg),
+                        ),
+                        Span::styled(" -> ", Style::default().fg(c(app, MK_COMMENT)).bg(bg)),
+                        Span::styled(
+                            short_hash(&item.remote_hash),
+                            Style::default().fg(c(app, MK_CYAN)).bg(bg),
+                        ),
+                    ])
+                }),
+        );
+    }
+
+    f.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(c(app, MK_BG_DIM))),
+        inner,
+    );
+}
+
+/// commit hash を一覧で並べるための短縮形。空なら `?`。
+fn short_hash(hash: &str) -> String {
+    if hash.is_empty() {
+        return String::from("?");
+    }
+    hash.chars().take(8).collect()
 }

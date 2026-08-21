@@ -103,3 +103,49 @@ fn draw_ui_aligns_workflow_repo_column_with_wide_chars() {
     let rendered = rendered_lines(&terminal).join("\n");
     assert!(rendered.contains('…'));
 }
+
+#[test]
+fn draw_ui_shows_cargo_ng_overlay_with_installed_and_remote_hashes() {
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_bin_check = Some(false);
+    app.repos[0].cargo_installed_hash = String::from("4ecf42e931e9dc3af0dd89bd53351676a2899a23");
+    app.repos[0].cargo_remote_hash = String::from("47049c0fe70d57e233d8943a4abab5bf780621bc");
+    app.open_cargo_ng_from_repos();
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    // TestBackend は全角 1 文字を 2 セル分返すため、空白を落としてから比較する。
+    let rendered = rendered_lines(&terminal).join("\n").replace(' ', "");
+    assert!(
+        rendered.contains("cargoinstallが古いアプリ"),
+        "NG overlay title should be visible: {rendered}"
+    );
+    assert!(
+        rendered.contains("focus-test"),
+        "NG overlay should list the stale repo: {rendered}"
+    );
+    assert!(
+        rendered.contains("4ecf42e9") && rendered.contains("47049c0f"),
+        "NG overlay should show installed and remote hashes: {rendered}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cargo_ng_overlay_empty_state() {
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.open_cargo_ng_from_repos();
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal).join("\n").replace(' ', "");
+    assert!(
+        rendered.contains("cgoがNGのrepoはありません"),
+        "empty NG overlay should say so instead of rendering a blank box: {rendered}"
+    );
+}

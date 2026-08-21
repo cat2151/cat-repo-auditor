@@ -84,6 +84,11 @@ pub(crate) fn handle_terminal_input(
         return Ok(true);
     }
 
+    if app.show_cargo_ng {
+        handle_cargo_ng_overlay(app, key.code, key.modifiers);
+        return Ok(true);
+    }
+
     if app.search_state == SearchState::Active {
         handle_search_input(app, key.code, key.modifiers);
         return Ok(true);
@@ -122,6 +127,22 @@ fn handle_workflow_repo_exist_overlay(app: &mut App, code: KeyCode, modifiers: K
     }
 }
 
+/// cgo が NG の repo 一覧 overlay のキー操作。
+///
+/// Enter で該当 repo へ飛べるようにして、NG を見つけてから対処するまでを 1 操作でつなぐ。
+fn handle_cargo_ng_overlay(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
+    let shift_n = matches!(code, KeyCode::Char('N'))
+        || (matches!(code, KeyCode::Char('n')) && modifiers.contains(KeyModifiers::SHIFT));
+    match code {
+        KeyCode::Esc => app.close_cargo_ng(),
+        KeyCode::Enter => app.jump_to_selected_cargo_ng(),
+        KeyCode::Char('j') | KeyCode::Down => app.cargo_ng_move_down(1),
+        KeyCode::Char('k') | KeyCode::Up => app.cargo_ng_move_up(1),
+        _ if shift_n => app.close_cargo_ng(),
+        _ => {}
+    }
+}
+
 fn handle_search_input(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     match code {
         KeyCode::Esc => app.search_cancel(),
@@ -145,6 +166,8 @@ fn handle_repo_focus_input(
 ) -> Result<bool> {
     let shift_w = matches!(code, KeyCode::Char('W'))
         || (matches!(code, KeyCode::Char('w')) && modifiers.contains(KeyModifiers::SHIFT));
+    let shift_n = matches!(code, KeyCode::Char('N'))
+        || (matches!(code, KeyCode::Char('n')) && modifiers.contains(KeyModifiers::SHIFT));
 
     match code {
         KeyCode::Char('q') => Ok(false),
@@ -201,6 +224,11 @@ fn handle_repo_focus_input(
                     app.transient_msg = Some(format!("open failed: {e}"));
                 }
             }
+            Ok(true)
+        }
+        _ if shift_n => {
+            app.num_prefix = 0;
+            app.open_cargo_ng_from_repos();
             Ok(true)
         }
         _ if shift_w => {

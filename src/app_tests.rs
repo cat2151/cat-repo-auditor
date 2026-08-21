@@ -6,6 +6,8 @@ mod support;
 
 #[path = "app_tests/cargo_hash_poll_tests.rs"]
 mod cargo_hash_poll_tests;
+#[path = "app_tests/cargo_ng_tests.rs"]
+mod cargo_ng_tests;
 #[path = "app_tests/detail_pane_tests.rs"]
 mod detail_pane_tests;
 #[path = "app_tests/log_and_workflow_tests.rs"]

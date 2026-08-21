@@ -362,7 +362,7 @@ fn draw_ui_shows_cgo_spinner_while_post_update_polling_is_active() {
         "cgo column should show a spinner while cargo hash polling is active: {repo_line}"
     );
     assert!(
-        !repo_line.contains("old"),
+        !repo_line.contains("NG"),
         "stale cargo status should be hidden while polling is active: {repo_line}"
     );
 }
@@ -400,7 +400,7 @@ fn draw_ui_shows_cgo_spinner_while_startup_cargo_check_is_pending() {
 }
 
 #[test]
-fn draw_ui_shows_cgo_old_from_hash_mismatch_even_if_cached_flag_is_ok() {
+fn draw_ui_shows_cgo_ng_from_hash_mismatch_even_if_cached_flag_is_ok() {
     let backend = TestBackend::new(120, 20);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = make_test_app_with_focus(true);
@@ -418,8 +418,8 @@ fn draw_ui_shows_cgo_old_from_hash_mismatch_even_if_cached_flag_is_ok() {
         .map(String::as_str)
         .expect("repo list should contain selected repo row");
     assert!(
-        repo_line.contains("old"),
-        "cgo column should show old when installed and remote hashes differ: {repo_line}"
+        repo_line.contains("NG"),
+        "cgo column should show NG when installed and remote hashes differ: {repo_line}"
     );
     assert!(
         !repo_line.contains(" ok"),
@@ -456,8 +456,8 @@ fn draw_ui_shows_cgo_unknown_when_latest_cargo_check_failed() {
         "cgo column should show unknown when current cargo check failed: {repo_line}"
     );
     assert!(
-        !repo_line.contains("ok") && !repo_line.contains("old"),
-        "failed cargo check should not reuse stale ok/old status: {repo_line}"
+        !repo_line.contains("ok") && !repo_line.contains("NG"),
+        "failed cargo check should not reuse stale ok/NG status: {repo_line}"
     );
 }
 
@@ -484,7 +484,68 @@ fn draw_ui_shows_cgo_ok_from_hash_match_even_if_cached_flag_is_old() {
         "cgo column should show ok when installed and remote hashes match: {repo_line}"
     );
     assert!(
-        !repo_line.contains("old"),
+        !repo_line.contains("NG"),
         "cgo column should not rely on cached cargo_install=false when hashes match: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_shows_cgo_ng_when_the_binary_self_report_is_stale_despite_matching_hashes() {
+    // 実測した cat-task-manager の状態を UI で再現する。checkout HEAD 由来の hash が
+    // remote と一致していても、実バイナリが古ければ NG を出さなければならない。
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_install = Some(true);
+    app.repos[0].cargo_installed_hash = String::from("same-hash");
+    app.repos[0].cargo_remote_hash = String::from("same-hash");
+    app.repos[0].cargo_bin_check = Some(false);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        repo_line.contains("NG"),
+        "binary self-report must win over matching hashes: {repo_line}"
+    );
+    assert!(
+        !repo_line.contains(" ok"),
+        "cgo column should not show ok when the installed binary reports an older commit: {repo_line}"
+    );
+}
+
+#[test]
+fn draw_ui_keeps_cgo_unknown_when_check_failed_even_with_a_stale_bin_report() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = make_test_app_with_focus(true);
+    app.loading = false;
+    app.repos[0].cargo_check_failed = true;
+    app.repos[0].cargo_bin_check = Some(false);
+    app.repos[0].cargo_installed_hash.clear();
+    app.repos[0].cargo_remote_hash.clear();
+    app.repos[0].readme_ja = Some(false);
+    app.repos[0].pages = Some(false);
+    app.repos[0].readme_ja_badge = Some(false);
+    app.repos[0].deepwiki = Some(false);
+    app.repos[0].wf_workflows = Some(false);
+
+    terminal.draw(|f| draw_ui(f, &mut app)).unwrap();
+
+    let rendered = rendered_lines(&terminal);
+    let repo_line = rendered
+        .iter()
+        .find(|line| line.contains('▶') && line.contains("focus-test"))
+        .map(String::as_str)
+        .expect("repo list should contain selected repo row");
+    assert!(
+        !repo_line.contains("NG"),
+        "check failure must not be reported as a confirmed NG: {repo_line}"
     );
 }

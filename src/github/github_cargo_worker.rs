@@ -1,14 +1,15 @@
 use crate::{
     github_local::{
         append_cargo_check_after_auto_update_log, append_cargo_check_results,
-        check_cargo_git_install, check_cargo_git_install_status, CargoGitInstallCheck,
+        check_cargo_git_install_status, check_installed_bins, BinCheckOutcome,
+        CargoGitInstallCheck,
     },
     history::History,
 };
 
 use super::{
     inspect_auto_update_after_recheck, phase3_worker_count, should_skip_auto_update_for_repo,
-    AutoUpdateAfterRecheck, AutoUpdateLaunchRequest, FetchProgress, RepoInfo,
+    AutoUpdateAfterRecheck, AutoUpdateLaunchRequest, CargoCheckFields, FetchProgress, RepoInfo,
 };
 
 /// Cargo check の状態とログ用の説明材料を保持する。
@@ -73,42 +74,73 @@ pub(super) fn format_cargo_check_status_log(repo: &RepoInfo, status: CargoCheckS
     )
 }
 
+/// binary self-report を最優先に、1 repo 分の cargo check 結果フィールドを決める。
+///
+/// `checkout_result`（`git/checkouts` の HEAD 由来）は診断ログと local hash の取得にだけ使い、
+/// ok / NG の判定には使わない。checkout HEAD は cargo が fetch した時点で remote に追いつき、
+/// `~/.cargo/bin/<bin>` が置き換わったかを表さないため。
 pub(super) fn resolve_cargo_check_fields(
     updated_at_raw: &str,
-    cargo_result: CargoGitInstallCheck,
-) -> (Option<bool>, String, String, String, String, bool) {
-    match cargo_result {
-        // `loc`（git から実際に読んだ hash）を cargo_cat に使い、
-        // 保存値が常に比較に使った正確な hash になるようにする。
-        CargoGitInstallCheck::Checked {
-            matches_remote,
-            installed_hash,
-            local_hash,
-            remote_hash,
-        } => (
-            Some(matches_remote),
-            local_hash,
-            remote_hash,
-            updated_at_raw.to_string(),
-            installed_hash,
-            false,
-        ),
-        CargoGitInstallCheck::NotInstalled => (
-            None,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            false,
-        ),
-        CargoGitInstallCheck::Failed => (
-            None,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            true,
-        ),
+    bin_check: &BinCheckOutcome,
+    checkout_result: &CargoGitInstallCheck,
+) -> CargoCheckFields {
+    // `cargo_checked_at` は local clone の HEAD を保持する診断用フィールドで、判定には使わない。
+    let local_hash = match checkout_result {
+        CargoGitInstallCheck::Checked { local_hash, .. } => local_hash.clone(),
+        CargoGitInstallCheck::NotInstalled | CargoGitInstallCheck::Failed => String::new(),
+    };
+
+    match bin_check {
+        BinCheckOutcome::UpToDate { embedded, remote }
+        | BinCheckOutcome::UpdateAvailable { embedded, remote } => {
+            let up_to_date = matches!(bin_check, BinCheckOutcome::UpToDate { .. });
+            CargoCheckFields {
+                cargo_install: Some(up_to_date),
+                cargo_checked_at: local_hash,
+                cargo_remote_hash: remote.clone(),
+                cargo_remote_hash_checked_at: updated_at_raw.to_string(),
+                cargo_installed_hash: embedded.clone(),
+                cargo_check_failed: false,
+                cargo_bin_check: Some(up_to_date),
+            }
+        }
+        // check サブコマンドで確認できなかった場合は checkout HEAD へ fallback せず、
+        // old / ok を断定しないまま `?` を出す。
+        BinCheckOutcome::Unavailable { .. } => CargoCheckFields {
+            cargo_check_failed: true,
+            ..CargoCheckFields::default()
+        },
+        BinCheckOutcome::NotInstalled => CargoCheckFields::default(),
+    }
+}
+
+/// binary self-report と checkout HEAD が食い違っていれば、その事実を伝えるログ文言を返す。
+///
+/// checkout dir はアプリからは削除しない（AGENTS.md）。判断材料を残すだけに留める。
+pub(super) fn checkout_divergence_message(
+    bin_check: &BinCheckOutcome,
+    checkout_result: &CargoGitInstallCheck,
+) -> Option<String> {
+    let embedded = bin_check.embedded_hash()?;
+    let CargoGitInstallCheck::Checked { installed_hash, .. } = checkout_result else {
+        return None;
+    };
+    if embedded == installed_hash {
+        return None;
+    }
+    Some(format!(
+        "参考: checkout HEAD={installed_hash} は binary embedded={embedded} と食い違います。binary self-report を採用します"
+    ))
+}
+
+fn log_bin_check_vs_checkout(
+    owner: &str,
+    repo_name: &str,
+    bin_check: &BinCheckOutcome,
+    checkout_result: &CargoGitInstallCheck,
+) {
+    if let Some(message) = checkout_divergence_message(bin_check, checkout_result) {
+        append_cargo_check_results(owner, &[(repo_name.to_string(), message)]);
     }
 }
 
@@ -126,12 +158,7 @@ struct CargoRepoTask {
 pub(super) struct CargoRepoResult {
     pub(super) name: String,
     pub(super) full_name: String,
-    pub(super) cargo_install: Option<bool>,
-    pub(super) cargo_cat: String,
-    pub(super) cargo_remote_hash: String,
-    pub(super) cargo_remote_hash_cat: String,
-    pub(super) cargo_installed_hash: String,
-    pub(super) cargo_check_failed: bool,
+    pub(super) fields: CargoCheckFields,
 }
 
 fn append_auto_update_recheck_log(
@@ -159,38 +186,30 @@ fn build_cargo_tasks(repos: &[RepoInfo]) -> Vec<CargoRepoTask> {
 fn run_cargo_repo_task(task: CargoRepoTask, owner: &str, base_dir: &str) -> CargoRepoResult {
     let repo = task.repo;
     let name = repo.name.clone();
-    let (
-        cargo_install,
-        cargo_cat,
-        cargo_remote_hash,
-        cargo_remote_hash_cat,
-        cargo_installed_hash,
-        cargo_check_failed,
-    ) = resolve_cargo_check_fields(
-        &repo.updated_at_raw,
-        check_cargo_git_install_status(owner, name.as_str(), base_dir),
-    );
+
+    // installed hash の正は実行バイナリの self-report。先にこれを取る。
+    let bin_check = check_installed_bins(owner, name.as_str());
+
+    // checkout HEAD 由来の判定は診断ログ専用。cargo install 対象外なら実行する意味がない。
+    let checkout_result = if matches!(bin_check, BinCheckOutcome::NotInstalled) {
+        CargoGitInstallCheck::NotInstalled
+    } else {
+        check_cargo_git_install_status(owner, name.as_str(), base_dir)
+    };
+    log_bin_check_vs_checkout(owner, name.as_str(), &bin_check, &checkout_result);
+
+    let fields = resolve_cargo_check_fields(&repo.updated_at_raw, &bin_check, &checkout_result);
 
     CargoRepoResult {
         name,
         full_name: repo.full_name,
-        cargo_install,
-        cargo_cat,
-        cargo_remote_hash,
-        cargo_remote_hash_cat,
-        cargo_installed_hash,
-        cargo_check_failed,
+        fields,
     }
 }
 
 pub(super) fn apply_cargo_result_to_history(history: &mut History, result: &CargoRepoResult) {
     if let Some(r) = history.repos.iter_mut().find(|r| r.name == result.name) {
-        r.cargo_install = result.cargo_install;
-        r.cargo_checked_at = result.cargo_cat.clone();
-        r.cargo_remote_hash = result.cargo_remote_hash.clone();
-        r.cargo_remote_hash_checked_at = result.cargo_remote_hash_cat.clone();
-        r.cargo_installed_hash = result.cargo_installed_hash.clone();
-        r.cargo_check_failed = result.cargo_check_failed;
+        result.fields.apply_to(r);
     }
 }
 
@@ -276,12 +295,7 @@ pub(super) fn spawn_background_cargo_checks(
                 });
                 let _ = tx.send(FetchProgress::CargoUpdate {
                     name: result.name.clone(),
-                    cargo_install: result.cargo_install,
-                    cargo_cat: result.cargo_cat.clone(),
-                    cargo_remote_hash: result.cargo_remote_hash.clone(),
-                    cargo_remote_hash_cat: result.cargo_remote_hash_cat.clone(),
-                    cargo_installed_hash: result.cargo_installed_hash.clone(),
-                    cargo_check_failed: result.cargo_check_failed,
+                    fields: result.fields.clone(),
                 });
 
                 if auto_update_run_dir.is_some() {
@@ -304,9 +318,8 @@ pub(super) fn spawn_background_cargo_checks(
                     match inspect_auto_update_after_recheck(
                         &owner,
                         &result.name,
-                        &base_dir,
-                        result.cargo_install,
-                        check_cargo_git_install,
+                        result.fields.cargo_install,
+                        check_installed_bins,
                     ) {
                         AutoUpdateAfterRecheck::StillOld {
                             installed_hash,
@@ -316,7 +329,7 @@ pub(super) fn spawn_background_cargo_checks(
                                 AutoUpdateLaunchRequest {
                                     name: result.name.clone(),
                                     full_name: result.full_name.clone(),
-                                    cargo_install: result.cargo_install,
+                                    cargo_install: result.fields.cargo_install,
                                     installed_hash,
                                     remote_hash,
                                 },
@@ -331,7 +344,7 @@ pub(super) fn spawn_background_cargo_checks(
                                 [
                                     "この repo は cargo check で old でしたが、recheck 時点では update 実行前に installed hash が更新されていました。".to_string(),
                                     format!(
-                                        "installed hash 確認結果: installed_hash={installed_hash} remote_hash={remote_hash}"
+                                        "installed hash 確認結果 (binary self-report): installed_hash={installed_hash} remote_hash={remote_hash}"
                                     ),
                                     String::from(
                                         "remote hash と一致したため update サブコマンドは実行しません。",
@@ -348,7 +361,7 @@ pub(super) fn spawn_background_cargo_checks(
                                 &result.full_name,
                                 [
                                     String::from(
-                                        "この repo は cargo check で old でしたが、recheck で installed hash を取得できませんでした。",
+                                        "この repo は cargo check で old でしたが、recheck で installed binary の check サブコマンドから hash を取得できませんでした。",
                                     ),
                                     String::from(
                                         "recheck 失敗のため update サブコマンドは実行せず、1分後の polling も開始しません。",

@@ -2,7 +2,8 @@ use crate::{
     config::Config,
     github_fetch::do_fetch,
     github_local::{
-        check_local_repo_state_no_fetch, git_pull, local_head_hash_no_fetch, LocalRepoState,
+        check_local_repo_state_no_fetch, git_pull, local_head_hash_no_fetch, BinCheckOutcome,
+        LocalRepoState,
     },
     history::History,
     self_update,
@@ -23,8 +24,8 @@ use phase3::{
 };
 
 pub use types::{
-    AutoUpdateLaunchRequest, FetchProgress, GitTrackingStatus, IssueOrPr, LocalStatus, RateLimit,
-    RepoInfo,
+    AutoUpdateLaunchRequest, CargoCheckFields, FetchProgress, GitTrackingStatus, IssueOrPr,
+    LocalStatus, RateLimit, RepoInfo,
 };
 
 // ──────────────────────────────────────────────
@@ -121,34 +122,37 @@ pub(super) enum AutoUpdateAfterRecheck {
     },
 }
 
+/// update を起動する直前に installed bin をもう一度 `check` し、まだ古いかを見る。
+///
+/// 判定できなかった場合（`Unavailable`）は `RecheckFailed` とし、update は起動しない。
+/// old / ok を断定できないまま auto-update loop に入れないため（AGENTS.md）。
 fn inspect_auto_update_after_recheck<Recheck>(
     owner: &str,
     repo_name: &str,
-    base_dir: &str,
     cargo_install: Option<bool>,
     recheck: Recheck,
 ) -> AutoUpdateAfterRecheck
 where
-    Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
+    Recheck: FnOnce(&str, &str) -> BinCheckOutcome,
 {
     if cargo_install != Some(false) {
         return AutoUpdateAfterRecheck::NotOldBeforeRecheck;
     }
 
-    match recheck(owner, repo_name, base_dir) {
-        Some((false, installed_hash, _local_hash, remote_hash)) => {
-            AutoUpdateAfterRecheck::StillOld {
-                installed_hash,
-                remote_hash,
-            }
-        }
-        Some((true, installed_hash, _local_hash, remote_hash)) => {
+    match recheck(owner, repo_name) {
+        BinCheckOutcome::UpdateAvailable { embedded, remote } => AutoUpdateAfterRecheck::StillOld {
+            installed_hash: embedded,
+            remote_hash: remote,
+        },
+        BinCheckOutcome::UpToDate { embedded, remote } => {
             AutoUpdateAfterRecheck::UpdatedDuringRecheck {
-                installed_hash,
-                remote_hash,
+                installed_hash: embedded,
+                remote_hash: remote,
             }
         }
-        None => AutoUpdateAfterRecheck::RecheckFailed,
+        BinCheckOutcome::NotInstalled | BinCheckOutcome::Unavailable { .. } => {
+            AutoUpdateAfterRecheck::RecheckFailed
+        }
     }
 }
 
@@ -161,16 +165,15 @@ pub(super) fn should_skip_auto_update_for_repo(owner: &str, repo_name: &str) -> 
 fn should_spawn_auto_update_after_recheck<Recheck>(
     owner: &str,
     repo_name: &str,
-    base_dir: &str,
     cargo_install: Option<bool>,
     recheck: Recheck,
 ) -> bool
 where
-    Recheck: FnOnce(&str, &str, &str) -> Option<(bool, String, String, String)>,
+    Recheck: FnOnce(&str, &str) -> BinCheckOutcome,
 {
     !should_skip_auto_update_for_repo(owner, repo_name)
         && matches!(
-            inspect_auto_update_after_recheck(owner, repo_name, base_dir, cargo_install, recheck),
+            inspect_auto_update_after_recheck(owner, repo_name, cargo_install, recheck),
             AutoUpdateAfterRecheck::StillOld { .. }
         )
 }

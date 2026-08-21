@@ -8,23 +8,6 @@ use crate::{
 };
 use std::path::Path;
 
-fn apply_cargo_update(
-    repo: &mut crate::github::RepoInfo,
-    cargo_install: Option<bool>,
-    cargo_cat: String,
-    cargo_remote_hash: String,
-    cargo_remote_hash_cat: String,
-    cargo_installed_hash: String,
-    cargo_check_failed: bool,
-) {
-    repo.cargo_install = cargo_install;
-    repo.cargo_checked_at = cargo_cat;
-    repo.cargo_remote_hash = cargo_remote_hash;
-    repo.cargo_remote_hash_checked_at = cargo_remote_hash_cat;
-    repo.cargo_installed_hash = cargo_installed_hash;
-    repo.cargo_check_failed = cargo_check_failed;
-}
-
 /// Return true when the repo already holds cargo fields that were updated live in the current
 /// fetch session rather than coming only from the next history-backed `Done` snapshot.
 ///
@@ -37,6 +20,7 @@ fn has_live_cargo_state(repo: &crate::github::RepoInfo) -> bool {
         || !repo.cargo_remote_hash_checked_at.is_empty()
         || !repo.cargo_installed_hash.is_empty()
         || repo.cargo_check_failed
+        || repo.cargo_bin_check.is_some()
 }
 
 fn merge_live_repo_state_from(
@@ -50,6 +34,7 @@ fn merge_live_repo_state_from(
         incoming.cargo_remote_hash_checked_at = existing.cargo_remote_hash_checked_at.clone();
         incoming.cargo_installed_hash = existing.cargo_installed_hash.clone();
         incoming.cargo_check_failed = existing.cargo_check_failed;
+        incoming.cargo_bin_check = existing.cargo_bin_check;
     }
 }
 
@@ -105,6 +90,8 @@ pub(crate) fn drain_fetch_channel_for_log_path(
             Ok(FetchProgress::BeginCargoRefresh(repo_names)) => {
                 app.add_pending_cargo_repos(repo_names);
                 app.set_bg_task_progress("cgo", 0, app.pending_cargo_repos.len());
+                // 新しい cargo check の周回が始まるので、NG 一覧をまた自動表示できるようにする。
+                app.reset_cargo_ng_auto_shown();
             }
             Ok(FetchProgress::PhaseProgress { tag, cur, total }) => {
                 app.set_bg_task_progress(tag, cur, total);
@@ -168,27 +155,15 @@ pub(crate) fn drain_fetch_channel_for_log_path(
                 app.finish_pending_local_repo(&name);
                 app.checking_repos.remove(&name);
             }
-            Ok(FetchProgress::CargoUpdate {
-                name,
-                cargo_install,
-                cargo_cat,
-                cargo_remote_hash,
-                cargo_remote_hash_cat,
-                cargo_installed_hash,
-                cargo_check_failed,
-            }) => {
+            Ok(FetchProgress::CargoUpdate { name, fields }) => {
                 if let Some(r) = app.repos.iter_mut().find(|r| r.name == name) {
-                    apply_cargo_update(
-                        r,
-                        cargo_install,
-                        cargo_cat,
-                        cargo_remote_hash,
-                        cargo_remote_hash_cat,
-                        cargo_installed_hash,
-                        cargo_check_failed,
-                    );
+                    fields.apply_to(r);
                 }
                 app.finish_pending_cargo_repo(&name);
+                // cargo check が一巡した時点で、NG があれば 1 度だけ一覧を自動表示する。
+                if app.pending_cargo_repos.is_empty() {
+                    app.auto_open_cargo_ng_once();
+                }
             }
             Ok(FetchProgress::RequestAutoUpdateLaunch(request)) => {
                 app.queue_auto_update_launch(request);
